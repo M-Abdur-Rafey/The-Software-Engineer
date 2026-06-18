@@ -100,6 +100,13 @@ CREATE TABLE IF NOT EXISTS migrations (
 `;
 
 const ORCHESTRATOR_SCHEMA = `
+CREATE TABLE IF NOT EXISTS onboarded_projects (
+  id           TEXT PRIMARY KEY,
+  project_path TEXT NOT NULL UNIQUE,
+  onboarded_at INTEGER NOT NULL,
+  tech_stack   TEXT,
+  summary      TEXT
+);
 CREATE TABLE IF NOT EXISTS sessions (
   id            TEXT PRIMARY KEY,
   task_text     TEXT NOT NULL,

@@ -39,7 +39,7 @@ That's it. Open Claude Code and run `/software-engineer` — it clones this repo
 
 Other commands:
 ```
-/software-engineer onboard      — learn the current project structure (run once per project)
+/software-engineer onboard      — force re-scan of current project (auto-runs on first use)
 /software-engineer status       — show recent sessions
 /software-engineer update       — pull latest version
 /software-engineer help         — show all commands
@@ -49,10 +49,12 @@ Other commands:
 
 ## What happens when you run a task
 
-Six agents run in dependency order. Each one reads its knowledge base first, does its work, then writes new learnings back.
+**First use on any project:** the system automatically scans your entire codebase before doing anything — routes, components, schema, conventions, security posture. This runs once per project and is stored in the agent knowledge bases. Every future session starts with that context already loaded.
+
+Six agents then run in dependency order:
 
 ```
-database → backend → frontend + testing (parallel) → bridge → git
+[onboard — first use only] → database → backend → frontend + testing (parallel) → bridge → git
 ```
 
 | Agent | Does |

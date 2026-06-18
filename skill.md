@@ -129,26 +129,42 @@ Tell user which version they're now on (`git log -1 --oneline`).
 
 ---
 
-## Subcommand: onboard
+## Auto-onboarding (happens automatically — no command needed)
 
-Learn the current project once so all future sessions start with full context.
+The first time any task is run on a project the system has never seen, it runs a full codebase scan automatically before doing any work. You do not need to run a separate onboard command.
+
+The scan covers:
+- All existing routes (method, path, middleware, auth requirement)
+- All components (type, file, which APIs they call)
+- Full database schema (tables, columns, foreign keys, migrations)
+- Code conventions (commit style, import style, naming, linter config)
+- Security posture (CORS, CSP, input validation, token storage method)
+- Tech stack (framework, ORM, state management, styling, auth)
+
+All findings are saved to every agent's knowledge.db and vault before the first session runs.
+
+## Subcommand: onboard (force re-scan)
+
+Forces a fresh codebase scan on the current project, even if it was onboarded before. Useful after a major refactor or when switching to a different codebase at the same path.
 
 Get the current project path. Then run:
 ```javascript
 Workflow({
-  scriptPath: `<install-path>/.claude/workflows/orchestrate.js`,
+  scriptPath: `<install-path>/.claude/workflows/onboard.js`,
   args: {
-    task: "ONBOARD: read all existing source files, extract conventions, routes, components, schema, and save everything to agent knowledge bases",
-    projectPath: "<current working directory>"
+    sessionId: "manual-onboard",
+    projectPath: "<current working directory>",
+    agentsDir: "<install-path>"
   }
 })
 ```
 
 After onboarding, agents know:
 - All existing API routes and their contracts
-- Existing component structure
-- Database tables and relationships
-- Naming conventions and code patterns
+- Existing component structure and API bindings
+- Database tables, relationships, and migration history
+- Naming conventions, import style, and error handling patterns
+- Security status: token storage, CORS, CSP, input validation
 
 ---
 

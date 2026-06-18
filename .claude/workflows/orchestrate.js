@@ -1,8 +1,9 @@
 export const meta = {
   name: 'orchestrate',
-  description: 'Main orchestration entry point — routes dev tasks to domain agents in dependency order',
+  description: 'Main orchestration entry point — routes dev tasks to domain agents in dependency order. Auto-onboards new projects on first use.',
   phases: [
     { title: 'Init', detail: 'Create session, classify task' },
+    { title: 'Onboard', detail: 'Deep project scan (first use only — reads entire codebase)' },
     { title: 'Database', detail: 'Schema and migration work' },
     { title: 'Backend', detail: 'Routes, controllers, services' },
     { title: 'Frontend + Testing', detail: 'Components and Postman collections (parallel)' },
@@ -39,6 +40,42 @@ const sessionResult = await agent(
 
 const sessionId = sessionResult.sessionId
 log(`Session ${sessionId} started`)
+
+// ─── Auto-onboard: first time this project is used, scan entire codebase ─────
+const isOnboardTask = taskText.trim().toUpperCase().startsWith('ONBOARD')
+
+if (!isOnboardTask && projectPath) {
+  const onboardCheck = await agent(
+    `Check if this project has been onboarded. Run this command:\n\n` +
+    `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js check-onboarded "${projectPath.replace(/"/g, '\\"')}"\n\n` +
+    `The command prints JSON. Return it as-is.`,
+    {
+      label: 'check-onboarded',
+      schema: {
+        type: 'object',
+        required: ['onboarded'],
+        properties: {
+          onboarded:   { type: 'boolean' },
+          onboardedAt: { type: ['number', 'null'] },
+          techStack:   { type: ['string', 'null'] },
+        },
+      },
+    }
+  )
+
+  if (!onboardCheck.onboarded) {
+    phase('Onboard')
+    log('First use on this project — running deep codebase scan before starting work...')
+    log('This happens once per project. All future sessions skip this step.')
+    await workflow(
+      { scriptPath: `${AGENTS_DIR}/.claude/workflows/onboard.js` },
+      { sessionId, projectPath, agentsDir: AGENTS_DIR }
+    )
+    log('Onboarding complete — all agents now have full context for this project')
+  } else {
+    log(`Project already onboarded (${onboardCheck.techStack || 'stack unknown'}) — skipping scan`)
+  }
+}
 
 const classification = await agent(
   `Classify this software development task:\n"${taskText}"\n\n` +

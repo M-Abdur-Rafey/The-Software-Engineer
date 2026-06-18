@@ -111,6 +111,27 @@ try {
       break;
     }
 
+    case 'check-onboarded': {
+      const [projectPath] = cmdArgs;
+      const db = openDb('orchestrator');
+      const row = db.prepare('SELECT * FROM onboarded_projects WHERE project_path = ?').get(projectPath);
+      db.close();
+      console.log(JSON.stringify({ onboarded: !!row, onboardedAt: row ? row.onboarded_at : null, techStack: row ? row.tech_stack : null }));
+      break;
+    }
+
+    case 'mark-onboarded': {
+      const [projectPath, techStack, summary] = cmdArgs;
+      const db = openDb('orchestrator');
+      const id = uuidv4();
+      db.prepare(
+        'INSERT OR REPLACE INTO onboarded_projects (id, project_path, onboarded_at, tech_stack, summary) VALUES (?, ?, ?, ?, ?)'
+      ).run(id, projectPath, Date.now(), techStack || null, summary || null);
+      db.close();
+      console.log(JSON.stringify({ success: true }));
+      break;
+    }
+
     default:
       console.error(JSON.stringify({ error: `Unknown command: ${command}. See file header for usage.` }));
       process.exit(1);
