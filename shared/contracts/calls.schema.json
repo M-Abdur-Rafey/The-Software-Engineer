@@ -1,0 +1,146 @@
+{
+  "type": "object",
+  "required": [
+    "sessionId",
+    "agentName",
+    "status"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "agentName": {
+      "type": "string",
+      "const": "calls"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "failed"
+      ]
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "twilio",
+        "vonage",
+        "plivo",
+        "telnyx"
+      ]
+    },
+    "callDirection": {
+      "type": "string",
+      "enum": [
+        "inbound",
+        "outbound",
+        "both"
+      ]
+    },
+    "webhookRoutes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "method",
+          "path"
+        ],
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "handler": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "authRequired": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "ivrFlow": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "campaignConfig": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "voiceScripts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "estimatedSeconds": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "complianceChecks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule",
+          "severity",
+          "passed"
+        ],
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "blocking",
+              "warning",
+              "info"
+            ]
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "filesChanged": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
