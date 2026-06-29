@@ -3,19 +3,40 @@
  * CLI interface for workflow agents to interact with SQLite databases.
  *
  * Usage:
- *   node shared/lib/db-cli.js init-session <taskText> <projectPath>
- *   node shared/lib/db-cli.js query <agentName|orchestrator> <sql>
- *   node shared/lib/db-cli.js insert <agentName|orchestrator> <table> <jsonData>
- *   node shared/lib/db-cli.js update-session-status <sessionId> <status>
- *   node shared/lib/db-cli.js log-agent-run <sessionId> <agentName> <status> [outputJson] [errorText]
- *   node shared/lib/db-cli.js log-session-event <agentName> <sessionId> <phase> <status> [message] [durationMs]
- *   node shared/lib/db-cli.js get-decisions <agentName> <topic> [limit]
+ *   node shared/lib/db-cli.js [--as <callerAgent>] <command> ...args
+ *
+ *   init-session <taskText> <projectPath>
+ *   query <agentName|orchestrator> <sql>            (read-only SELECT, output capped)
+ *   insert <agentName|orchestrator> <table> <jsonData>
+ *   update-session-status <sessionId> <status>
+ *   log-agent-run <sessionId> <agentName> <status> [outputJson] [errorText]
+ *   log-session-event <agentName> <sessionId> <phase> <status> [message] [durationMs]
+ *   get-decisions <agentName> <topic> [limit]       (output capped)
+ *   save-decision <agentName> <sessionId> <topic> <summary> [rationale]
+ *   check-onboarded <projectPath>
+ *   mark-onboarded <projectPath> <techStack> <summary>
+ *
+ * `--as <agent>` declares the calling agent so per-agent knowledge access is
+ * checked against shared/lib/acl.js. Omit it for legacy/privileged callers.
+ * Orchestrator-DB coordination commands (sessions, runs, onboarding) are not
+ * ACL-scoped — they are how the system tracks work, not per-agent knowledge.
  */
 
 const { openDb } = require('./db');
 const { v4: uuidv4 } = require('uuid');
+const { assertRead, assertWrite } = require('./acl');
+const { capRows, truncate } = require('./truncate');
 
-const [, , command, ...cmdArgs] = process.argv;
+// ── extract the optional `--as <caller>` flag from anywhere in argv ───────────
+const rawArgs = process.argv.slice(2);
+let caller = null;
+const argv = [];
+for (let i = 0; i < rawArgs.length; i++) {
+  if (rawArgs[i] === '--as') { caller = rawArgs[++i] || null; continue; }
+  if (rawArgs[i].startsWith('--as=')) { caller = rawArgs[i].slice(5) || null; continue; }
+  argv.push(rawArgs[i]);
+}
+const [command, ...cmdArgs] = argv;
 
 try {
   switch (command) {
@@ -34,15 +55,24 @@ try {
 
     case 'query': {
       const [agentName, sql] = cmdArgs;
+      assertRead(caller, agentName);
       const db = openDb(agentName);
-      const rows = db.prepare(sql).all();
+      const stmt = db.prepare(sql); // throws on multi-statement SQL
+      if (!stmt.reader) {
+        db.close();
+        console.error(JSON.stringify({ error: 'query: only read-only SELECT statements are allowed' }));
+        process.exit(1);
+      }
+      const rows = stmt.all();
       db.close();
-      console.log(JSON.stringify(rows));
+      // Cap output so a large result set can't balloon the agent's input tokens.
+      console.log(capRows(rows).json);
       break;
     }
 
     case 'insert': {
       const [agentName, table, jsonData] = cmdArgs;
+      assertWrite(caller, agentName);
       const row = JSON.parse(jsonData);
       const db = openDb(agentName);
       const cols = Object.keys(row).join(', ');
@@ -78,6 +108,7 @@ try {
 
     case 'log-session-event': {
       const [agentName, sessionId, phase, status, message, durationMs] = cmdArgs;
+      assertWrite(caller, agentName);
       const db = openDb(agentName);
       const id = uuidv4();
       db.prepare(
@@ -90,17 +121,26 @@ try {
 
     case 'get-decisions': {
       const [agentName, topic, limit = '10'] = cmdArgs;
+      assertRead(caller, agentName);
       const db = openDb(agentName);
       const rows = db.prepare(
-        'SELECT * FROM decisions WHERE topic = ? ORDER BY created_at DESC LIMIT ?'
+        'SELECT topic, summary, rationale, created_at FROM decisions WHERE topic = ? ORDER BY created_at DESC LIMIT ?'
       ).all(topic, parseInt(limit, 10));
       db.close();
-      console.log(JSON.stringify(rows));
+      // Trim long free-text fields, then cap the whole set — keeps context lean.
+      const trimmed = rows.map(r => ({
+        topic: r.topic,
+        summary: truncate(r.summary, 500),
+        rationale: truncate(r.rationale, 500),
+        created_at: r.created_at,
+      }));
+      console.log(capRows(trimmed).json);
       break;
     }
 
     case 'save-decision': {
       const [agentName, sessionId, topic, summary, rationale] = cmdArgs;
+      assertWrite(caller, agentName);
       const db = openDb(agentName);
       const id = uuidv4();
       db.prepare(

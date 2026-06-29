@@ -53,6 +53,8 @@ Two communication layers — keep them distinct:
 - **Knowledge (persistent):** per-agent `agents/<name>/vault/` (Obsidian markdown) + `agents/<name>/knowledge.db`. Vaults are cross-linked into one graph via `[[wikilinks]]` — open the `agents/` folder as a single Obsidian vault to navigate it.
 - **Coordination (runtime):** typed JSON contracts (`shared/contracts/*.schema.json`) passed between workflows, plus the `shared/orchestrator.db` session log. Agents do **not** message each other through vault links.
 
+Knowledge access is scoped by `shared/lib/acl.js`: agents call `db-cli --as <agent>`, which enforces write-own-only and read-own+upstream against the policy. `db-cli query` is **read-only** (rejects non-SELECT/multi-statement) and all DB output is **capped** via `shared/lib/truncate.js` so large result sets can't balloon an agent's input tokens. This is a guardrail (a caller could still spoof `--as`), not OS-level isolation.
+
 Agents: an **orchestrator** (coordinator — decomposes, sequences, validates; never writes code) plus domain agents database/backend/frontend/testing/calls/mcpbridge/gitdevops. Each domain runs internal sub-agents — e.g. backend `flow-planner → data-architect → route-creator → prompt-engineer → code-standards → folder-structure`; frontend includes `layout-architect / positioning-specialist / contrast-specialist` for complex CSS. The backend **data-architect** enforces a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), and caching.
 
 ## Editing Workflow scripts (`.claude/workflows/*.js`) — read first

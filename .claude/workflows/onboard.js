@@ -494,13 +494,13 @@ await agent(
   ---
 
   After writing all 4 files, run this command to save a decision to the backend knowledge.db:
-  cd "${AGENTS_DIR}" && node shared/lib/db-cli.js save-decision backend "onboard-${sessionId}" "project-conventions" "Project ${projectName}: ${discovery.techStack.backendFramework || 'no backend'} + ${discovery.techStack.frontendFramework || 'no frontend'} + ${discovery.techStack.database || 'no db'}. Error format: ${backendScan.errorFormat}. Folder: ${backendScan.folderPattern}" "Onboarded from ${projectPath}"
+  cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as onboard save-decision backend "onboard-${sessionId}" "project-conventions" "Project ${projectName}: ${discovery.techStack.backendFramework || 'no backend'} + ${discovery.techStack.frontendFramework || 'no frontend'} + ${discovery.techStack.database || 'no db'}. Error format: ${backendScan.errorFormat}. Folder: ${backendScan.folderPattern}" "Onboarded from ${projectPath}"
 
   Then run to save a frontend decision:
-  cd "${AGENTS_DIR}" && node shared/lib/db-cli.js save-decision frontend "onboard-${sessionId}" "storage-rules" "Project ${projectName} uses ${frontendScan.tokenStorageMethod} for tokens. API calls via ${frontendScan.apiCallPattern}. State: ${discovery.techStack.stateManagement || 'none'}" "Onboarded from ${projectPath}"
+  cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as onboard save-decision frontend "onboard-${sessionId}" "storage-rules" "Project ${projectName} uses ${frontendScan.tokenStorageMethod} for tokens. API calls via ${frontendScan.apiCallPattern}. State: ${discovery.techStack.stateManagement || 'none'}" "Onboarded from ${projectPath}"
 
   Then run to save a database decision:
-  cd "${AGENTS_DIR}" && node shared/lib/db-cli.js save-decision database "onboard-${sessionId}" "schema-design" "Project ${projectName}: ${dbScan.totalTableCount} tables. ORM: ${discovery.techStack.orm || 'none'}. Pattern: ${dbScan.queryPattern}" "Onboarded from ${projectPath}"
+  cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as onboard save-decision database "onboard-${sessionId}" "schema-design" "Project ${projectName}: ${dbScan.totalTableCount} tables. ORM: ${discovery.techStack.orm || 'none'}. Pattern: ${dbScan.queryPattern}" "Onboarded from ${projectPath}"
 
   Return JSON: { filesWritten: [string], decisionsaved: number }`,
   {
@@ -546,7 +546,7 @@ const techStackSummary = [
 await agent(
   `Mark this project as onboarded. Run:
 
-  cd "${AGENTS_DIR}" && node shared/lib/db-cli.js mark-onboarded "${projectPath}" "${techStackSummary}" "${discovery.projectSummary.slice(0, 200).replace(/"/g, '')}"
+  cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as onboard mark-onboarded "${projectPath}" "${techStackSummary}" "${discovery.projectSummary.slice(0, 200).replace(/"/g, '')}"
 
   Return "done".`,
   { label: 'mark-onboarded' }

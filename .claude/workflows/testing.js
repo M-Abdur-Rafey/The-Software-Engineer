@@ -110,7 +110,7 @@ await agent(
   collection.testCases.map(t => `- ${t.method} ${t.routePath} — ${t.scenarioName} (${t.type}, expect ${t.expectedStatus})`).join('\n') +
   `\n\n` +
   `2. Log session event:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js log-session-event testing "${sessionId}" "complete" "completed" "${collection.testCases.length} test cases, ${pct}% coverage"\n\n` +
+  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as testing log-session-event testing "${sessionId}" "complete" "completed" "${collection.testCases.length} test cases, ${pct}% coverage"\n\n` +
   `Return "done".`,
   { label: 'write-output' }
 )

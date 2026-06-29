@@ -32,7 +32,7 @@ phase('Load Context')
 
 const context = await agent(
   `Load context for the Calls Agent (session: ${sessionId}).\n\n` +
-  `Run: cd "${AGENTS_DIR}" && node shared/lib/db-cli.js get-decisions calls telephony-patterns 10\n\n` +
+  `Run: cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls get-decisions calls telephony-patterns 10\n\n` +
   `Then read:\n` +
   `- ${AGENTS_DIR}/agents/calls/vault/INDEX.md\n` +
   `- ${AGENTS_DIR}/agents/calls/vault/providers/twilio-setup.md\n` +
@@ -306,7 +306,7 @@ phase('Persist')
 await agent(
   `Save calls agent state for session ${sessionId}.\n\n` +
   `Run:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js save-decision calls "${sessionId}" "telephony-patterns" ` +
+  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls save-decision calls "${sessionId}" "telephony-patterns" ` +
   `"Built ${flow.callDirection} call system with ${integration.webhookRoutes.length} webhooks for: ${taskText.slice(0, 60).replace(/"/g, '')}" ` +
   `"Provider: ${provider}, compliance passed: ${compliance.passed}"\n\n` +
   `Then write a vault note to: ${AGENTS_DIR}/agents/calls/vault/decisions/${flow.featureName}.md\n` +

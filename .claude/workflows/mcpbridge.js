@@ -28,7 +28,7 @@ phase('Load Context')
 
 const context = await agent(
   `Load context for the MCP Bridge Agent (session: ${sessionId}).\n\n` +
-  `Run: cd "${AGENTS_DIR}" && node shared/lib/db-cli.js get-decisions mcpbridge contract-violations 5\n\n` +
+  `Run: cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as mcpbridge get-decisions mcpbridge contract-violations 5\n\n` +
   `Return JSON: { priorViolations: <array from command> }`,
   {
     label: 'load-context',
@@ -158,7 +158,7 @@ const contractsPassed = totalBlocking === 0
 await agent(
   `Persist MCP Bridge results.\n\n` +
   (totalBlocking > 0
-    ? `Save violation decision:\ncd "${AGENTS_DIR}" && node shared/lib/db-cli.js save-decision mcpbridge "${sessionId}" "contract-violations" "${totalBlocking} blocking violation(s) found for: ${taskText.slice(0,50).replace(/"/g,'')}" "Types: ${[...new Set(allViolations.map(v=>v.type))].join(', ')}"\n\n`
+    ? `Save violation decision:\ncd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as mcpbridge save-decision mcpbridge "${sessionId}" "contract-violations" "${totalBlocking} blocking violation(s) found for: ${taskText.slice(0,50).replace(/"/g,'')}" "Types: ${[...new Set(allViolations.map(v=>v.type))].join(', ')}"\n\n`
     : ``) +
   `Write contract note to: ${AGENTS_DIR}/agents/mcpbridge/vault/contracts/${sessionId}.md\n` +
   `Content: # Contract Validation — Session ${sessionId}\n\n` +

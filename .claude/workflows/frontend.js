@@ -41,7 +41,7 @@ phase('Load Context')
 
 const context = await agent(
   `Load context for the Frontend Agent (session: ${sessionId}).\n\n` +
-  `Run: cd "${AGENTS_DIR}" && node shared/lib/db-cli.js get-decisions frontend storage-rules 10\n\n` +
+  `Run: cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as frontend get-decisions frontend storage-rules 10\n\n` +
   `Also read these files:\n` +
   `- ${AGENTS_DIR}/agents/frontend/vault/state-management/storage-rules.md\n` +
   `- ${AGENTS_DIR}/agents/frontend/vault/security/bearer-token-rules.md\n` +
@@ -418,7 +418,7 @@ log(`Security: ${security.securityFlags.length} flag(s), ${errorFlags.length} er
 // Persist
 await agent(
   `Save frontend decision. Run:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js save-decision frontend "${sessionId}" "storage-rules" ` +
+  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as frontend save-decision frontend "${sessionId}" "storage-rules" ` +
   `"Wired ${wiring.apiBindings.length} API bindings for: ${taskText.slice(0,60).replace(/"/g,'')}" "Security passed: ${security.passed}"\n\n` +
   `Return "done".`,
   { label: 'persist-state' }

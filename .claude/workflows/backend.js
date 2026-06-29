@@ -30,7 +30,7 @@ phase('Load Context')
 
 const context = await agent(
   `Load context for the Backend Agent (session: ${sessionId}).\n\n` +
-  `Run:\ncd "${AGENTS_DIR}" && node shared/lib/db-cli.js get-decisions backend express-patterns 10\n\n` +
+  `Run:\ncd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as backend get-decisions backend express-patterns 10\n\n` +
   `Then read: ${AGENTS_DIR}/agents/backend/vault/INDEX.md\n` +
   `Then read any relevant vault notes for the task: "${taskText}"\n\n` +
   `Return JSON: { decisions: <array from command>, relevantNoteCount: <number> }`,
@@ -226,7 +226,7 @@ log(`Structure: created ${structure.createdFiles.length} missing file(s)`)
 // Persist state
 await agent(
   `Save backend agent state. Run:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js save-decision backend "${sessionId}" "express-patterns" ` +
+  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as backend save-decision backend "${sessionId}" "express-patterns" ` +
   `"Created ${build.routeContracts.length} routes for: ${taskText.slice(0,60).replace(/"/g,'')}" "Feature: ${plan.featureName}"\n\n` +
   `Return "done".`,
   { label: 'persist-state' }

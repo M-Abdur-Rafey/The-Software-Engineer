@@ -30,7 +30,7 @@ phase('Load Context')
 const context = await agent(
   `Load context for the Database Agent (session: ${sessionId}).\n\n` +
   `Run these commands:\n` +
-  `1. cd "${AGENTS_DIR}" && node shared/lib/db-cli.js get-decisions database schema-design 10\n` +
+  `1. cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database get-decisions database schema-design 10\n` +
   `2. Read ${AGENTS_DIR}/agents/database/vault/INDEX.md\n` +
   `3. Read ${AGENTS_DIR}/agents/database/vault/optimizations/index-guidelines.md\n\n` +
   `Return JSON: { decisions: <array from command 1>, indexGuidelines: "<text of index-guidelines.md>" }`,
@@ -165,10 +165,10 @@ await agent(
   `Persist database agent state for session ${sessionId}.\n\n` +
   `Run these commands in order:\n\n` +
   `1. Save a migration record:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js insert database migrations '{"id":"${sessionId}-mig","session_id":"${sessionId}","filename":"${tableDesign.migrationFile}","description":"${taskText.slice(0,80).replace(/'/g,'')}","status":"generated","created_at":0}'\n\n` +
+  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database insert database migrations '{"id":"${sessionId}-mig","session_id":"${sessionId}","filename":"${tableDesign.migrationFile}","description":"${taskText.slice(0,80).replace(/'/g,'')}","status":"generated","created_at":0}'\n\n` +
   `(Use any timestamp for created_at — the DB will use the insert time)\n\n` +
   `2. Save a decision:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js save-decision database "${sessionId}" "schema-design" "Created ${tableDesign.tables.length} tables for: ${taskText.slice(0,60).replace(/"/g,'')}" "Task required new schema"\n\n` +
+  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database save-decision database "${sessionId}" "schema-design" "Created ${tableDesign.tables.length} tables for: ${taskText.slice(0,60).replace(/"/g,'')}" "Task required new schema"\n\n` +
   `3. Write a vault note to: ${AGENTS_DIR}/agents/database/vault/schemas/${tableDesign.tables.map(t=>t.name).join('-')}.md\n` +
   `Content should include: table names, columns, FK relationships, estimated rows.\n\n` +
   `Return "done".`,
