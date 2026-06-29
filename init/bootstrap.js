@@ -48,6 +48,9 @@ const DIRS = [
   'agents/orchestrator/vault/routing',
   'agents/orchestrator/vault/sessions',
   'agents/orchestrator/vault/decisions',
+  'agents/ponytail/vault/philosophy',
+  'agents/ponytail/vault/reviews',
+  'agents/ponytail/vault/decisions',
   'shared/lib',
   'shared/contracts',
   'shared/standards',
@@ -180,7 +183,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id);
 `;
 
 // ─── Create agent knowledge.db files ─────────────────────────────────────────
-const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'orchestrator'];
+const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'orchestrator'];
 
 log.info('Creating agent knowledge.db files...');
 AGENT_NAMES.forEach(name => {
@@ -570,6 +573,51 @@ const CONTRACTS = {
       },
       filesChanged: { type: 'array', items: { type: 'string' } },
       errors:       { type: 'array', items: { type: 'string' } },
+    },
+  },
+
+  ponytail: {
+    type: 'object',
+    required: ['sessionId', 'agentName', 'status'],
+    properties: {
+      sessionId: { type: 'string' },
+      agentName: { type: 'string', const: 'ponytail' },
+      status:    { type: 'string', enum: ['completed', 'failed', 'skipped'] },
+      mode:      { type: 'string', enum: ['lite', 'full', 'ultra'] },
+      filesReviewed: { type: 'array', items: { type: 'string' } },
+      simplifications: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['file', 'rationale'],
+          properties: {
+            file:         { type: 'string' },
+            rationale:    { type: 'string' },
+            linesRemoved: { type: 'number' },
+          },
+        },
+      },
+      skippedSuggestions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['file', 'suggestion', 'reason'],
+          properties: {
+            file:       { type: 'string' },
+            suggestion: { type: 'string' },
+            reason:     { type: 'string' },
+          },
+        },
+      },
+      metrics: {
+        type: 'object',
+        properties: {
+          filesReviewed:          { type: 'number' },
+          simplificationsApplied: { type: 'number' },
+          estimatedLinesRemoved:  { type: 'number' },
+        },
+      },
+      errors: { type: 'array', items: { type: 'string' } },
     },
   },
 

@@ -1,0 +1,102 @@
+{
+  "type": "object",
+  "required": [
+    "sessionId",
+    "agentName",
+    "status"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "agentName": {
+      "type": "string",
+      "const": "ponytail"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "failed",
+        "skipped"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "lite",
+        "full",
+        "ultra"
+      ]
+    },
+    "filesReviewed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "simplifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "file",
+          "rationale"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "linesRemoved": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "skippedSuggestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "file",
+          "suggestion",
+          "reason"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "suggestion": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "filesReviewed": {
+          "type": "number"
+        },
+        "simplificationsApplied": {
+          "type": "number"
+        },
+        "estimatedLinesRemoved": {
+          "type": "number"
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

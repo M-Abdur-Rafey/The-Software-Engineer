@@ -35,17 +35,18 @@ Workflow({ scriptPath: '~/.agents/.claude/workflows/orchestrate.js',
   args: { task: "...", projectPath: "C:/abs/path", agentsDir: "~/.agents" } })
 ```
 
-Individual domain workflows (`backend.js`, `frontend.js`, `database.js`, `testing.js`, `calls.js`, `gitdevops.js`, `mcpbridge.js`, `onboard.js`) can be invoked the same way.
+Individual domain workflows (`backend.js`, `frontend.js`, `database.js`, `testing.js`, `calls.js`, `ponytail.js`, `gitdevops.js`, `mcpbridge.js`, `onboard.js`) can be invoked the same way.
 
 ## Architecture
 
 Dependency order (always enforced):
 
 ```
-[onboard — first use only] → database → backend → frontend + testing + calls (parallel) → mcpbridge → gitdevops
+[onboard — first use only] → database → backend → frontend + testing + calls (parallel) → ponytail → mcpbridge → gitdevops
 ```
 
 - Frontend/testing/calls parallelize after backend: frontend needs `BackendOutput.contractExports[]`, testing needs `BackendOutput.routes[]`, calls needs the backend + database outputs.
+- **ponytail** is the "lazy senior dev" refinement gate: after code generation it reviews the session's changed files against a minimal-code decision ladder and applies behavior-preserving simplifications (never touching validation/security/accessibility/requested features). It is **advisory — never blocks** — and runs before the bridge so contracts are re-validated on whatever it trimmed. Vendored from [ponytail](https://github.com/DietrichGebert/ponytail) (MIT).
 - **mcpbridge** validates the cross-domain JSON contracts and gates the commit; **gitdevops** runs last and commits only if the bridge passes its 10-point security scan.
 
 Two communication layers — keep them distinct:
@@ -55,7 +56,7 @@ Two communication layers — keep them distinct:
 
 Knowledge access is scoped by `shared/lib/acl.js`: agents call `db-cli --as <agent>`, which enforces write-own-only and read-own+upstream against the policy. `db-cli query` is **read-only** (rejects non-SELECT/multi-statement) and all DB output is **capped** via `shared/lib/truncate.js` so large result sets can't balloon an agent's input tokens. This is a guardrail (a caller could still spoof `--as`), not OS-level isolation.
 
-Agents: an **orchestrator** (coordinator — decomposes, sequences, validates; never writes code) plus domain agents database/backend/frontend/testing/calls/mcpbridge/gitdevops. Each domain runs internal sub-agents — e.g. backend `flow-planner → data-architect → route-creator → prompt-engineer → code-standards → folder-structure`; frontend includes `layout-architect / positioning-specialist / contrast-specialist` for complex CSS. The backend **data-architect** enforces a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), and caching.
+Agents: an **orchestrator** (coordinator — decomposes, sequences, validates; never writes code) plus domain agents database/backend/frontend/testing/calls/ponytail/mcpbridge/gitdevops. Each domain runs internal sub-agents — e.g. backend `flow-planner → data-architect → route-creator → prompt-engineer → code-standards → folder-structure`; frontend includes `layout-architect / positioning-specialist / contrast-specialist` for complex CSS. The backend **data-architect** enforces a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), and caching.
 
 ## Editing Workflow scripts (`.claude/workflows/*.js`) — read first
 

@@ -7,7 +7,9 @@
 | 3a | [[frontend]] | BackendOutput | FrontendOutput |
 | 3b | [[testing]] | BackendOutput | Postman collection |
 | 3c | [[calls]] | BackendOutput, DatabaseOutput | CallsOutput |
-| 4 | [[mcpbridge]] | all outputs | contract validation |
-| 5 | [[gitdevops]] | validated outputs | branch + commit |
+| 4 | [[ponytail]] | code outputs | simplified files + review |
+| 5 | [[mcpbridge]] | all outputs | contract validation |
+| 6 | [[gitdevops]] | validated outputs | branch + commit |
 
-Steps 3a–3c run in parallel. The commit only happens if step 4 passes.
+Steps 3a–3c run in parallel. Ponytail (step 4) trims the generated code before the
+bridge re-validates contracts. The commit only happens if step 5 passes.

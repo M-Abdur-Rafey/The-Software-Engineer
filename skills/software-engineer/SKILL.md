@@ -397,12 +397,13 @@ Examples:
 | **Frontend** | Builds components, wires API calls, enforces security rules. For 3D tasks: designs Three.js/WebGL scene, physics, shaders, and scroll animation using Opus model | ui-designer, 3d-designer (Opus), component-creator, api-wirer, security-checker |
 | **Testing** | Generates Postman tests (success case, error case, auth case per route) | — |
 | **Calls** | Inbound IVR flows, outbound campaigns, webhook handlers, TTS scripts, TCPA/GDPR compliance | flow-designer, telephony-integrator, voice-script-writer, compliance-checker |
+| **Ponytail** | "Lazy senior dev" pass — reviews the generated code against a minimal-code decision ladder (reuse > stdlib > native > deps > one-liner) and trims over-engineering. Never touches validation, security, or requested features. Advisory — never blocks. | — |
 | **Bridge** | Checks that frontend and backend are talking to each other correctly | — |
 | **Git** | Runs 10 security checks, creates branch, writes structured commit | — |
 
 **Order (always enforced):**
 ```
-[onboard — first use only] → database → backend → frontend + testing + calls → bridge → git
+[onboard — first use only] → database → backend → frontend + testing + calls → ponytail → bridge → git
 ```
 
 ---

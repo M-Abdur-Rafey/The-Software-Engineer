@@ -2151,6 +2151,70 @@ The hardest, most bug-prone styling. Three specialists own it and run on every f
 `);
 log.ok('frontend complex-css architecture seeded');
 
+// ─── Ponytail vault ───────────────────────────────────────────────────────────
+// The "lazy senior dev" minimal-code philosophy. Vendored from the ponytail
+// project (https://github.com/DietrichGebert/ponytail, MIT). The ponytail
+// workflow reads these three notes before reviewing a session's generated code.
+writeNote('ponytail', 'philosophy/decision-ladder.md', `# The Decision Ladder
+
+> Makes the agent think like the laziest senior dev in the room.
+> **The best code is the code you never wrote.**
+
+Before writing ANY code, climb this ladder and stop at the first rung that works:
+
+1. **Does this need to exist? (YAGNI)** — If the requirement is speculative, skip it.
+   Don't build for an imagined future; build for the request in front of you.
+2. **Already in the codebase?** — Reuse an existing function, component, or util.
+3. **Standard library?** — Use the language stdlib before writing custom code.
+4. **Native platform feature?** — Use a built-in browser/runtime/DB feature before a library.
+5. **Installed dependency?** — Use a dependency already in the project before adding a new one.
+6. **One-line solution?** — Prefer a clean one-liner over a multi-line block.
+7. **Only then: minimal working code.** — Write the least code that fully solves the problem.
+
+## Review heuristics (what over-engineering looks like)
+- Unrequested abstractions, wrapper layers, or "framework" code for a single use.
+- Hand-rolled code that duplicates the stdlib, a native feature, or an installed dep.
+- Dead code, unused exports, needless indirection, premature generalization.
+- Multi-line blocks that collapse to a clear one-liner.
+
+## Bias
+**Deletion over addition. Boring over clever.** Bug fixes target the root cause, not the symptom.
+Mark deliberate simplifications with a \`ponytail:\` comment so future readers know what was
+skipped and when to add it back.
+`);
+
+writeNote('ponytail', 'philosophy/modes.md', `# Intensity Modes
+
+The agent runs at one of three intensities (passed in as \`mode\`):
+
+| Mode | Behavior |
+|------|----------|
+| **lite** | Build as asked. Suggest a lazier alternative, but do **not** edit files. |
+| **full** (default) | Enforce the decision ladder. Apply behavior-preserving simplifications. Shortest explanation. |
+| **ultra** | YAGNI extremist. Challenge the requirement itself — question whether the code should exist at all. |
+
+Whatever the mode, only **explain what was skipped and when to add it back** — keep the
+narration short. The output of a review is fewer lines, not more words.
+`);
+
+writeNote('ponytail', 'philosophy/never-simplify.md', `# When NOT to Simplify
+
+Laziness is about avoiding *unnecessary* code — never about cutting corners on safety.
+**Never** flag, remove, or weaken any of the following, even in \`ultra\` mode:
+
+- **Input validation** at system boundaries.
+- **Error handling** — try/catch, structured error responses, graceful degradation.
+- **Security** — auth checks, token placement, sanitization, CSP, parameterized queries.
+- **Accessibility** — ARIA, keyboard navigation, focus states, contrast.
+- **Explicitly requested features** — if the user asked for it, it stays.
+
+Always understand the **full** problem before proposing a shortcut. A simplification must be
+behavior-preserving and high-confidence; if it is risky, leave the code as-is and report why.
+Anything touching the areas above belongs in \`skippedSuggestions\`, not in the applied set.
+`);
+
+log.ok('ponytail vault seeded');
+
 // ─── Connected knowledge graph (Obsidian [[wikilinks]]) ───────────────────────
 // A home note per agent + sub-agent stubs, cross-linked along the contract flow,
 // plus an orchestrator hub linking to everything. Open the `agents/` folder as
@@ -2213,10 +2277,15 @@ const GRAPH = {
       ['compliance-checker', 'Validates TCPA/GDPR/DNC and recording consent.', null],
     ],
   },
+  ponytail: {
+    title: 'Ponytail Agent',
+    role: 'Lazy-senior-dev refinement gate — reviews generated code against the minimal-code decision ladder and applies safe simplifications. The best code is the code you never wrote.',
+    upstream: ['backend', 'frontend', 'calls'], downstream: ['mcpbridge'], validators: [], subAgents: [],
+  },
   mcpbridge: {
     title: 'MCP Bridge Agent',
     role: 'Validates frontend↔backend↔database↔calls contracts; gates the commit.',
-    upstream: ['backend', 'frontend', 'database', 'calls'], downstream: ['gitdevops'], validators: [], subAgents: [],
+    upstream: ['backend', 'frontend', 'database', 'calls', 'ponytail'], downstream: ['gitdevops'], validators: [], subAgents: [],
   },
   gitdevops: {
     title: 'Git / DevOps Agent',
@@ -2271,7 +2340,7 @@ writeNote('orchestrator', 'orchestrator.md', [
   'The top-level coordinator. Routes each task through the domain agents in dependency order and passes typed JSON contracts between them.',
   '',
   '## Dependency order',
-  `${link('database')} → ${link('backend')} → ( ${link('frontend')} · ${link('testing')} · ${link('calls')} ) → ${link('mcpbridge')} → ${link('gitdevops')}`,
+  `${link('database')} → ${link('backend')} → ( ${link('frontend')} · ${link('testing')} · ${link('calls')} ) → ${link('ponytail')} → ${link('mcpbridge')} → ${link('gitdevops')}`,
   '',
   '## Domain agents',
   DOMAINS.map(link).join(' · '),
@@ -2293,17 +2362,19 @@ writeNote('orchestrator', 'routing/dependency-order.md', [
   `| 3a | ${link('frontend')} | BackendOutput | FrontendOutput |`,
   `| 3b | ${link('testing')} | BackendOutput | Postman collection |`,
   `| 3c | ${link('calls')} | BackendOutput, DatabaseOutput | CallsOutput |`,
-  `| 4 | ${link('mcpbridge')} | all outputs | contract validation |`,
-  `| 5 | ${link('gitdevops')} | validated outputs | branch + commit |`,
+  `| 4 | ${link('ponytail')} | code outputs | simplified files + review |`,
+  `| 5 | ${link('mcpbridge')} | all outputs | contract validation |`,
+  `| 6 | ${link('gitdevops')} | validated outputs | branch + commit |`,
   '',
-  'Steps 3a–3c run in parallel. The commit only happens if step 4 passes.',
+  'Steps 3a–3c run in parallel. Ponytail (step 4) trims the generated code before the',
+  'bridge re-validates contracts. The commit only happens if step 5 passes.',
   '',
 ].join('\n'));
 
 log.ok('knowledge graph seeded (home notes, sub-agents, orchestrator)');
 
 // ─── Update all INDEX.md files ────────────────────────────────────────────────
-const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'orchestrator'];
+const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'orchestrator'];
 AGENT_NAMES.forEach(name => {
   updateIndexMd(name);
   log.ok(`${name} vault/INDEX.md updated`);

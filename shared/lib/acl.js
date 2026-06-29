@@ -26,6 +26,7 @@ const READ = {
   frontend: ['frontend', 'backend'],
   testing: ['testing', 'backend'],
   calls: ['calls', 'backend', 'database'],
+  ponytail: ['ponytail', 'backend', 'frontend', 'calls'],  // reviews the code these agents generate
 };
 
 function canWrite(caller, target) {
