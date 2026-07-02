@@ -7,7 +7,7 @@
 
 ## Talks to
 - **Reads from (upstream):** [[mcpbridge]]
-- **Hands off to (downstream):** — (leaf)
+- **Hands off to (downstream):** [[sre]]
 - **Validated by:** — none
 
 ## Internal pipeline (sub-agents)

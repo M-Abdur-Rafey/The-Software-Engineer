@@ -7,7 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This directory **is** multi-agent software-engineering orchestration infrastructure — not an app to ship. Installed it lives at `~/.agents`; in development it is this repo (`MARafey/The-Software-Engineer`, default branch **master**). It ships two ways:
 
 - **Claude Code plugin** — `.claude-plugin/{plugin,marketplace}.json` + `skills/software-engineer/SKILL.md` provide the `/software-engineer` slash command. The skill clones the repo to `~/.agents` on first run, then drives the Workflow scripts.
-- **Cross-IDE MCP server** — `mcp/server.mjs` exposes the orchestrator to any MCP editor (Cursor/Windsurf/VS Code). See `mcp/README.md`.
+- **Cross-IDE MCP server** — `mcp/server.mjs` exposes the orchestrator to any MCP editor (Cursor/Windsurf/VS Code). See `mcp/README.md`. Outside Claude Code the model layer needs `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in the editor's mcp.json env; `SE_MAIN_MODEL`/`SE_SUB_MODEL` override model choice.
+
+The skill file (`skills/software-engineer/SKILL.md`) is also the plugin's shell layer: it owns install-path resolution, first-run auto-install, and the command routing table — adding a new `/software-engineer <command>` means editing that routing table, not just adding a workflow.
 
 Given a task + target project path, the orchestrator routes work through domain agents in dependency order, each grounded by its own SQLite `knowledge.db` + Obsidian vault.
 
@@ -35,17 +37,20 @@ Workflow({ scriptPath: '~/.agents/.claude/workflows/orchestrate.js',
   args: { task: "...", projectPath: "C:/abs/path", agentsDir: "~/.agents" } })
 ```
 
-Individual domain workflows (`backend.js`, `frontend.js`, `database.js`, `testing.js`, `calls.js`, `ponytail.js`, `gitdevops.js`, `mcpbridge.js`, `onboard.js`) can be invoked the same way.
+Individual domain workflows (`requirements.js`, `backend.js`, `frontend.js`, `database.js`, `testing.js`, `calls.js`, `ponytail.js`, `gitdevops.js`, `mcpbridge.js`, `sre.js`, `onboard.js`) can be invoked the same way.
 
 ## Architecture
 
 Dependency order (always enforced):
 
 ```
-[onboard — first use only] → database → backend → frontend + testing + calls (parallel) → ponytail → mcpbridge → gitdevops
+[onboard — first use only] → requirements → database → backend → frontend + testing + calls (parallel) → ponytail → mcpbridge → gitdevops → sre
+                    ↑ ______________________________________ feedback loop ______________________________________ ↓
 ```
 
+- **requirements** runs first (spec-driven development): it synthesizes signals — task text, prior SRE feedback, project logs/bug reports/user feedback — into user stories with Given/When/Then acceptance criteria plus a specification whose Decisions table pins every choice a domain agent would otherwise guess (unresolvable ones go to `openQuestions[]`, never silent guesses). All domain workflows receive `requirementsOutput`; testing derives test data from the acceptance criteria.
 - Frontend/testing/calls parallelize after backend: frontend needs `BackendOutput.contractExports[]`, testing needs `BackendOutput.routes[]`, calls needs the backend + database outputs.
+- **sre** runs last (operate phase, advisory — never blocks, never edits code): health checks, log/root-cause diagnostics, IaC review, and outcome metrics computed deterministically from the session contracts (coverage, violations, security blocks — never lines of code). Its `feedback[]` is saved as decisions the requirements agent reads next cycle, closing the lifecycle loop.
 - **ponytail** is the "lazy senior dev" refinement gate: after code generation it reviews the session's changed files against a minimal-code decision ladder and applies behavior-preserving simplifications (never touching validation/security/accessibility/requested features). It is **advisory — never blocks** — and runs before the bridge so contracts are re-validated on whatever it trimmed. Vendored from [ponytail](https://github.com/DietrichGebert/ponytail) (MIT).
 - **mcpbridge** validates the cross-domain JSON contracts and gates the commit; **gitdevops** runs last and commits only if the bridge passes its 10-point security scan.
 
@@ -56,7 +61,13 @@ Two communication layers — keep them distinct:
 
 Knowledge access is scoped by `shared/lib/acl.js`: agents call `db-cli --as <agent>`, which enforces write-own-only and read-own+upstream against the policy. `db-cli query` is **read-only** (rejects non-SELECT/multi-statement) and all DB output is **capped** via `shared/lib/truncate.js` so large result sets can't balloon an agent's input tokens. This is a guardrail (a caller could still spoof `--as`), not OS-level isolation.
 
-Agents: an **orchestrator** (coordinator — decomposes, sequences, validates; never writes code) plus domain agents database/backend/frontend/testing/calls/ponytail/mcpbridge/gitdevops. Each domain runs internal sub-agents — e.g. backend `flow-planner → data-architect → route-creator → prompt-engineer → code-standards → folder-structure`; frontend includes `layout-architect / positioning-specialist / contrast-specialist` for complex CSS. The backend **data-architect** enforces a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), and caching.
+Agents: an **orchestrator** (coordinator — decomposes, sequences, validates; never writes code) plus domain agents requirements/database/backend/frontend/testing/calls/ponytail/mcpbridge/gitdevops/sre. Each domain runs internal sub-agents — e.g. backend `flow-planner → data-architect → route-creator → prompt-engineer → code-standards → folder-structure`; frontend includes `layout-architect / positioning-specialist / contrast-specialist` for complex CSS. The backend **data-architect** enforces a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), and caching.
+
+**`agents/<name>/CLAUDE.md` is the source of truth for each domain's behavior** — sub-agent pipeline, output contract shape, and standards live there, and agents read their own file at run time. Change domain logic there, not in the workflow scripts. The gitdevops file plus `agents/gitdevops/vault/security-scans/checklist.md` define the 10-point pre-commit scan: 7 checks are BLOCKING (committed `.env` files, hardcoded secrets/bearer tokens, `localhost` outside tests, auth tokens from `localStorage`, DB credentials in source, missing CSP on frontend changes) and there is deliberately no force-override.
+
+ACL read scope (`shared/lib/acl.js`): orchestrator/onboard/mcpbridge/gitdevops/sre read all; requirements reads +sre (feedback loop); database/backend/frontend/testing/calls all read +requirements (the spec), plus backend reads +database, frontend and testing read +backend, calls reads +backend+database; ponytail reads +backend+frontend+calls. Everyone writes only their own knowledge.
+
+The shared SQLite schema (defined in `init/bootstrap.js`) has four tables workflows touch via db-cli: `sessions`, `agent_runs`, `decisions`, and `patterns` — check bootstrap for columns before writing queries. Workflow args follow one pattern: `{ sessionId?, projectPath, agentsDir, clarifications? }`, where `clarifications` carries pre-answered user preferences (`designPreferences` / `archPreferences` / `dbPreferences` / `callPreferences` — see `skills/software-engineer/SKILL.md` for the shape) so the MCP path can run without interactive prompts.
 
 ## Editing Workflow scripts (`.claude/workflows/*.js`) — read first
 

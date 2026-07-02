@@ -21,11 +21,13 @@ const READ = {
   onboard: '*',
   mcpbridge: '*',   // validates every domain's contracts
   gitdevops: '*',   // scans everything before committing
-  database: ['database'],
-  backend: ['backend', 'database'],
-  frontend: ['frontend', 'backend'],
-  testing: ['testing', 'backend'],
-  calls: ['calls', 'backend', 'database'],
+  sre: '*',         // operate-phase observer — diagnoses across every domain
+  requirements: ['requirements', 'sre'],  // entry point; consumes ops feedback from the previous cycle
+  database: ['database', 'requirements'],
+  backend: ['backend', 'database', 'requirements'],
+  frontend: ['frontend', 'backend', 'requirements'],
+  testing: ['testing', 'backend', 'requirements'],  // derives test data from user stories
+  calls: ['calls', 'backend', 'database', 'requirements'],
   ponytail: ['ponytail', 'backend', 'frontend', 'calls'],  // reviews the code these agents generate
 };
 

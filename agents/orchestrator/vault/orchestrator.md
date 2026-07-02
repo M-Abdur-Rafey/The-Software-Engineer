@@ -3,10 +3,10 @@
 The top-level coordinator. Routes each task through the domain agents in dependency order and passes typed JSON contracts between them.
 
 ## Dependency order
-[[database]] → [[backend]] → ( [[frontend]] · [[testing]] · [[calls]] ) → [[ponytail]] → [[mcpbridge]] → [[gitdevops]]
+[[requirements]] → [[database]] → [[backend]] → ( [[frontend]] · [[testing]] · [[calls]] ) → [[ponytail]] → [[mcpbridge]] → [[gitdevops]] → [[sre]] ⤳ back to [[requirements]]
 
 ## Domain agents
-[[database]] · [[backend]] · [[frontend]] · [[testing]] · [[calls]] · [[ponytail]] · [[mcpbridge]] · [[gitdevops]]
+[[requirements]] · [[database]] · [[backend]] · [[frontend]] · [[testing]] · [[calls]] · [[ponytail]] · [[mcpbridge]] · [[gitdevops]] · [[sre]]
 
 ## How they communicate
 - **Knowledge (persistent):** each agent's vault + `knowledge.db` — this connected graph.

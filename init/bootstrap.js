@@ -52,6 +52,14 @@ const DIRS = [
   'agents/ponytail/vault/philosophy',
   'agents/ponytail/vault/reviews',
   'agents/ponytail/vault/decisions',
+  'agents/requirements/vault/specs',
+  'agents/requirements/vault/user-stories',
+  'agents/requirements/vault/signals',
+  'agents/requirements/vault/decisions',
+  'agents/sre/vault/diagnostics',
+  'agents/sre/vault/metrics',
+  'agents/sre/vault/runbooks',
+  'agents/sre/vault/decisions',
   'shared/lib',
   'shared/contracts',
   'shared/standards',
@@ -184,7 +192,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id);
 `;
 
 // ─── Create agent knowledge.db files ─────────────────────────────────────────
-const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'orchestrator'];
+const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'requirements', 'sre', 'orchestrator'];
 
 log.info('Creating agent knowledge.db files...');
 AGENT_NAMES.forEach(name => {
@@ -616,6 +624,162 @@ const CONTRACTS = {
           filesReviewed:          { type: 'number' },
           simplificationsApplied: { type: 'number' },
           estimatedLinesRemoved:  { type: 'number' },
+        },
+      },
+      errors: { type: 'array', items: { type: 'string' } },
+    },
+  },
+
+  requirements: {
+    type: 'object',
+    required: ['sessionId', 'agentName', 'status'],
+    properties: {
+      sessionId: { type: 'string' },
+      agentName: { type: 'string', const: 'requirements' },
+      status:    { type: 'string', enum: ['completed', 'failed'] },
+      signalsAnalyzed: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['source', 'finding'],
+          properties: {
+            source:  { type: 'string', enum: ['task-text', 'logs', 'bug-reports', 'user-feedback', 'stakeholder-notes', 'sre-feedback', 'codebase'] },
+            finding: { type: 'string' },
+          },
+        },
+      },
+      rootCauses: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['symptom', 'cause'],
+          properties: {
+            symptom:  { type: 'string' },
+            cause:    { type: 'string' },
+            evidence: { type: 'string' },
+          },
+        },
+      },
+      userStories: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['id', 'asA', 'iWant', 'soThat', 'acceptanceCriteria'],
+          properties: {
+            id:      { type: 'string' },
+            asA:     { type: 'string' },
+            iWant:   { type: 'string' },
+            soThat:  { type: 'string' },
+            acceptanceCriteria: { type: 'array', items: { type: 'string' } },
+            priority: { type: 'string', enum: ['must', 'should', 'could'] },
+          },
+        },
+      },
+      spec: {
+        type: 'object',
+        properties: {
+          summary:      { type: 'string' },
+          inScope:      { type: 'array', items: { type: 'string' } },
+          outOfScope:   { type: 'array', items: { type: 'string' } },
+          decisions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['topic', 'decision'],
+              properties: {
+                topic:     { type: 'string' },
+                decision:  { type: 'string' },
+                rationale: { type: 'string' },
+              },
+            },
+          },
+          openQuestions: { type: 'array', items: { type: 'string' } },
+          specFile:      { type: 'string' },
+        },
+      },
+      tasks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['id', 'title', 'domain'],
+          properties: {
+            id:          { type: 'string' },
+            title:       { type: 'string' },
+            domain:      { type: 'string', enum: ['database', 'backend', 'frontend', 'testing', 'calls'] },
+            storyId:     { type: 'string' },
+            description: { type: 'string' },
+          },
+        },
+      },
+      errors: { type: 'array', items: { type: 'string' } },
+    },
+  },
+
+  sre: {
+    type: 'object',
+    required: ['sessionId', 'agentName', 'status'],
+    properties: {
+      sessionId: { type: 'string' },
+      agentName: { type: 'string', const: 'sre' },
+      status:    { type: 'string', enum: ['completed', 'failed', 'skipped'] },
+      healthChecks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['name', 'status'],
+          properties: {
+            name:   { type: 'string' },
+            status: { type: 'string', enum: ['pass', 'warn', 'fail'] },
+            detail: { type: 'string' },
+          },
+        },
+      },
+      diagnostics: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['symptom', 'rootCause', 'severity'],
+          properties: {
+            symptom:      { type: 'string' },
+            rootCause:    { type: 'string' },
+            evidence:     { type: 'string' },
+            suggestedFix: { type: 'string' },
+            severity:     { type: 'string', enum: ['critical', 'major', 'minor'] },
+          },
+        },
+      },
+      outcomeMetrics: {
+        type: 'object',
+        properties: {
+          filesChangedCount:   { type: 'number' },
+          routesAdded:         { type: 'number' },
+          testCoveragePercent: { type: 'number' },
+          contractViolations:  { type: 'number' },
+          securityBlocks:      { type: 'number' },
+          simplificationsApplied: { type: 'number' },
+        },
+      },
+      iacArtifacts: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['type', 'path'],
+          properties: {
+            type:        { type: 'string', enum: ['dockerfile', 'compose', 'kubernetes', 'ansible', 'ci'] },
+            path:        { type: 'string' },
+            description: { type: 'string' },
+          },
+        },
+      },
+      feedback: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['forAgent', 'note'],
+          properties: {
+            forAgent: { type: 'string' },
+            note:     { type: 'string' },
+          },
         },
       },
       errors: { type: 'array', items: { type: 'string' } },

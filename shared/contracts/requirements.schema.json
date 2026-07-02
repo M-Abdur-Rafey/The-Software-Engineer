@@ -1,0 +1,204 @@
+{
+  "type": "object",
+  "required": [
+    "sessionId",
+    "agentName",
+    "status"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "agentName": {
+      "type": "string",
+      "const": "requirements"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "failed"
+      ]
+    },
+    "signalsAnalyzed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "finding"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "task-text",
+              "logs",
+              "bug-reports",
+              "user-feedback",
+              "stakeholder-notes",
+              "sre-feedback",
+              "codebase"
+            ]
+          },
+          "finding": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "rootCauses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "symptom",
+          "cause"
+        ],
+        "properties": {
+          "symptom": {
+            "type": "string"
+          },
+          "cause": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "userStories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "asA",
+          "iWant",
+          "soThat",
+          "acceptanceCriteria"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "asA": {
+            "type": "string"
+          },
+          "iWant": {
+            "type": "string"
+          },
+          "soThat": {
+            "type": "string"
+          },
+          "acceptanceCriteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "must",
+              "should",
+              "could"
+            ]
+          }
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "inScope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outOfScope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "topic",
+              "decision"
+            ],
+            "properties": {
+              "topic": {
+                "type": "string"
+              },
+              "decision": {
+                "type": "string"
+              },
+              "rationale": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "openQuestions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "specFile": {
+          "type": "string"
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "domain"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "database",
+              "backend",
+              "frontend",
+              "testing",
+              "calls"
+            ]
+          },
+          "storyId": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -12,9 +12,11 @@ const AGENTS_DIR    = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Age
 const sessionId     = (args && args.sessionId)    || 'no-session'
 const taskText      = (args && args.taskText)     || ''
 const projectPath   = (args && args.projectPath)  || ''
-const backendOutput = (args && args.backendOutput) || null
+const backendOutput      = (args && args.backendOutput)      || null
+const requirementsOutput = (args && args.requirementsOutput) || null
 
-const routes = (backendOutput && backendOutput.routes) || []
+const routes      = (backendOutput && backendOutput.routes) || []
+const userStories = (requirementsOutput && requirementsOutput.userStories) || []
 
 // ─── Phase: Load Context ─────────────────────────────────────────────────────
 phase('Load Context')
@@ -61,6 +63,11 @@ const collectionPath = `${AGENTS_DIR}/agents/testing/vault/collections/${feature
 const collection = await agent(
   `You are the Testing Agent. Generate a complete Postman Collection v2.1 JSON.\n\n` +
   `Routes to test (from backend contract):\n${JSON.stringify(routes, null, 2)}\n\n` +
+  (userStories.length
+    ? `User stories with acceptance criteria (from the requirements spec) — derive realistic ` +
+      `test data and edge cases directly from these Given/When/Then criteria, and add one extra ` +
+      `test per acceptance criterion that maps to a route:\n${JSON.stringify(userStories, null, 2)}\n\n`
+    : '') +
   `Template reference:\n${context.template}\n\n` +
   `Rules:\n` +
   `- Collection name: "${featureName}"\n` +

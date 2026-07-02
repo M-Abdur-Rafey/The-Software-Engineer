@@ -1,0 +1,159 @@
+{
+  "type": "object",
+  "required": [
+    "sessionId",
+    "agentName",
+    "status"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "agentName": {
+      "type": "string",
+      "const": "sre"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "failed",
+        "skipped"
+      ]
+    },
+    "healthChecks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "symptom",
+          "rootCause",
+          "severity"
+        ],
+        "properties": {
+          "symptom": {
+            "type": "string"
+          },
+          "rootCause": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "suggestedFix": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "major",
+              "minor"
+            ]
+          }
+        }
+      }
+    },
+    "outcomeMetrics": {
+      "type": "object",
+      "properties": {
+        "filesChangedCount": {
+          "type": "number"
+        },
+        "routesAdded": {
+          "type": "number"
+        },
+        "testCoveragePercent": {
+          "type": "number"
+        },
+        "contractViolations": {
+          "type": "number"
+        },
+        "securityBlocks": {
+          "type": "number"
+        },
+        "simplificationsApplied": {
+          "type": "number"
+        }
+      }
+    },
+    "iacArtifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "path"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "dockerfile",
+              "compose",
+              "kubernetes",
+              "ansible",
+              "ci"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "feedback": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "forAgent",
+          "note"
+        ],
+        "properties": {
+          "forAgent": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

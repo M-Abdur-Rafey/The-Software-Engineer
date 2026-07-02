@@ -4,12 +4,14 @@ export const meta = {
   phases: [
     { title: 'Init', detail: 'Create session, classify task' },
     { title: 'Onboard', detail: 'Deep project scan (first use only — reads entire codebase)' },
+    { title: 'Requirements', detail: 'Spec-driven: signals → user stories → specification' },
     { title: 'Database', detail: 'Schema and migration work' },
     { title: 'Backend', detail: 'Routes, controllers, services' },
     { title: 'Frontend + Testing + Calls', detail: 'Components, Postman collections, and telephony (parallel)' },
     { title: 'Ponytail', detail: 'Lazy-senior-dev pass — trims over-engineering from generated code' },
     { title: 'Bridge', detail: 'Contract validation across all domains' },
     { title: 'Git', detail: 'Branch, security scan, commit' },
+    { title: 'SRE', detail: 'Operate: health checks, diagnostics, outcome metrics, feedback loop (advisory)' },
   ],
 }
 
@@ -115,6 +117,7 @@ const classification = await agent(
 
 log(`db=${classification.requiresDatabase} be=${classification.requiresBackend} fe=${classification.requiresFrontend} calls=${classification.requiresCalls} type=${classification.taskType}`)
 
+let requirementsOutput = null
 let databaseOutput = null
 let backendOutput  = null
 let frontendOutput = null
@@ -123,13 +126,25 @@ let callsOutput    = null
 let ponytailOutput = null
 let bridgeOutput   = null
 let gitOutput      = null
+let sreOutput      = null
+
+// ─── Phase: Requirements ─────────────────────────────────────────────────────
+// Spec-driven development: synthesize signals (task text, prior SRE feedback,
+// logs/bug reports, user feedback) into user stories + a specification with
+// explicit decisions, so no domain agent has to guess at unstated requirements.
+phase('Requirements')
+requirementsOutput = await workflow(
+  { scriptPath: `${AGENTS_DIR}/.claude/workflows/requirements.js` },
+  { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, clarifications }
+)
+log(`requirements → ${requirementsOutput && requirementsOutput.status} (${requirementsOutput && requirementsOutput.userStories && requirementsOutput.userStories.length} stories, ${requirementsOutput && requirementsOutput.spec && requirementsOutput.spec.openQuestions && requirementsOutput.spec.openQuestions.length} open questions)`)
 
 // ─── Phase: Database ─────────────────────────────────────────────────────────
 if (classification.requiresDatabase) {
   phase('Database')
   databaseOutput = await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/database.js` },
-    { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, dbPreferences: clarifications.dbPreferences || null }
+    { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null }
   )
   log(`database → ${databaseOutput && databaseOutput.status}`)
 }
@@ -139,7 +154,7 @@ if (classification.requiresBackend) {
   phase('Backend')
   backendOutput = await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/backend.js` },
-    { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, databaseOutput, archPreferences: clarifications.archPreferences || null }
+    { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null }
   )
   log(`backend → ${backendOutput && backendOutput.status}`)
 }
@@ -152,21 +167,21 @@ phase('Frontend + Testing + Calls')
   if (classification.requiresFrontend && backendOutput) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/frontend.js` },
-      { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, backendOutput, designPreferences: clarifications.designPreferences || null }
+      { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null }
     ))
   }
 
   if (backendOutput) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/testing.js` },
-      { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, backendOutput }
+      { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, requirementsOutput, backendOutput }
     ))
   }
 
   if (classification.requiresCalls) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/calls.js` },
-      { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null }
+      { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, requirementsOutput, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null }
     ))
   }
 
@@ -247,6 +262,31 @@ gitOutput = await workflow(
 )
 log(`git → ${gitOutput && gitOutput.status} branch=${gitOutput && gitOutput.branch}`)
 
+// ─── Phase: SRE ───────────────────────────────────────────────────────────────
+// Operate phase: health checks, log/root-cause diagnostics, IaC review, and
+// outcome metrics (system health, coverage, violations — never lines of code).
+// Advisory — never blocks. Its feedback is read by requirements next session,
+// closing the lifecycle loop.
+phase('SRE')
+sreOutput = await workflow(
+  { scriptPath: `${AGENTS_DIR}/.claude/workflows/sre.js` },
+  {
+    agentsDir: AGENTS_DIR,
+    sessionId,
+    taskText,
+    projectPath,
+    backendOutput,
+    frontendOutput,
+    databaseOutput,
+    testingOutput,
+    callsOutput,
+    ponytailOutput,
+    bridgeOutput,
+    gitOutput,
+  }
+)
+log(`sre → ${sreOutput && sreOutput.status} (${sreOutput && sreOutput.diagnostics && sreOutput.diagnostics.length} diagnostics, ${sreOutput && sreOutput.feedback && sreOutput.feedback.length} feedback items)`)
+
 const finalStatus = gitOutput && gitOutput.status === 'completed' ? 'completed' : 'failed'
 await agent(
   `Mark this session as ${finalStatus}. Run:\n\ncd "${AGENTS_DIR}"; node shared/lib/db-cli.js update-session-status "${sessionId}" "${finalStatus}"\n\nReturn "done".`,
@@ -262,8 +302,8 @@ await agent(
   `- Task: ${taskText.replace(/`/g, "'").slice(0, 300)}\n` +
   `- Project: ${projectPath}\n` +
   `- Status: ${finalStatus}\n` +
-  `- Domains: ${['database', 'backend', 'frontend', 'testing', 'calls', 'ponytail', 'mcpbridge', 'gitdevops']
-    .filter((_, i) => [databaseOutput, backendOutput, frontendOutput, testingOutput, callsOutput, ponytailOutput, bridgeOutput, gitOutput][i])
+  `- Domains: ${['requirements', 'database', 'backend', 'frontend', 'testing', 'calls', 'ponytail', 'mcpbridge', 'gitdevops', 'sre']
+    .filter((_, i) => [requirementsOutput, databaseOutput, backendOutput, frontendOutput, testingOutput, callsOutput, ponytailOutput, bridgeOutput, gitOutput, sreOutput][i])
     .map((d) => '[[' + d + ']]').join(' · ')}\n` +
   `- Branch: ${(gitOutput && gitOutput.branch) || 'n/a'}\n` +
   `- Orchestrated by: [[orchestrator]]\n\n` +
@@ -275,6 +315,7 @@ return {
   sessionId,
   status: finalStatus,
   completedAgents: [
+    requirementsOutput && 'requirements',
     databaseOutput && 'database',
     backendOutput  && 'backend',
     frontendOutput && 'frontend',
@@ -283,10 +324,15 @@ return {
     ponytailOutput && 'ponytail',
     bridgeOutput   && 'mcpbridge',
     gitOutput      && 'gitdevops',
+    sreOutput      && 'sre',
   ].filter(Boolean),
   branch:          gitOutput && gitOutput.branch,
   commitHash:      gitOutput && gitOutput.commitHash,
   ponytail:        ponytailOutput && ponytailOutput.metrics,
+  spec:            requirementsOutput && requirementsOutput.spec,
+  openQuestions:   (requirementsOutput && requirementsOutput.spec && requirementsOutput.spec.openQuestions) || [],
+  outcomeMetrics:  sreOutput && sreOutput.outcomeMetrics,
+  sreFeedback:     (sreOutput && sreOutput.feedback) || [],
   contractsPassed: bridgePassed,
   securityPassed:  gitOutput && !(gitOutput.blockedBy && gitOutput.blockedBy.length),
 }

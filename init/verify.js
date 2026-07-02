@@ -27,7 +27,7 @@ function check(label, fn) {
 }
 
 // ─── Agent knowledge.db files ─────────────────────────────────────────────────
-const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'orchestrator'];
+const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'requirements', 'sre', 'orchestrator'];
 const COMMON_TABLES = ['decisions', 'patterns', 'session_log', 'contracts'];
 
 AGENT_NAMES.forEach(name => {
@@ -71,7 +71,7 @@ AGENT_NAMES.forEach(name => {
 });
 
 // ─── Contract schema files ────────────────────────────────────────────────────
-const CONTRACT_NAMES = ['task', 'backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail'];
+const CONTRACT_NAMES = ['task', 'backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'requirements', 'sre'];
 CONTRACT_NAMES.forEach(name => {
   const schemaPath = path.join(AGENTS_DIR, 'shared', 'contracts', `${name}.schema.json`);
   check(`shared/contracts/${name}.schema.json is valid JSON`, () => {

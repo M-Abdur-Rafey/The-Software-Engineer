@@ -2335,6 +2335,147 @@ Anything touching the areas above belongs in \`skippedSuggestions\`, not in the 
 
 log.ok('ponytail vault seeded');
 
+// ─── Requirements vault ───────────────────────────────────────────────────────
+writeNote('requirements', 'specs/spec-template.md', `# Specification Template
+
+Spec-driven development: the intent behind a task is turned into a specification a model
+can read and follow, BEFORE any domain agent writes code. Big ambiguous asks
+("build me an e-commerce platform") are full of unstated decisions — payments, auth,
+shipping. The spec surfaces those decisions explicitly so they are made once, up front,
+not improvised mid-generation across thousands of unread lines.
+
+## Required sections
+\`\`\`markdown
+# Spec: <feature name>
+
+## Summary
+One paragraph: what we are building and why.
+
+## In scope
+- Bullet list of concrete capabilities this session WILL deliver.
+
+## Out of scope
+- Explicitly excluded items (prevents scope creep inside code generation).
+
+## Decisions
+| Topic | Decision | Rationale |
+|-------|----------|-----------|
+| e.g. auth | JWT bearer | matches existing backend middleware |
+
+## Open questions
+- Anything that could not be decided from available signals. These go back to the
+  user — never silently guessed at inside a domain agent.
+
+## User stories
+See linked story files.
+\`\`\`
+
+## Rules
+- Every decision that a domain agent would otherwise have to guess MUST appear in
+  the Decisions table.
+- Keep tasks small and well-defined — one story maps to a handful of routes/components,
+  never "the whole system".
+- Out-of-scope is as important as in-scope.
+`);
+
+writeNote('requirements', 'user-stories/story-format.md', `# User Story Format
+
+\`\`\`markdown
+## <STORY-ID>: <title>
+**As a** <role>
+**I want** <capability>
+**So that** <benefit>
+
+### Acceptance criteria
+- [ ] Given <context>, when <action>, then <observable outcome>
+- [ ] ...
+
+**Priority:** must | should | could
+\`\`\`
+
+## Rules
+- Acceptance criteria must be testable — the testing agent generates test cases and
+  test data directly from them.
+- Each criterion is a Given/When/Then with an observable outcome (a status code, a
+  visible UI state, a row in a table) — never "works correctly".
+- A story too big to describe in 5 criteria gets split.
+`);
+
+writeNote('requirements', 'signals/signal-synthesis.md', `# Signal Synthesis
+
+Requirements are derived from signals, not only from the raw task text. Before drafting
+the spec, gather and synthesize every available source:
+
+| Source | Where to look | What it yields |
+|--------|--------------|----------------|
+| task-text | the user's request | primary intent |
+| sre-feedback | \`agents/sre/vault/diagnostics/\` + sre decisions | what failed in production last cycle |
+| logs / bug-reports | project's logs, issue tracker exports in the repo | root causes, real failure modes |
+| user-feedback | surveys, reviews, support exports found in the project | behaviour bottlenecks, usage patterns |
+| codebase | onboarding summary | current architecture and constraints |
+
+## Root-cause discipline
+When a signal is a symptom ("checkout is slow"), record symptom → cause → evidence.
+A spec item addressing a symptom without a cause is a guess — flag it as an open question.
+`);
+
+log.ok('requirements vault seeded');
+
+// ─── SRE vault ────────────────────────────────────────────────────────────────
+writeNote('sre', 'runbooks/root-cause-analysis.md', `# Root-Cause Analysis Runbook
+
+Given logs, stack traces, or bug reports, diagnose — don't just describe.
+
+## Method
+1. **Symptom**: the observable failure (error message, status code, user report).
+2. **Trace**: follow the stack trace / log timeline to the first point where state went wrong.
+3. **Root cause**: the code or config decision that allowed it — not the line that threw.
+4. **Evidence**: the exact log lines / trace frames supporting the diagnosis.
+5. **Suggested fix**: smallest change that removes the cause (not the symptom).
+
+## Severity
+- **critical** — data loss, security exposure, total outage
+- **major** — a feature is broken for a class of users
+- **minor** — degraded UX, noisy logs, slow path
+
+Every diagnostic feeds back into the next requirements cycle via \`feedback[]\`.
+`);
+
+writeNote('sre', 'metrics/outcome-metrics.md', `# Outcome Metrics — measure outcomes, not lines of code
+
+Lines of code generated is NOT a success metric. Per session, report:
+
+| Metric | Source |
+|--------|--------|
+| filesChangedCount | union of all domain \`filesChanged[]\` |
+| routesAdded | \`BackendOutput.routes[]\` length |
+| testCoveragePercent | \`TestingOutput.coverage.percentCovered\` |
+| contractViolations | \`MCPBridgeOutput.contractValidation.violations[]\` length |
+| securityBlocks | gitdevops \`blockedBy[]\` length |
+| simplificationsApplied | \`PonytailOutput.metrics.simplificationsApplied\` |
+
+Trends across sessions (query the decisions table) matter more than any single value:
+are contract violations going down? Is coverage staying at 100%? Is ponytail finding
+less over-engineering over time?
+`);
+
+writeNote('sre', 'runbooks/iac-review.md', `# Infrastructure-as-Code Review
+
+When the session touched deployment artifacts (Dockerfile, compose, Kubernetes YAML,
+Ansible, CI pipelines), verify:
+
+- No secrets or credentials inline — env/secret references only.
+- Images pinned to versions, not \`latest\`.
+- Health checks / readiness probes declared.
+- Resource limits set for containers.
+- Migrations run before the service starts, never during requests.
+
+Record each artifact in \`iacArtifacts[]\`. Do not create infrastructure the task didn't
+ask for — report gaps as feedback instead.
+`);
+
+log.ok('sre vault seeded');
+
 // ─── Connected knowledge graph (Obsidian [[wikilinks]]) ───────────────────────
 // A home note per agent + sub-agent stubs, cross-linked along the contract flow,
 // plus an orchestrator hub linking to everything. Open the `agents/` folder as
@@ -2343,6 +2484,16 @@ const link = (a) => `[[${a}]]`;
 const links = (arr) => (arr.length ? arr.map(link).join(' · ') : '— none');
 
 const GRAPH = {
+  requirements: {
+    title: 'Requirements Agent',
+    role: 'Spec-driven front of the lifecycle — synthesizes signals (task text, logs, bug reports, user feedback, SRE diagnostics) into user stories and a specification every domain agent follows.',
+    upstream: ['sre'], downstream: ['database', 'backend', 'frontend', 'testing', 'calls'], validators: ['mcpbridge'],
+    subAgents: [
+      ['signal-analyst', 'Gathers and synthesizes unstructured signals: prior SRE feedback, logs, bug reports, user feedback, onboarding context.', 'story-writer'],
+      ['story-writer', 'Turns synthesized intent into small, testable user stories with Given/When/Then acceptance criteria.', 'spec-author'],
+      ['spec-author', 'Writes the specification: scope, out-of-scope, explicit decisions, open questions, and a per-domain task breakdown.', null],
+    ],
+  },
   database: {
     title: 'Database Agent',
     role: 'Designs tables and migrations, validates schema, optimizes queries.',
@@ -2412,7 +2563,17 @@ const GRAPH = {
   gitdevops: {
     title: 'Git / DevOps Agent',
     role: 'Runs the security scan, creates the branch, writes the commit.',
-    upstream: ['mcpbridge'], downstream: [], validators: [], subAgents: [],
+    upstream: ['mcpbridge'], downstream: ['sre'], validators: [], subAgents: [],
+  },
+  sre: {
+    title: 'SRE Agent',
+    role: 'Operate phase — post-session health checks, log/root-cause diagnostics, IaC review, and outcome metrics (system health, coverage, violations — never lines of code). Its feedback closes the loop into the next requirements cycle.',
+    upstream: ['gitdevops'], downstream: ['requirements'], validators: [],
+    subAgents: [
+      ['log-analyst', 'Reads session outputs, project logs, and stack traces for failure signals.', 'incident-diagnostician'],
+      ['incident-diagnostician', 'Turns symptoms into root causes with evidence and a suggested fix.', 'metrics-reporter'],
+      ['metrics-reporter', 'Computes outcome metrics for the session and writes feedback for the next requirements cycle.', null],
+    ],
   },
 };
 
@@ -2462,7 +2623,7 @@ writeNote('orchestrator', 'orchestrator.md', [
   'The top-level coordinator. Routes each task through the domain agents in dependency order and passes typed JSON contracts between them.',
   '',
   '## Dependency order',
-  `${link('database')} → ${link('backend')} → ( ${link('frontend')} · ${link('testing')} · ${link('calls')} ) → ${link('ponytail')} → ${link('mcpbridge')} → ${link('gitdevops')}`,
+  `${link('requirements')} → ${link('database')} → ${link('backend')} → ( ${link('frontend')} · ${link('testing')} · ${link('calls')} ) → ${link('ponytail')} → ${link('mcpbridge')} → ${link('gitdevops')} → ${link('sre')} ⤳ back to ${link('requirements')}`,
   '',
   '## Domain agents',
   DOMAINS.map(link).join(' · '),
@@ -2479,24 +2640,27 @@ writeNote('orchestrator', 'routing/dependency-order.md', [
   '',
   '| Step | Agent | Consumes | Produces |',
   '|------|-------|----------|----------|',
-  `| 1 | ${link('database')} | task | DatabaseOutput |`,
-  `| 2 | ${link('backend')} | DatabaseOutput | BackendOutput |`,
-  `| 3a | ${link('frontend')} | BackendOutput | FrontendOutput |`,
-  `| 3b | ${link('testing')} | BackendOutput | Postman collection |`,
-  `| 3c | ${link('calls')} | BackendOutput, DatabaseOutput | CallsOutput |`,
+  `| 0 | ${link('requirements')} | task + signals + prior SRE feedback | RequirementsOutput (user stories + spec) |`,
+  `| 1 | ${link('database')} | RequirementsOutput | DatabaseOutput |`,
+  `| 2 | ${link('backend')} | RequirementsOutput, DatabaseOutput | BackendOutput |`,
+  `| 3a | ${link('frontend')} | RequirementsOutput, BackendOutput | FrontendOutput |`,
+  `| 3b | ${link('testing')} | RequirementsOutput, BackendOutput | Postman collection |`,
+  `| 3c | ${link('calls')} | RequirementsOutput, BackendOutput, DatabaseOutput | CallsOutput |`,
   `| 4 | ${link('ponytail')} | code outputs | simplified files + review |`,
   `| 5 | ${link('mcpbridge')} | all outputs | contract validation |`,
   `| 6 | ${link('gitdevops')} | validated outputs | branch + commit |`,
+  `| 7 | ${link('sre')} | all outputs + project logs | diagnostics + outcome metrics + feedback |`,
   '',
   'Steps 3a–3c run in parallel. Ponytail (step 4) trims the generated code before the',
-  'bridge re-validates contracts. The commit only happens if step 5 passes.',
+  'bridge re-validates contracts. The commit only happens if step 5 passes. SRE (step 7)',
+  'is advisory — it never blocks — and its feedback is read by requirements next session.',
   '',
 ].join('\n'));
 
 log.ok('knowledge graph seeded (home notes, sub-agents, orchestrator)');
 
 // ─── Update all INDEX.md files ────────────────────────────────────────────────
-const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'orchestrator'];
+const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'requirements', 'sre', 'orchestrator'];
 AGENT_NAMES.forEach(name => {
   updateIndexMd(name);
   log.ok(`${name} vault/INDEX.md updated`);
