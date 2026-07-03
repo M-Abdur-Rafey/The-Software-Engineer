@@ -67,6 +67,7 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 | `/software-engineer status` | Show recent sessions — go to the Status section |
 | `/software-engineer update` | Pull latest version — go to the Update section |
 | `/software-engineer onboard` | Force re-scan of current project — go to the Onboard section |
+| `/software-engineer graph` | Build a filtered code knowledge graph of the current project — go to the Graph section |
 | `/software-engineer help` | Print usage — go to the Help section |
 
 ---
@@ -305,7 +306,7 @@ Get the install path, then run:
 - Windows: `Set-Location "$env:USERPROFILE\.agents"; node init/verify.js`
 - macOS/Linux: `cd "$HOME/.agents" && node init/verify.js`
 
-Show the full output. If all 35 checks pass: _"All systems operational. Ready to use."_
+Show the full output. If all checks pass: _"All systems operational. Ready to use."_
 
 If any check fails: show which check failed, what it means in plain language, and how to fix it (usually re-running `npm run init`).
 
@@ -366,15 +367,38 @@ Tell the user what was found: tech stack, number of routes, components, tables.
 
 ---
 
+## Subcommand: graph (filtered code knowledge graph)
+
+Builds a **lean Obsidian knowledge graph of the current project** — only the routes, components, tables, features and relationships that actually exist in the code. Theoretical or unused entities are excluded on purpose, so the graph stays navigable instead of overflowing.
+
+Works best right after `onboard` (it reuses the scan), but it will scan directly if the project hasn't been onboarded.
+
+Get the current project path, then run:
+```javascript
+Workflow({
+  scriptPath: `<install-path>/.claude/workflows/codegraph.js`,
+  args: {
+    sessionId: "manual-graph",
+    projectPath: "<current working directory>",
+    agentsDir: "<install-path>"
+  }
+})
+```
+
+When it finishes, tell the user the node/edge counts by type, how to open it (open `<install-path>/agents/orchestrator/vault` as an Obsidian vault → `projects/<name>/graph/_index.md` → Graph View), and note anything dropped for leanness. The graph is git-ignored (personal project data).
+
+---
+
 ## Subcommand: help
 
 Show:
 ```
 /software-engineer <task>     — Plan, build, test, and commit anything
-/software-engineer test       — Run health check (35 checks, no files modified)
+/software-engineer test       — Run health check (no files modified)
 /software-engineer status     — Show recent sessions
 /software-engineer update     — Pull latest version
 /software-engineer onboard    — Re-scan current project
+/software-engineer graph      — Build a filtered code knowledge graph (Obsidian)
 /software-engineer help       — Show this
 
 Examples:

@@ -38,8 +38,9 @@ That's it. Run `/software-engineer` — on first use it clones this repo to `~/.
 
 Other commands:
 ```
-/software-engineer test         — run 56 health checks, verify install is working (no files modified)
+/software-engineer test         — run health checks, verify install is working (no files modified)
 /software-engineer onboard      — force re-scan of current project (auto-runs on first use)
+/software-engineer graph        — build a filtered code knowledge graph of the project (Obsidian)
 /software-engineer status       — show recent sessions
 /software-engineer update       — pull latest version
 /software-engineer help         — show all commands
@@ -198,6 +199,24 @@ Each agent builds up its own Obsidian-compatible knowledge vault at `~/.agents/a
 ~/.agents/agents/mcpbridge/vault/     Contract validation history, release sign-off discipline
 ~/.agents/agents/sre/vault/           Root-cause runbooks, drift monitoring, outcome metrics
 ```
+
+## Code knowledge graph (`/software-engineer graph`)
+
+The vaults above map the **orchestration system**. To map **your project's own code**, run `/software-engineer graph` — it parses the codebase (reusing the onboarding scan) and emits a *filtered* Obsidian graph containing only entities that actually exist in the source. Theoretical or unused nodes are deliberately excluded so the graph stays lean instead of overflowing.
+
+```mermaid
+flowchart LR
+    subgraph FEAT["📦 feature: users"]
+      direction TB
+      C["🎨 cmp-UserList<br/><i>page</i>"] -->|calls| R["⚙️ route-get-api-users<br/><i>GET /api/users · auth</i>"]
+      R -->|reads-writes| T[("🗄️ tbl-users<br/><i>id · email · created_at</i>")]
+    end
+    T -->|fk| T2[("🗄️ tbl-orders")]
+
+    style FEAT fill:#e8f0fe,stroke:#4285f4
+```
+
+Each node becomes an Obsidian note with **YAML frontmatter metadata** (file path, HTTP method, columns, auth) and `[[wikilinks]]` for every real relationship — `calls` (component → route), `reads-writes` (route → table), `fk` (table → table), and `belongs-to` (entity → feature). The output lands in `agents/orchestrator/vault/projects/<name>/graph/` (git-ignored, personal) plus a machine-readable `graph.json` for tooling. Open that vault in Obsidian and switch to Graph View to navigate your codebase as a live map.
 
 ### See the whole graph
 

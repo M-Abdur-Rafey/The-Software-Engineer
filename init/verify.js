@@ -96,6 +96,39 @@ CONTRACT_NAMES.forEach(name => {
   });
 });
 
+// ─── Workflow scripts are free of hidden/format characters ────────────────────
+// The Workflow tool inlines a script into the approval dialog and rejects any
+// invisible control/format characters (e.g. the U+FE0F variation selector that
+// rides along with emoji like ⚠️). Such a character makes the whole workflow
+// un-launchable, so guard every workflow here.
+const workflowsDir = path.join(AGENTS_DIR, '.claude', 'workflows');
+function hiddenCharCode(code) {
+  return (
+    (code < 32 && code !== 9 && code !== 10 && code !== 13) || // C0 control (allow tab/LF/CR)
+    code === 127 || (code >= 128 && code < 160) ||             // DEL + C1 control
+    (code >= 0xfe00 && code <= 0xfe0f) ||                      // variation selectors
+    code === 0x200b || code === 0x200c || code === 0x200d ||   // zero-width
+    code === 0x200e || code === 0x200f ||                      // bidi marks
+    (code >= 0x202a && code <= 0x202e) ||                      // bidi embedding/override
+    (code >= 0x2066 && code <= 0x2069) ||                      // bidi isolates
+    code === 0xfeff || code === 0x00ad ||                      // BOM/ZWNBSP, soft hyphen
+    code === 0x2028 || code === 0x2029                         // line/paragraph separators
+  );
+}
+if (fs.existsSync(workflowsDir)) {
+  fs.readdirSync(workflowsDir).filter(f => f.endsWith('.js')).forEach(f => {
+    check(`.claude/workflows/${f} has no hidden/control characters`, () => {
+      const s = fs.readFileSync(path.join(workflowsDir, f), 'utf8');
+      for (let i = 0, line = 1; i < s.length; i++) {
+        if (s[i] === '\n') line++;
+        if (hiddenCharCode(s.charCodeAt(i))) {
+          throw new Error(`hidden char U+${s.charCodeAt(i).toString(16).padStart(4, '0')} at line ${line} — breaks the Workflow approval dialog`);
+        }
+      }
+    });
+  });
+}
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 console.log('');
 log.table([

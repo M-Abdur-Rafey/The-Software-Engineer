@@ -447,7 +447,7 @@ await agent(
 
   ## CRITICAL — token storage for this project
   This project stores auth tokens via: **${frontendScan.tokenStorageMethod}**
-  ${frontendScan.tokenStorageMethod.toLowerCase().includes('localstorage') ? '⚠️ WARNING: current project uses localStorage for tokens — flag this as a security concern in future sessions.' : ''}
+  ${frontendScan.tokenStorageMethod.toLowerCase().includes('localstorage') ? 'WARNING: current project uses localStorage for tokens — flag this as a security concern in future sessions.' : ''}
 
   ## Components (${frontendScan.totalComponentCount} total)
   ${(frontendScan.components || []).slice(0, 30).map(c => `- ${c.name} (${c.type}) — ${c.filePath}${c.usesAPI && c.usesAPI.length ? ' — calls: ' + c.usesAPI.join(', ') : ''}`).join('\n')}
@@ -488,8 +488,8 @@ await agent(
   **Input validation:** ${conventions.inputValidation || 'none found'}
   **Linter:** ${conventions.linterConfig || 'none'}
 
-  ${!conventions.cspConfigured ? '⚠️ CSP headers not configured — flag this as a security issue.' : ''}
-  ${!conventions.corsConfigured ? '⚠️ CORS not configured — flag this as a security issue.' : ''}
+  ${!conventions.cspConfigured ? 'WARNING: CSP headers not configured — flag this as a security issue.' : ''}
+  ${!conventions.corsConfigured ? 'WARNING: CORS not configured — flag this as a security issue.' : ''}
 
   ---
 
