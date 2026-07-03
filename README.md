@@ -15,7 +15,13 @@ In Claude Code, register this repo as a plugin marketplace, then install the plu
 /plugin install software-engineer@software-engineer
 ```
 
-That's it. Run `/software-engineer` — on first use it clones this repo to `~/.agents`, installs dependencies, and seeds the knowledge bases automatically.
+That's it. Then run:
+
+```
+/software-engineer start
+```
+
+`start` is the one-command setup: it clones this repo to `~/.agents`, installs dependencies, seeds the knowledge bases, scans your current project, and builds its code knowledge graph — leaving you ready to build. (Running any `/software-engineer <task>` also auto-installs on first use, but `start` gets everything, including the graph, in one shot.)
 
 > Why a plugin and not a loose file? Claude Code only loads skills that live in a folder as `skills/<name>/SKILL.md`. Dropping a single `software-engineer.md` into `~/.claude/skills/` will **not** register the slash command — the plugin packaging is what makes `/software-engineer` appear.
 
@@ -38,6 +44,7 @@ That's it. Run `/software-engineer` — on first use it clones this repo to `~/.
 
 Other commands:
 ```
+/software-engineer start        — one-command setup: install + scan project + build code graph
 /software-engineer test         — run health checks, verify install is working (no files modified)
 /software-engineer onboard      — force re-scan of current project (auto-runs on first use)
 /software-engineer graph        — build a filtered code knowledge graph of the project (Obsidian)

@@ -62,6 +62,7 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 
 | What the user typed | Action |
 |---------------------|--------|
+| `/software-engineer start` | One-command setup: install (if needed) + scan project + build code graph — go to the Start section |
 | `/software-engineer <task>` | Run the full pipeline — go to Step 4 |
 | `/software-engineer test` | Run health check — go to the Test section |
 | `/software-engineer status` | Show recent sessions — go to the Status section |
@@ -69,6 +70,43 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 | `/software-engineer onboard` | Force re-scan of current project — go to the Onboard section |
 | `/software-engineer graph` | Build a filtered code knowledge graph of the current project — go to the Graph section |
 | `/software-engineer help` | Print usage — go to the Help section |
+
+---
+
+## Subcommand: start (one-command setup + code graph)
+
+The friendly "get me ready" command. Run it once when you first use Software Engineer on a machine or point it at a new project. It ensures everything is installed, scans the current project, and builds the filtered code knowledge graph — after this, `/software-engineer <task>` just works with full context.
+
+Do these in order, reporting progress as you go:
+
+1. **Ensure the engine is installed.** Run Step 1 (resolve install path) and Step 2 (auto-install if not installed) above. If it is already installed, don't re-clone — just confirm health:
+   - Windows: `Set-Location "$env:USERPROFILE\.agents"; node init/verify.js`
+   - macOS/Linux: `cd "$HOME/.agents" && node init/verify.js`
+   If verify fails, show the error and stop (usually fixed by re-running `npm run init`).
+
+2. **Scan the current project** (same as the Onboard subcommand). Get the current project path, then:
+   ```javascript
+   Workflow({
+     scriptPath: `<install-path>/.claude/workflows/onboard.js`,
+     args: { sessionId: "start-onboard", projectPath: "<current working directory>", agentsDir: "<install-path>" }
+   })
+   ```
+
+3. **Build the code knowledge graph** (reuses the scan from step 2):
+   ```javascript
+   Workflow({
+     scriptPath: `<install-path>/.claude/workflows/codegraph.js`,
+     args: { sessionId: "start-graph", projectPath: "<current working directory>", agentsDir: "<install-path>" }
+   })
+   ```
+
+4. **Report one combined summary:**
+   - Install: fresh install or already present, health OK
+   - Project: tech stack + route/component/table counts (from step 2)
+   - Graph: node/edge counts by type and where to open it in Obsidian (from step 3)
+   - Close with: _"You're ready — run `/software-engineer <task>` to build, fix, or add anything."_
+
+Replace `<install-path>` with the real path (forward slashes), same as everywhere else.
 
 ---
 
@@ -393,6 +431,7 @@ When it finishes, tell the user the node/edge counts by type, how to open it (op
 
 Show:
 ```
+/software-engineer start      — One-command setup: install + scan project + build code graph
 /software-engineer <task>     — Plan, build, test, and commit anything
 /software-engineer test       — Run health check (no files modified)
 /software-engineer status     — Show recent sessions
