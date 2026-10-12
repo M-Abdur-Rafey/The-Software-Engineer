@@ -146,7 +146,10 @@ const build = await agent(
   `  service.js  — all business logic\n` +
   `  schema.js   — validation schemas\n\n` +
   `Error format everywhere: { success: false, code: 'ERR_CODE', message: '...', details: {} }\n\n` +
-  `Return JSON: { filesCreated: [string], filesUpdated: [string], routeContracts: [{method,path,handler,middleware,description,requestBodySchema,responseSchema,authRequired}] }`,
+  `routeContracts lists ONLY routes this session created or whose behaviour it changed (untouched routes are left out; ` +
+  `testing tests only what is listed). For each set change: "new" | "modified", and for modified routes a one-line ` +
+  `changeSummary of exactly what behaves differently now (e.g. "returns 409 when the project is archived").\n\n` +
+  `Return JSON: { filesCreated: [string], filesUpdated: [string], routeContracts: [{method,path,handler,middleware,description,requestBodySchema,responseSchema,authRequired,change,changeSummary}] }`,
   {
     label: 'route-creator',
     phase: 'Build',

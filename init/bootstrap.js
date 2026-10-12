@@ -287,6 +287,9 @@ const CONTRACTS = {
             middleware: { type: 'array', items: { type: 'string' } },
             description: { type: 'string' },
             authRequired: { type: 'boolean' },
+            // What this session did to the route; testing tests only new/modified behaviour.
+            change: { type: 'string', enum: ['new', 'modified'] },
+            changeSummary: { type: 'string' },
           },
         },
       },
@@ -475,7 +478,7 @@ const CONTRACTS = {
             routePath: { type: 'string' },
             method: { type: 'string' },
             scenarioName: { type: 'string' },
-            type: { type: 'string', enum: ['positive', 'negative', 'auth'] },
+            type: { type: 'string', enum: ['positive', 'negative', 'auth', 'change', 'smoke', 'flow'] },
             expectedStatus: { type: 'number' },
           },
         },

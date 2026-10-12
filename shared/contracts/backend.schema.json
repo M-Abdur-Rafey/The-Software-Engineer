@@ -139,6 +139,16 @@
           },
           "authRequired": {
             "type": "boolean"
+          },
+          "change": {
+            "type": "string",
+            "enum": [
+              "new",
+              "modified"
+            ]
+          },
+          "changeSummary": {
+            "type": "string"
           }
         }
       }

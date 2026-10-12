@@ -280,7 +280,8 @@ phase('Frontend + Testing + Calls')
   if (backendOutput) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/testing.js` },
-      { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, requirementsOutput, backendOutput }
+      { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, requirementsOutput, backendOutput,
+        flowDirs: docs ? docs.targets.map(t => `${DOCS}/modules/${t}/flows`) : [] }
     ))
   }
 

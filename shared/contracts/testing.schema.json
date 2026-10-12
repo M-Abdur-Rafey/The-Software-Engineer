@@ -52,7 +52,10 @@
             "enum": [
               "positive",
               "negative",
-              "auth"
+              "auth",
+              "change",
+              "smoke",
+              "flow"
             ]
           },
           "expectedStatus": {
