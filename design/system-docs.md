@@ -224,9 +224,9 @@ Asks how to use it:
 ## 6. Suggested build order
 
 1. **Done:** doc format, templates, `sysdocs.js` + verify checks + `npm run test:sysdocs`
-2. `docs` command: bootstrap for existing projects + new-project plan
-3. Gate loop in the skill + `approve` / `answer` commands
-4. `orchestrate.js`: drift, impact, doc-updater around the existing pipeline
+2. **Done:** `docs` command: bootstrap for existing projects + new-project plan (`.claude/workflows/sysdocs.js`)
+3. **Done:** gate loop in the skill + `approve` / `answer` / `team` commands
+4. **Done:** `orchestrate.js`: sync, impact, gate, doc-updater around the existing pipeline. A/B tested: see [ab-test-report.md](ab-test-report.md)
 5. Layered build loop with parallel modules + integrate step
 6. `team` + `merge` commands
 7. UI variant picking: the frontend agent returns 2–3 options, each with a Markdown layout sketch (plus a plain-language description of how it behaves); the skill shows them in chat; the pick is recorded in the module README under Decisions
