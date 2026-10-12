@@ -56,7 +56,12 @@ const contractCheck = await agent(
   `For each frontend apiBinding, find a matching contractExport where routeMethod === binding.method AND routePath === binding.routePath.\n` +
   `- No match → type: MISSING_BACKEND_ROUTE (BLOCKING)\n` +
   `- Method mismatch → type: METHOD_MISMATCH (BLOCKING)\n` +
-  `- Path mismatch → type: PATH_MISMATCH (BLOCKING)\n\n` +
+  `- Path mismatch → type: PATH_MISMATCH (BLOCKING)\n` +
+  `The exports above list only routes the backend touched THIS session. Before reporting any of these three, check ` +
+  `whether the route already exists in the project: look for an "api:<METHOD> <path>" row in ${projectPath}/docs/system/dependencies.md ` +
+  `if that file exists, otherwise search the backend source in ${projectPath} for the route registration. A route that exists ` +
+  `with the same method and path is NOT a violation (it is pre-existing and was not changed), and frontend-only sessions ` +
+  `with no exports at all are judged entirely this way.\n\n` +
   `STEP 2 — Backend → Database table match (WARNING only):\n` +
   `If a backend handler description mentions a table name, check it exists in dbTables.\n` +
   `- Missing → type: DB_TABLE_MISSING (WARNING, not blocking)\n\n` +

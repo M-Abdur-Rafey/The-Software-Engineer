@@ -31,7 +31,16 @@ const TOUCHPOINT_RULES =
   `A consumer may use a sub-field: api:GET /api/users/:id#email. A module may only depend on its own or LOWER layers, ` +
   `and modules in the same layer should not depend on each other (they build in parallel).`
 
+// Options must respect the pipeline's own blocking rules: in the A/B test the planner
+// offered "sessionStorage" for the token, the user picked it, and the bridge then blocked the build.
+const BLOCKING_RULES =
+  `Before writing options, read the pipeline's blocking rules: ${AGENTS_DIR}/shared/standards/security-rules.md, ` +
+  `${AGENTS_DIR}/agents/gitdevops/vault/security-scans/checklist.md and ${AGENTS_DIR}/agents/frontend/vault/security/bearer-token-rules.md. ` +
+  `Never offer an option one of them forbids (e.g. tokens in localStorage OR sessionStorage). If a rule already decides the ` +
+  `matter, it is not a question: record it as a decision in the module doc instead.`
+
 const QUESTION_RULES =
+  `${BLOCKING_RULES} ` +
   `Questions: ask ONLY about decisions that change behaviour or data and are not already pinned down. ` +
   `Every question MUST have: question, chainReaction (which other modules/features change depending on the answer, plain language), ` +
   `technical (a concrete technical example), plain (a plain-language everyday example a non-developer understands), ` +
@@ -83,22 +92,42 @@ async function runCli(label, commands) {
   )
 }
 
-function writerPrompt(mod, source) {
-  return (
-    `You are the doc-writer for module "${mod.name}" (layer ${mod.layer}) in ${DOCS}/modules/${mod.name}/.\n\n` +
-    `Source of facts: ${source}\n\n` +
+// One writer documents a small batch of modules: every agent pays ~40-60k tokens of fixed
+// context before doing any work, so 11 single-module writers cost far more than 4 batched ones.
+const WRITER_BATCH = 3
+
+function writerPrompt(mods, source) {
+  const one = (mod) =>
+    `### Module "${mod.name}" (layer ${mod.layer}) in ${DOCS}/modules/${mod.name}/
+` +
     `1. Edit ${DOCS}/modules/${mod.name}/README.md. Do NOT touch the frontmatter block between the --- lines ` +
-    `(it is managed by sysdocs.js). Replace the placeholder text (in _italics_) of every section:\n` +
-    `   - What it does: one plain-language paragraph, then a technical paragraph\n` +
-    `   - Flows: a bullet link per flow file\n` +
-    `   - APIs: for each endpoint: method + path, auth, a JSON request example, a JSON response example, errors\n` +
-    `   - Data: for each record: where it comes from (DB table / third-party API / user input), stored format with a real example record, and how it is created, edited and deleted\n` +
-    `   - Decisions: one line per answered question in questions.md (skip if none)\n` +
-    `2. For each flow (${(mod.flows || []).join(', ') || 'derive 1-3 main flows'}): run\n` +
-    `   ${CLI} add-flow "${projectPath}" ${mod.name} <flow-name>\n` +
+    `(it is managed by sysdocs.js). Replace the placeholder text (in _italics_) of every section:
+` +
+    `   - What it does: one plain-language paragraph, then a technical paragraph
+` +
+    `   - Flows: a bullet link per flow file
+` +
+    `   - APIs: for each endpoint: method + path, auth, a JSON request example, a JSON response example, errors
+` +
+    `   - Data: for each record: where it comes from (DB table / third-party API / user input), stored format with a real example record, and how it is created, edited and deleted
+` +
+    `   - Decisions: one line per answered question in questions.md (skip if none)
+` +
+    `2. For each flow (${(mod.flows || []).join(', ') || 'derive 1-3 main flows'}): run
+` +
+    `   ${CLI} add-flow "${projectPath}" ${mod.name} <flow-name>
+` +
     `   then fill ${DOCS}/modules/${mod.name}/flows/<flow-name>.md: plain-language summary, numbered steps user -> frontend -> backend -> DB, ` +
-    `a Mermaid sequenceDiagram, example data at each step, failure cases.\n\n` +
-    `Keep it factual and compact: no filler, ASCII only. Only write files inside ${DOCS}/modules/${mod.name}/.\n` +
+    `a Mermaid sequenceDiagram, example data at each step, failure cases.
+
+`
+  return (
+    `You are the doc-writer for ${mods.length} module(s). Source of facts: ${source}
+
+` +
+    mods.map(one).join('') +
+    `Keep it factual and compact: no filler, ASCII only. Only write files inside these modules' folders.
+` +
     `Return "done".`
   )
 }
@@ -143,14 +172,16 @@ if (mode === 'plan' || mode === 'bootstrap') {
   const source = mode === 'plan'
     ? `the plan in ${PLAN_FILE} (your module's entry) and this idea:\n"""\n${idea}\n"""`
     : `the real code under the module's paths (see the README frontmatter) in ${projectPath}`
-  await pipeline(summary.modules, m => agent(writerPrompt(m, source), { label: `write:${m.name}`, phase: 'Write Docs' }))
+  const batches = []
+  for (let i = 0; i < summary.modules.length; i += WRITER_BATCH) batches.push(summary.modules.slice(i, i + WRITER_BATCH))
+  await pipeline(batches, b => agent(writerPrompt(b, source), { label: `write:${b.map(m => m.name).join('+')}`, phase: 'Write Docs' }))
 
   phase('Index')
   const finalCheck = await runCli('index', [
     `${CLI} index "${projectPath}"`,
+    `node -e "require('fs').rmSync(process.argv[1], { force: true })" "${PLAN_FILE}"`,
     `${CLI} questions "${projectPath}"`,
   ])
-  await runCli('cleanup', [`node -e "require('fs').rmSync(process.argv[1], { force: true })" "${PLAN_FILE}"`])
 
   let open = 0
   try { open = JSON.parse(finalCheck.output).total || 0 } catch (e) { open = -1 }
@@ -233,8 +264,13 @@ if (mode === 'update') {
       unowned:  { type: 'array', items: { type: 'string' } },
     },
   }
+  // Prefer the files the domain agents reported: after a blocked commit, git status also
+  // holds earlier sessions' work, and documenting all of it again wastes a writer per module.
+  const reported = ((args && args.changedFiles) || []).filter(Boolean)
   const changed = await agent(
-    `1. Run: git -C "${projectPath}" status --porcelain -uall   and collect the changed file paths, ignoring anything under docs/system/.\n` +
+    (reported.length
+      ? `1. The changed files are: ${reported.map(f => `"${f}"`).join(' ')} (ignore anything under docs/system/).\n`
+      : `1. Run: git -C "${projectPath}" status --porcelain -uall   and collect the changed file paths, ignoring anything under docs/system/.\n`) +
     `2. Run: ${CLI} impact "${projectPath}" <each changed path, quoted>\n` +
     `   It prints { targets: [{ target, providers: [module names] }], unowned: [...] }.\n` +
     `Return { byModule: [{ module, files }] grouping the changed files by provider module, unowned: [...] }.`,

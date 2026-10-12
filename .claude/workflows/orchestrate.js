@@ -166,7 +166,9 @@ if (args && args.systemDocs !== false && projectPath) {
       `add questions: write a JSON array to a file and run ${CLI} ask "${projectPath}" <module> @<file>. Each item needs ` +
       `question, chainReaction (plain language: which modules/features change), technical (concrete example), plain ` +
       `(everyday example for a non-developer), data (realistic record/payload as a JSON string), options (recommended first), touches. ` +
-      `Ask only what changes behaviour or data.\n\n` +
+      `Ask only what changes behaviour or data. When a question touches auth, secrets, storage or hosts, read the blocking ` +
+      `rules first (${AGENTS_DIR}/shared/standards/security-rules.md, ${AGENTS_DIR}/agents/gitdevops/vault/security-scans/checklist.md, ` +
+      `${AGENTS_DIR}/agents/frontend/vault/security/bearer-token-rules.md) and never offer an option they forbid.\n\n` +
       `Return:\n- targetModules, newModules\n- consumers: [{module, owner, uses, risk: how this change could break it}]\n` +
       `- otherOwners: consumers whose owner differs from the targets' owners (skip blank owners)\n` +
       `- chainReaction: 2-6 plain-language sentences on what else changes\n- questionsAdded: ids\n` +
@@ -267,7 +269,8 @@ phase('Frontend + Testing + Calls')
 {
   const parallelTasks = []
 
-  if (classification.requiresFrontend && backendOutput) {
+  // Frontend-only tasks (no backend change) still need the frontend agent; it copes with backendOutput = null.
+  if (classification.requiresFrontend) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/frontend.js` },
       { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null }
@@ -291,7 +294,7 @@ phase('Frontend + Testing + Calls')
   if (parallelTasks.length > 0) {
     const results = await parallel(parallelTasks)
     let idx = 0
-    if (classification.requiresFrontend && backendOutput) { frontendOutput = results[idx++] }
+    if (classification.requiresFrontend)                  { frontendOutput = results[idx++] }
     if (backendOutput)                                    { testingOutput  = results[idx++] }
     if (classification.requiresCalls)                     { callsOutput    = results[idx++] }
     log(`frontend → ${frontendOutput && frontendOutput.status} | testing → ${testingOutput && testingOutput.status} | calls → ${callsOutput && callsOutput.status}`)
@@ -349,7 +352,13 @@ if (!bridgePassed) {
 let docsUpdate = null
 if (docs) {
   phase('Docs Update')
-  docsUpdate = await workflow(SYSDOCS, { mode: 'update', projectPath, agentsDir: AGENTS_DIR, sessionId, modules: docs.targets, taskText })
+  const changedFiles = [
+    ...((backendOutput && backendOutput.filesChanged) || []),
+    ...((frontendOutput && frontendOutput.filesChanged) || []),
+    ...((callsOutput && callsOutput.filesChanged) || []),
+    ...((databaseOutput && databaseOutput.migrationFile) ? [databaseOutput.migrationFile] : []),
+  ]
+  docsUpdate = await workflow(SYSDOCS, { mode: 'update', projectPath, agentsDir: AGENTS_DIR, sessionId, modules: docs.targets, taskText, changedFiles })
   log(`docs updated for ${(docsUpdate && docsUpdate.modules || []).join(', ')}`)
 }
 
