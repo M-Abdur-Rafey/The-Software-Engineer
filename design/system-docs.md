@@ -211,8 +211,8 @@ Asks how to use it:
 
 | Area | Change |
 |---|---|
-| `shared/lib/sysdocs.js` | New (section 2); add to `verify.js` shared-lib list |
-| Templates | `agents/orchestrator/vault/templates/system-docs/` holds README, flow, questions, team and layers templates |
+| `shared/lib/sysdocs.js` | **Done.** Section 2 plus `init`, `add-module`, `add-flow`, `ask`, `approve`, `synced`, `team-add`; tested by `tests/sysdocs.test.js` |
+| Templates | **Done.** `shared/templates/system-docs/` (static and committed, so vault seeding never touches them) |
 | `.claude/workflows/sysdocs.js` | New: plan (new project), bootstrap (existing), doc-sync, doc-updater phases |
 | `orchestrate.js` | drift → impact → gate → pipeline → doc-updater; layer loop with parallel per-module builds + integrate step |
 | `requirements.js` / `CLAUDE.md` | Write questions and decisions into module docs |
@@ -223,7 +223,7 @@ Asks how to use it:
 
 ## 6. Suggested build order
 
-1. Doc format, templates, `sysdocs.js` (index, impact, drift, gate, questions, answer, team) + verify checks
+1. **Done:** doc format, templates, `sysdocs.js` + verify checks + `npm run test:sysdocs`
 2. `docs` command: bootstrap for existing projects + new-project plan
 3. Gate loop in the skill + `approve` / `answer` commands
 4. `orchestrate.js`: drift, impact, doc-updater around the existing pipeline

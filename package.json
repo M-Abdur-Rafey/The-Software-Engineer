@@ -13,7 +13,8 @@
     "init": "node init/bootstrap.js && node init/seed-vaults.js && node init/verify.js",
     "mcp": "node mcp/server.mjs",
     "test:mcp": "node tests/mcp-protocol.mjs",
-    "test": "node init/verify.js && node tests/mcp-protocol.mjs"
+    "test:sysdocs": "node tests/sysdocs.test.js",
+    "test": "node init/verify.js && node tests/mcp-protocol.mjs && node tests/sysdocs.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

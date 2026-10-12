@@ -89,9 +89,17 @@ CONTRACT_NAMES.forEach(name => {
 });
 
 // ─── Shared lib ───────────────────────────────────────────────────────────────
-['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js'].forEach(f => {
+['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js'].forEach(f => {
   check(`shared/lib/${f} exists`, () => {
     const p = path.join(AGENTS_DIR, 'shared', 'lib', f);
+    if (!fs.existsSync(p)) throw new Error('file missing');
+  });
+});
+
+// ─── System Docs templates (copied into target projects by sysdocs.js) ───────
+['module-README.md', 'module-questions.md', 'flow.md', 'team.md', 'layers.md'].forEach(f => {
+  check(`shared/templates/system-docs/${f} exists`, () => {
+    const p = path.join(AGENTS_DIR, 'shared', 'templates', 'system-docs', f);
     if (!fs.existsSync(p)) throw new Error('file missing');
   });
 });
