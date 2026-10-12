@@ -20,7 +20,7 @@ Run from the repo root (`~/.agents` once installed):
 ```
 npm install              # deps incl. native better-sqlite3 + @modelcontextprotocol/sdk
 npm run init             # bootstrap + seed + verify — REQUIRED after changing agents/contracts/seed notes
-npm run verify           # health check, 42 checks (same as `/software-engineer test`)
+npm run verify           # health check: DBs/tables, vault INDEX.md, contract schemas, shared lib, workflow hidden-char scan (same as `/software-engineer test`)
 npm test                 # verify + MCP protocol test
 npm run test:mcp         # MCP stdio protocol test only (tests/mcp-protocol.mjs)
 npm run mcp              # run the MCP server on stdio
@@ -37,7 +37,9 @@ Workflow({ scriptPath: '~/.agents/.claude/workflows/orchestrate.js',
   args: { task: "...", projectPath: "C:/abs/path", agentsDir: "~/.agents" } })
 ```
 
-Individual domain workflows (`requirements.js`, `backend.js`, `frontend.js`, `database.js`, `testing.js`, `calls.js`, `ponytail.js`, `gitdevops.js`, `mcpbridge.js`, `sre.js`, `onboard.js`) can be invoked the same way.
+Individual domain workflows (`requirements.js`, `backend.js`, `frontend.js`, `database.js`, `testing.js`, `calls.js`, `ponytail.js`, `gitdevops.js`, `mcpbridge.js`, `sre.js`, `onboard.js`, `codegraph.js`) can be invoked the same way.
+
+`codegraph.js` sits outside the pipeline (driven by `/software-engineer graph` and `start` = onboard → codegraph): it builds a lean Obsidian graph of only entities that exist in the target project's code, capped per node type (`maxNodesPerType`, default 60), written to `agents/orchestrator/vault/projects/<name>/graph/` (git-ignored). The root `skill.md` is only a pointer to `skills/software-engineer/SKILL.md`.
 
 ## Architecture
 
@@ -67,7 +69,7 @@ Agents: an **orchestrator** (coordinator — decomposes, sequences, validates; n
 
 ACL read scope (`shared/lib/acl.js`): orchestrator/onboard/mcpbridge/gitdevops/sre read all; requirements reads +sre (feedback loop); database/backend/frontend/testing/calls all read +requirements (the spec), plus backend reads +database, frontend and testing read +backend, calls reads +backend+database; ponytail reads +backend+frontend+calls. Everyone writes only their own knowledge.
 
-The shared SQLite schema (defined in `init/bootstrap.js`) has four tables workflows touch via db-cli: `sessions`, `agent_runs`, `decisions`, and `patterns` — check bootstrap for columns before writing queries. Workflow args follow one pattern: `{ sessionId?, projectPath, agentsDir, clarifications? }`, where `clarifications` carries pre-answered user preferences (`designPreferences` / `archPreferences` / `dbPreferences` / `callPreferences` — see `skills/software-engineer/SKILL.md` for the shape) so the MCP path can run without interactive prompts.
+SQLite schemas live in `init/bootstrap.js` — check columns there before writing queries. Every `agents/<name>/knowledge.db` gets `decisions`, `patterns`, `session_log`, `contracts` (plus `migrations` for database, `call_logs`/`campaigns` for calls); `shared/orchestrator.db` holds `sessions`, `agent_runs`, `contracts_registry`, `onboarded_projects`. Workflow args follow one pattern: `{ sessionId?, projectPath, agentsDir, clarifications? }`, where `clarifications` carries pre-answered user preferences (`designPreferences` / `archPreferences` / `dbPreferences` / `callPreferences` — see `skills/software-engineer/SKILL.md` for the shape) so the MCP path can run without interactive prompts.
 
 ## Editing Workflow scripts (`.claude/workflows/*.js`) — read first
 
@@ -75,6 +77,7 @@ These run in the Claude Code **Workflow tool sandbox**, not plain Node:
 
 - Structure is `export const meta = {...}` followed by a body executed inside an async wrapper, so top-level `await` and top-level `return` are valid. `node --check file.js` will wrongly flag the `return`/`export`; to syntax-check, strip `export ` and wrap the body in `(async()=>{ … })()`.
 - The sandbox has **no fs/Node APIs**, and `Date.now()` / `Math.random()` / argless `new Date()` throw. Do file/DB side effects by having an `agent()` run a shell command (db-cli) or use the Write tool inside the agent prompt.
+- **No emoji or invisible characters** (variation selectors like U+FE0F, zero-width, bidi marks, BOM). The Workflow approval dialog rejects them and the script becomes un-launchable; `verify` scans every workflow for this — write plain text like `WARNING`.
 - **Never hardcode the install path.** Each workflow uses `const AGENTS_DIR = (args && args.agentsDir) || '<dev fallback>'`, and `orchestrate.js` threads `agentsDir` into every sub-workflow's args.
 - Model tiers via `agent(prompt, { model })`: mechanical command-runners use `'haiku'`, the 3D phase uses opus, everything else inherits the host model.
 
