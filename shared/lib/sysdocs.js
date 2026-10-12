@@ -68,7 +68,7 @@ function template(name, vars) {
 
 function git(project, args, { allowFail = false } = {}) {
   try {
-    return execFileSync('git', ['-C', project, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    return execFileSync('git', ['-C', project, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trimEnd();  // keep leading spaces: porcelain status lines start with them
   } catch (err) {
     if (allowFail) return null;
     fail(`git ${args.join(' ')} failed: ${(err.stderr || err.message).toString().trim()}`);
@@ -843,4 +843,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseYaml, frontmatter, setFrontmatterKey, parseEntry, renderEntry, effectiveStatus, commands };
+module.exports = { parseYaml, frontmatter, setFrontmatterKey, parseEntry, renderEntry, effectiveStatus, loadModules, owns, normPath, commands };

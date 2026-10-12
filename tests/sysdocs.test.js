@@ -240,6 +240,12 @@ try {
     d = run('drift');
     assert.deepStrictEqual(d.modules.find(m => m.module === 'auth').changed, ['src/auth/login.js']);
     assert.ok(d.unownedChanged.includes('scripts/seed.js'), JSON.stringify(d));
+
+    // Uncommitted edit to a tracked file: porcelain prints " M path" with a leading space.
+    run('synced', 'auth');
+    writeFile('src/auth/login.js', 'module.exports = 4;\n');
+    d = run('drift');
+    assert.deepStrictEqual(d.modules.find(m => m.module === 'auth').changed, ['src/auth/login.js']);
   });
 
   test('team lists unknown git emails; team-add maps them', () => {
