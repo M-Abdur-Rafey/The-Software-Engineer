@@ -250,6 +250,35 @@ try {
     assert.strictEqual(run('team').known[0].name, 'Asad N');
   });
 
+  test('apply-plan creates modules, meta, questions and the layers table', () => {
+    const planFile = path.join(project, 'plan.json');
+    fs.writeFileSync(planFile, JSON.stringify({
+      layers: [{ layer: 3, name: 'Core data', why: 'records users work with' }],
+      modules: [{
+        name: 'billing', layer: 3, owner: 'Sara',
+        paths: ['src/billing/'], provides: ['api:GET /api/invoices'],
+        dependsOn: [{ module: 'auth', uses: ['fn:requireAuth'] }, { module: 'foundation', uses: [] }],
+        questions: [{ question: 'Currency?', chainReaction: 'reports sums totals', technical: 'integer cents', plain: 'prices like 12.50', data: { total_cents: 1250 } }],
+      }],
+    }));
+    const r = run('apply-plan', `@${planFile}`, '--synced');
+    assert.deepStrictEqual(r.errors, []);
+    assert.deepStrictEqual(r.questionsAdded, { billing: ['Q-billing-001'] });
+    const readme = fs.readFileSync(doc('modules', 'billing', 'README.md'), 'utf8');
+    assert.ok(/synced_at: [0-9a-f]{7,}/.test(readme), readme);
+    assert.ok(readme.includes('owner: Sara'));
+    assert.ok(fs.readFileSync(doc('layers.md'), 'utf8').includes('| 3 | Core data | billing | records users work with |'));
+    assert.deepStrictEqual(run('impact', 'fn:requireAuth').targets[0].consumers.map(c => c.module), ['billing', 'orders']);
+  });
+
+  test('set-meta rewrites frontmatter lists without hand-edited YAML', () => {
+    const r = run('set-meta', 'billing', JSON.stringify({ provides: ['api:GET /api/invoices', 'api:POST /api/invoices'], dependsOn: [] }));
+    assert.deepStrictEqual(r.errors, []);
+    assert.deepStrictEqual(run('impact', 'api:POST /api/invoices').targets[0].providers, ['billing']);
+    assert.deepStrictEqual(run('impact', 'fn:requireAuth').targets[0].consumers.map(c => c.module), ['orders']);
+    assert.ok(fs.readFileSync(doc('modules', 'billing', 'README.md'), 'utf8').includes('depends_on: []\n---'));
+  });
+
   test('unknown commands fail cleanly', () => {
     assert.strictEqual(run('toString').exitCode, 1);
   });

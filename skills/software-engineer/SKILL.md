@@ -69,6 +69,10 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 | `/software-engineer update` | Pull latest version — go to the Update section |
 | `/software-engineer onboard` | Force re-scan of current project — go to the Onboard section |
 | `/software-engineer graph` | Build a filtered code knowledge graph of the current project — go to the Graph section |
+| `/software-engineer docs [idea]` | Set up System Docs (the project's source of truth in `docs/system/`) — go to the Docs section |
+| `/software-engineer answer [module]` | Walk through open System Docs questions in chat — go to the Answer section |
+| `/software-engineer approve <module\|layers>` | Approve a module doc (or the layer plan) so coding can start — go to the Answer section |
+| `/software-engineer team` | Map git emails to names — go to the Team section |
 | `/software-engineer help` | Print usage — go to the Help section |
 
 ---
@@ -329,6 +333,41 @@ After the workflow completes, summarise clearly:
 - **Security:** any issues found (or "all clear")
 - **Contract check:** whether frontend/backend/database were consistent
 - If anything was **blocked** (contract violation, security issue): explain in plain language what failed and what the user should do to fix it
+- **System Docs** (when `systemDocs` is set): which module docs were updated and which other owners are affected
+
+**If the result has `status: "awaiting-answers"`**, nothing was coded: the project's System Docs need decisions first. Explain the `chainReaction` and the affected `consumers` in plain language, then follow the Answer section for every target module in `blocking`. When every target passes `gate`, re-run Step 5 with the same task.
+
+---
+
+## Subcommand: docs (System Docs setup)
+
+System Docs keep a per-module source of truth in the project's `docs/system/` (committed, shared with the team): flows, APIs, data, who-depends-on-what, and every decision. Once set up, every `/software-engineer <task>` checks impact on linked modules, stops for answers when a module's doc isn't approved, and updates the docs after coding. Design: `<install-path>/design/system-docs.md`.
+
+Let `CLI` be `node <install-path>/shared/lib/sysdocs.js`.
+
+1. **New or empty project:** take the idea from the arguments (or ask for it), then run
+   ```javascript
+   Workflow({ scriptPath: `<install-path>/.claude/workflows/sysdocs.js`,
+     args: { mode: "plan", idea: "<idea>", projectPath: "<cwd>", agentsDir: "<install-path>", owner: "<user's name from team.md, if known>" } })
+   ```
+   Then show `docs/system/layers.md` and ask the user to approve it (`CLI approve <cwd> layers <name>`), and go to the Answer section.
+2. **Existing code:** ask how they want to use it:
+   - **Incremental** (default, cheapest): just run `CLI init <cwd>`; each future task documents only the modules it touches.
+   - **Full**: run the same workflow with `mode: "bootstrap"`.
+   - **Selected**: `mode: "bootstrap"` with `modules: [<the names they pick>]`.
+3. Run the Team section once so commits map to real names.
+
+## Subcommand: answer / approve (System Docs questions)
+
+1. `CLI questions <cwd> [module]` lists open and conflicting questions (with a module, also its shelved ones).
+2. Ask them **in chat**, one module at a time, showing for each: the question, the chain reaction, the technical example, the plain-language example, the data example and the options (recommended first). Use AskUserQuestion when the options fit; otherwise ask in prose.
+3. Record each reply: `CLI answer <cwd> <qid> "<name>" "<answer>"`. If they aren't sure yet: `CLI defer <cwd> <qid> "<name>"` (shelved: it comes back when that module is next built or touched). If the result says `conflict`, show both answers and record the one they choose with `--final`.
+4. Teammates may also answer by editing `questions.md` directly; `CLI index <cwd>` picks those up.
+5. When a module has no open, conflicting or shelved questions, ask the user to approve it: `CLI approve <cwd> <module> "<name>"`. Anyone on the team may approve.
+
+## Subcommand: team
+
+Run `CLI team <cwd>`. For every email under `unknown`, ask the user for the person's name and role, then `CLI team-add <cwd> <email> "<name>" "<role>"`. The mapping lives in `docs/system/team.md`, so teammates see and reuse it.
 
 ---
 
@@ -438,6 +477,10 @@ Show:
 /software-engineer update     — Pull latest version
 /software-engineer onboard    — Re-scan current project
 /software-engineer graph      — Build a filtered code knowledge graph (Obsidian)
+/software-engineer docs       — Set up System Docs: the project's per-module source of truth
+/software-engineer answer     — Answer open System Docs questions
+/software-engineer approve    — Approve a module doc (or the layer plan) so coding can start
+/software-engineer team       — Map git emails to names
 /software-engineer help       — Show this
 
 Examples:

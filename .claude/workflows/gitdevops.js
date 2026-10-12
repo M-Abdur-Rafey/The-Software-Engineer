@@ -22,7 +22,9 @@ const filesChanged = [
   ...((backendOutput  && backendOutput.filesChanged)  || []),
   ...((args && args.frontendOutput  && args.frontendOutput.filesChanged)  || []),
   ...((args && args.databaseOutput  && args.databaseOutput.migrationFile ? [args.databaseOutput.migrationFile] : [])),
+  ...((args && args.extraFiles) || []),   // e.g. docs/system when System Docs updated module docs
 ]
+const commitNotes = (args && args.commitNotes) || ''
 
 // ─── Phase: Load Context ──────────────────────────────────────────────────────
 phase('Load Context')
@@ -150,8 +152,9 @@ const commit = await agent(
   `IMPORTANT rules:\n` +
   `- NEVER push to main or master — use branch ${branchName}\n` +
   `- Subject: max 50 chars, imperative, no trailing period\n` +
-  `- Type: ${taskType}, scope: feature name (from task)\n\n` +
-  `Steps:\n` +
+  `- Type: ${taskType}, scope: feature name (from task)\n` +
+  (commitNotes ? `- Append this section verbatim to the commit body:\n${commitNotes}\n` : '') +
+  `\nSteps:\n` +
   `1. cd ${projectPath}\n` +
   `2. git checkout -b ${branchName}  (or git switch -c ${branchName})\n` +
   `3. git add <the changed files only — not all files, only the ones listed>\n` +

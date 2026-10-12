@@ -10,7 +10,9 @@
  *   init <project>                              scaffold docs/system/ (team.md, layers.md, modules/)
  *   add-module <project> <module> <layer> [owner]
  *   add-flow <project> <module> <flow>
- *   index <project>                             rebuild INDEX.md + dependencies.md; validate frontmatter
+ *   set-meta <project> <module> <json|@file>    set owner/layer/paths/provides/dependsOn in frontmatter
+ *   apply-plan <project> <json|@file> [--synced] create/update many modules + questions + layers table
+ *   index <project>                            rebuild INDEX.md + dependencies.md; validate frontmatter
  *   impact <project> <touchpoint|path>...       provider + direct/indirect consumers
  *   drift <project>                             code changed since each module's synced_at
  *   synced <project> <module> [commit]          record that a module's doc matches the code
@@ -164,6 +166,28 @@ function setFrontmatterKey(text, key, value) {
   const re = new RegExp(`^${key}:.*$`, 'm');
   const next = re.test(body) ? body.replace(re, line) : `${body}\n${line}`;
   return `---\n${next}\n---${text.slice(m[0].length)}`;
+}
+
+// Replace (or add) a top-level key together with its indented block.
+function setFrontmatterBlock(text, key, lines) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  if (!m) fail('no frontmatter block');
+  const fm = m[1].split(/\r?\n/);
+  const idx = fm.findIndex(l => l.startsWith(`${key}:`));
+  if (idx === -1) fm.push(...lines);
+  else {
+    let end = idx + 1;
+    while (end < fm.length && (/^\s+\S/.test(fm[end]) || /^-/.test(fm[end]))) end++;
+    fm.splice(idx, end - idx, ...lines);
+  }
+  return `---\n${fm.join('\n')}\n---${text.slice(m[0].length)}`;
+}
+
+function yamlList(key, items) {
+  if (!items.length) return [`${key}: []`];
+  return [`${key}:`, ...items.flatMap(it => (typeof it === 'string'
+    ? [`  - ${it}`]
+    : [`  - module: ${it.module}`, ...(asList(it.uses).length ? ['    uses:', ...asList(it.uses).map(u => `      - ${u}`)] : ['    uses: []'])]))];
 }
 
 // ─── modules ─────────────────────────────────────────────────────────────────
@@ -350,8 +374,11 @@ function loadQuestions(file) {
   return { file, preamble: preamble.join('\n').trimEnd(), entries: groups.map(parseEntry) };
 }
 
+// Writes only when the rendering differs, so a command touching one module never
+// rewrites (and can't clobber) another module's file written concurrently.
 function saveQuestions(qs) {
-  write(qs.file, `${[qs.preamble, ...qs.entries.map(renderEntry)].join('\n\n')}\n`);
+  const text = `${[qs.preamble, ...qs.entries.map(renderEntry)].join('\n\n')}\n`;
+  if ((read(qs.file) || '').replace(/\r\n/g, '\n') !== text) write(qs.file, text);
 }
 
 function findQuestion(modules, qid) {
@@ -465,6 +492,86 @@ function loadTeam(project) {
   return { text, rows };
 }
 
+// ─── shared write helpers (no index rebuild; callers decide) ─────────────────
+function scaffoldModule(project, name, layer, owner) {
+  if (!name || !MODULE_RE.test(name) || name === 'layers') fail(`module name "${name}" must be lowercase kebab-case (and not "layers")`);
+  if (!Number.isInteger(Number(layer)) || layer === undefined || layer === null) fail(`module "${name}": layer must be an integer`);
+  const dir = path.join(modulesDir(project), name);
+  const created = [];
+  for (const [file, tpl] of [['README.md', 'module-README.md'], ['questions.md', 'module-questions.md']]) {
+    const p = path.join(dir, file);
+    if (!fs.existsSync(p)) { write(p, template(tpl, { module: name, layer: Number(layer), owner: owner || '' })); created.push(`docs/system/modules/${name}/${file}`); }
+  }
+  return created;
+}
+
+// meta: { owner?, layer?, paths?, provides?, dependsOn? | depends_on? }
+function applyMeta(project, name, meta) {
+  const file = path.join(modulesDir(project), name, 'README.md');
+  let text = read(file);
+  if (text == null) fail(`unknown module "${name}"`);
+  if (meta.owner != null) text = setFrontmatterKey(text, 'owner', meta.owner);
+  if (meta.layer != null) text = setFrontmatterKey(text, 'layer', Number(meta.layer));
+  if (meta.paths) text = setFrontmatterBlock(text, 'paths', yamlList('paths', asList(meta.paths).map(normPath)));
+  if (meta.provides) text = setFrontmatterBlock(text, 'provides', yamlList('provides', asList(meta.provides)));
+  const deps = meta.dependsOn || meta.depends_on;
+  if (deps) text = setFrontmatterBlock(text, 'depends_on', yamlList('depends_on', asList(deps).map(d => (typeof d === 'string' ? { module: d, uses: [] } : d))));
+  write(file, text);
+}
+
+// items: [{ question, chainReaction, technical, plain, data, touches?, options?, askedBy? }]
+function appendQuestions(project, name, items) {
+  const file = path.join(modulesDir(project), name, 'questions.md');
+  if (!fs.existsSync(path.join(modulesDir(project), name, 'README.md'))) fail(`unknown module "${name}"`);
+  const missing = [];
+  items.forEach((it, n) => {
+    ['question', 'chainReaction', 'technical', 'plain', 'data'].forEach(k => {
+      if (!it || it[k] == null || String(typeof it[k] === 'object' ? JSON.stringify(it[k]) : it[k]).trim() === '') missing.push(`${name} item ${n}: ${k}`);
+    });
+  });
+  if (missing.length) fail(`every question needs question, chainReaction, technical, plain and data — missing: ${missing.join('; ')}`);
+
+  const qs = fs.existsSync(file)
+    ? loadQuestions(file)
+    : { file, preamble: template('module-questions.md', { module: name }).trimEnd(), entries: [] };
+  let next = qs.entries.reduce((max, e) => Math.max(max, Number((/-(\d+)$/.exec(e.id) || [])[1] || 0)), 0);
+  const ids = [];
+  for (const it of items) {
+    const id = `Q-${name}-${String(++next).padStart(3, '0')}`;
+    const data = typeof it.data === 'object' ? `\`\`\`json\n${JSON.stringify(it.data, null, 2)}\n\`\`\`` : `\`\`\`\n${String(it.data).trim()}\n\`\`\``;
+    const body = [
+      '',
+      `**Chain reaction:** ${it.chainReaction}`, '',
+      `**Technical example:** ${it.technical}`, '',
+      `**Plain-language example:** ${it.plain}`, '',
+      '**Data example:**', data,
+    ];
+    if (asList(it.options).length) body.push('', '**Options:**', ...asList(it.options).map(o => `- ${o}`));
+    qs.entries.push({
+      id, title: String(it.question).replace(/\s+/g, ' ').trim(),
+      meta: { status: 'open', asked: `${today()} by ${it.askedBy || 'agent'}`, touches: asList(it.touches).join(', ') },
+      extraHeader: [], body, answer: '', answeredBy: '', answeredAt: '', history: [], tail: [],
+    });
+    ids.push(id);
+  }
+  saveQuestions(qs);
+  return ids;
+}
+
+function writeLayersTable(project, layers) {
+  const file = path.join(docsRoot(project), 'layers.md');
+  const text = (read(file) || template('layers.md', {})).replace(/\r\n/g, '\n');
+  const rows = [...layers].sort((a, b) => a.layer - b.layer)
+    .map(l => `| ${l.layer} | ${l.name || ''} | ${asList(l.modules).join(', ')} | ${l.why || ''} |`);
+  const lines = text.split('\n');
+  const start = lines.findIndex(l => /^\| *Layer *\|/.test(l));
+  if (start === -1) { write(file, `${text.trimEnd()}\n\n| Layer | Name | Modules | Why this order |\n|---|---|---|---|\n${rows.join('\n')}\n`); return; }
+  let end = start + 2;
+  while (end < lines.length && lines[end].startsWith('|')) end++;
+  lines.splice(start + 2, end - start - 2, ...rows);
+  write(file, lines.join('\n'));
+}
+
 // ─── commands ────────────────────────────────────────────────────────────────
 const commands = {
   init(project) {
@@ -479,15 +586,41 @@ const commands = {
   },
 
   'add-module'(project, name, layer, owner) {
-    if (!name || !MODULE_RE.test(name) || name === 'layers') fail('module name must be lowercase kebab-case (and not "layers")');
-    if (!Number.isInteger(Number(layer)) || layer === undefined) fail('layer must be an integer');
-    const dir = path.join(modulesDir(project), name);
+    return Object.assign({ created: scaffoldModule(project, name, layer, owner) }, runIndex(project));
+  },
+
+  'set-meta'(project, name, input) {
+    applyMeta(project, name, JSON.parse(readInput(input) || '{}'));
+    return Object.assign({ module: name }, runIndex(project));
+  },
+
+  // plan: { layers?: [{layer, name, why, modules?}], modules: [{name, layer, owner?, paths, provides, dependsOn, questions?}] }
+  // --synced marks every module in the plan as matching the current HEAD (bootstrap from existing code).
+  'apply-plan'(project, input, ...flags) {
+    const plan = JSON.parse(readInput(input) || '{}');
+    const mods = asList(plan.modules);
+    if (!mods.length) fail('plan has no modules');
+    if (!fs.existsSync(docsRoot(project))) commands.init(project);
     const created = [];
-    for (const [file, tpl] of [['README.md', 'module-README.md'], ['questions.md', 'module-questions.md']]) {
-      const p = path.join(dir, file);
-      if (!fs.existsSync(p)) { write(p, template(tpl, { module: name, layer: Number(layer), owner: owner || '' })); created.push(`docs/system/modules/${name}/${file}`); }
+    const questionsAdded = {};
+    for (const m of mods) {
+      created.push(...scaffoldModule(project, m.name, m.layer, m.owner));
+      applyMeta(project, m.name, m);
+      if (asList(m.questions).length) questionsAdded[m.name] = appendQuestions(project, m.name, asList(m.questions));
     }
-    return Object.assign({ created }, runIndex(project));
+    if (asList(plan.layers).length) {
+      writeLayersTable(project, asList(plan.layers).map(l => Object.assign({}, l, {
+        modules: asList(l.modules).length ? l.modules : mods.filter(m => Number(m.layer) === Number(l.layer)).map(m => m.name),
+      })));
+    }
+    if (flags.includes('--synced')) {
+      const sha = git(project, ['rev-parse', '--short=10', 'HEAD']);
+      for (const m of mods) {
+        const file = path.join(modulesDir(project), m.name, 'README.md');
+        write(file, setFrontmatterKey(read(file), 'synced_at', sha));
+      }
+    }
+    return Object.assign({ created, questionsAdded }, runIndex(project));
   },
 
   'add-flow'(project, name, flow) {
@@ -619,42 +752,8 @@ const commands = {
   },
 
   ask(project, name, input) {
-    const { modules } = loadModules(project);
-    const mod = getModule(modules, name);
     const parsed = JSON.parse(readInput(input) || 'null');
-    const items = Array.isArray(parsed) ? parsed : [parsed];
-    const missing = [];
-    items.forEach((it, n) => {
-      ['question', 'chainReaction', 'technical', 'plain', 'data'].forEach(k => {
-        if (!it || it[k] == null || String(typeof it[k] === 'object' ? JSON.stringify(it[k]) : it[k]).trim() === '') missing.push(`item ${n}: ${k}`);
-      });
-    });
-    if (missing.length) fail(`every question needs question, chainReaction, technical, plain and data — missing: ${missing.join('; ')}`);
-
-    const qs = mod.questions.file && fs.existsSync(mod.questions.file)
-      ? mod.questions
-      : { file: path.join(modulesDir(project), name, 'questions.md'), preamble: template('module-questions.md', { module: name }).trimEnd(), entries: [] };
-    let next = qs.entries.reduce((max, e) => Math.max(max, Number((/-(\d+)$/.exec(e.id) || [])[1] || 0)), 0);
-    const ids = [];
-    for (const it of items) {
-      const id = `Q-${name}-${String(++next).padStart(3, '0')}`;
-      const data = typeof it.data === 'object' ? `\`\`\`json\n${JSON.stringify(it.data, null, 2)}\n\`\`\`` : `\`\`\`\n${String(it.data).trim()}\n\`\`\``;
-      const body = [
-        '',
-        `**Chain reaction:** ${it.chainReaction}`, '',
-        `**Technical example:** ${it.technical}`, '',
-        `**Plain-language example:** ${it.plain}`, '',
-        '**Data example:**', data,
-      ];
-      if (asList(it.options).length) body.push('', '**Options:**', ...asList(it.options).map(o => `- ${o}`));
-      qs.entries.push({
-        id, title: String(it.question).replace(/\s+/g, ' ').trim(),
-        meta: { status: 'open', asked: `${today()} by ${it.askedBy || 'agent'}`, touches: asList(it.touches).join(', ') },
-        extraHeader: [], body, answer: '', answeredBy: '', answeredAt: '', history: [], tail: [],
-      });
-      ids.push(id);
-    }
-    saveQuestions(qs);
+    const ids = appendQuestions(project, name, Array.isArray(parsed) ? parsed : [parsed]);
     runIndex(project);
     return { module: name, added: ids };
   },
