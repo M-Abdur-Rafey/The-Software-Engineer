@@ -104,6 +104,31 @@ If you share a mockup image or screenshot, it reads it and only asks about the p
 - **After coding,** the module docs are updated and marked in sync with the commit. Manual code edits are detected next time and folded back into the docs.
 - **New projects** are planned in layers: foundation, then auth, then core data, then access control, so each layer builds on tested code below it.
 
+```mermaid
+flowchart TD
+    START(["/software-engineer docs"]) --> KIND{"new or existing<br/>project?"}
+    KIND -->|"new (from your idea)"| PLAN["🏛️ Architect<br/>modules · layers · touchpoints<br/>questions with 3 examples each"]
+    KIND -->|existing code| MAP["🗺️ Cartographer<br/>documents the real code<br/><i>incremental · full · selected</i>"]
+    PLAN & MAP --> TREE[("📘 docs/system/<br/>module READMEs · flows · questions<br/>INDEX.md · dependencies.md · team.md")]
+
+    TREE --> Q{"open questions?"}
+    Q -->|yes| ANS["💬 /software-engineer answer<br/>answer · shelve for later · resolve conflicts<br/><i>or teammates answer in questions.md</i>"]
+    ANS --> APP
+    Q -->|no| APP["✅ /software-engineer approve &lt;module&gt;"]
+
+    APP --> TASK(["/software-engineer &lt;task&gt;"])
+    TASK --> IMP["🧭 impact: who uses what changes"]
+    IMP -->|"new decision needed"| ANS
+    IMP -->|"gate passes"| BUILDS["🏗️ pipeline builds it"]
+    BUILDS --> UPD["📚 docs updated · marked synced"]
+    UPD --> TREE
+
+    EDIT(["✋ manual code edit"]) -.->|"next task: drift detected"| SYNC["🔄 sync docs<br/>conflicts with a decision become questions"]
+    SYNC -.-> TREE
+
+    style TREE fill:#f3e8fd,stroke:#a142f4
+```
+
 Design: [`design/system-docs.md`](design/system-docs.md). A/B comparison against the plain pipeline: [`design/ab-test-report.md`](design/ab-test-report.md).
 
 ## UI testing
@@ -122,6 +147,28 @@ It starts your app on spare ports with a throwaway test database, so your runnin
 - **Cheap to rerun:** small models write Playwright scripts once (saved in `tests/ui/`). Running them costs no model tokens, and a script is only rewritten when its flow changes.
 - **Report:** `docs/system/testing/<date>-report.md` lists each bug with what went wrong, the intended result, what happened instead, how to fix it, and a ready-to-run `/software-engineer fix:` command.
 
+```mermaid
+flowchart TD
+    CMD(["/software-engineer uitest"]) --> SCOPE["🎯 Scope<br/>changed modules + linked modules<br/><i>style/text-only change → skip</i>"]
+    SCOPE --> ENV["🔌 Environment check<br/>running services · free ports · installs"]
+    ENV --> ASK{"👤 Start UI testing?<br/>flows · installs · workers · token estimate"}
+    ASK -->|Cancel| STOP(["nothing runs"])
+    ASK -->|Start| UP["🧪 Throwaway environment<br/>app on spare ports · test DB · seeded users<br/><i>local addresses only</i>"]
+
+    UP --> PLANT["📋 Plan from System Docs<br/>roles · input variants · multi-user · UI-vs-DB"]
+    PLANT --> GEN["✍️ Generate Playwright specs<br/>small models · parallel<br/><i>only new or changed flows</i>"]
+    GEN --> RUN["▶️ Run in parallel<br/>no model tokens"]
+    RUN --> FAIL{"failures?"}
+    FAIL -->|no| REP
+    FAIL -->|yes| TRI["🔍 Triage<br/>broken test → repair once + rerun<br/>real bug → report entry"]
+    TRI --> REP["📄 Report<br/>what went wrong · intended · got · how to fix<br/>+ ready-to-run fix command"]
+    REP --> DOWN["🧹 Stop what it started · drop test DB"]
+    REP -.->|"you run the fix command"| FIX(["/software-engineer fix: …<br/>normal pipeline with impact check"])
+
+    style ASK fill:#fef7e0,stroke:#f9ab00
+    style UP fill:#e6f4ea,stroke:#34a853
+```
+
 Requires System Docs. Design: [`design/ui-testing.md`](design/ui-testing.md).
 
 ---
@@ -137,7 +184,18 @@ flowchart TD
     U(["👤 You<br/>/software-engineer &lt;task&gt;"]) --> O["🧠 Orchestrator<br/>classify · sequence · pass contracts"]
 
     O --> ONB["🔍 Onboard<br/><i>first use only — deep codebase scan</i>"]
-    ONB --> REQ
+    ONB --> HAS{"📘 docs/system<br/>in the project?"}
+
+    subgraph SD["📘 System Docs <i>(only when the project has docs/system)</i>"]
+        SYNC["🔄 Sync<br/>fold manual code edits back into the docs"]
+        IMPACT["🧭 Impact analyst<br/>which modules use what this changes<br/>chain reaction · new questions"]
+        GATECHK{"🚦 Gate<br/>doc approved?<br/>no open questions?"}
+    end
+
+    HAS -->|yes| SYNC --> IMPACT --> GATECHK
+    HAS -->|no| REQ
+    GATECHK -.->|"no — ⏸ awaiting your answers<br/>/software-engineer answer · approve"| U
+    GATECHK -->|"yes — briefing for every agent"| REQ
 
     subgraph PLAN["📋 Plan"]
         REQ["📝 Requirements<br/>signals → user stories → spec"]
@@ -147,7 +205,7 @@ flowchart TD
         DB[("🗄️ Database<br/>tables · migrations · indexes")]
         BE["⚙️ Backend<br/>routes · services · AI micro-agents"]
         FE["🎨 Frontend<br/>components · art direction · 3D"]
-        TEST["🧪 Testing<br/>Postman: positive · negative · auth"]
+        TEST["🧪 Testing<br/>Postman for changed routes only:<br/>new = full suite · modified = change + smoke"]
         CALLS["📞 Calls<br/>IVR · campaigns · compliance"]
     end
 
@@ -157,38 +215,42 @@ flowchart TD
     end
 
     subgraph SHIP["🚀 Release & Operate"]
-        GIT["🔐 Git/DevOps<br/>10-point security scan → branch → commit"]
+        DOCS["📚 Docs update<br/>touched modules' flows · APIs · data<br/><i>System Docs projects</i>"]
+        GIT["🔐 Git/DevOps<br/>10-point security scan → branch → commit<br/>+ 'Affects other owners' section"]
+        SYNCED["✔ Mark docs synced<br/>to the new commit"]
         SRE["📡 SRE<br/>health · root-cause · drift · metrics<br/><i>advisory — never blocks</i>"]
     end
 
     REQ -->|spec + stories| DB
     DB -->|DatabaseOutput| BE
     BE -->|BackendOutput| FE
-    BE -->|routes| TEST
+    BE -->|changed routes| TEST
     BE --> CALLS
     DB --> CALLS
     FE & TEST & CALLS --> PONY
     PONY --> BRIDGE
-    BRIDGE -->|"passed ✔"| GIT
+    BRIDGE -->|"passed ✔"| DOCS
     BRIDGE -.->|"violations ✖ — session blocked"| O
-    GIT --> SRE
+    DOCS --> GIT --> SYNCED --> SRE
     SRE -.->|"feedback closes the loop"| REQ
 
+    style SD fill:#f3e8fd,stroke:#a142f4
     style PLAN fill:#e8f0fe,stroke:#4285f4
     style BUILD fill:#e6f4ea,stroke:#34a853
     style GATE fill:#fef7e0,stroke:#f9ab00
     style SHIP fill:#fce8e6,stroke:#ea4335
 ```
 
-Frontend, Testing, and Calls run **in parallel** once the backend contract exists.
+Frontend, Testing, and Calls run **in parallel** once the backend contract exists. Frontend-only tasks still run the frontend agent. The System Docs steps (purple, plus the docs update and sync after the bridge) only run when the project has `docs/system/`; without it the pipeline goes straight from onboarding to requirements.
 
 | Agent | Icon | Does |
 |-------|------|------|
+| **Impact analyst** | 🧭 | System Docs projects only. Before any code, maps the task to modules, lists every module that uses what will change and how it could break, records the chain reaction in plain language, and asks about any decision that isn't recorded. Stops for your answers if a target module's doc isn't approved |
 | **Requirements** | 📝 | Runs first (spec-driven development). Synthesizes signals — your task, project logs/bug reports, last cycle's SRE feedback — into user stories with Given/When/Then acceptance criteria and a spec whose Decisions table pins every choice the other agents would otherwise guess. Undecidable items come back to you as open questions |
 | **Database** | 🗄️ | Writes migration SQL, validates foreign keys, adds indexes |
 | **Backend** | ⚙️ | A *data-architect* first plans lean data access — a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), caching/lookup tables — then routes, controllers, services with JSDoc. AI/LLM features follow a full model lifecycle (traceable data, bias checks, fairness evaluation) |
 | **Frontend** | 🎨 | Builds components, wires API calls, enforces token/storage rules. Dedicated *layout / positioning / contrast* specialists handle complex parent-child CSS. 3D tasks invoke Opus for scene/physics/shader design |
-| **Testing** | 🧪 | Generates Postman collection (positive + negative + auth tests per route), deriving test data from the spec's acceptance criteria |
+| **Testing** | 🧪 | Generates a Postman collection for what the session changed only: new routes get positive, negative and auth tests; modified routes get a test for each changed behaviour plus one smoke test; System Docs flows that call a changed route get one end-to-end scenario. Test data comes from the spec's acceptance criteria. UI testing is separate and manual (`/software-engineer uitest`) |
 | **Calls** | 📞 | Inbound IVR flows, outbound dialing campaigns, Twilio/Vonage webhooks, TTS scripts, TCPA/GDPR/DNC compliance |
 | **Ponytail** | ✂️ | The "lazy senior dev": reviews the generated code and applies behavior-preserving simplifications — never touching validation, security, or accessibility. Advisory, never blocks |
 | **Bridge** | 🌉 | Validates that frontend bindings and telephony webhooks match backend contracts, and that handlers reference real tables. Any blocking violation stops the pipeline before commit |
@@ -321,12 +383,22 @@ flowchart LR
         ACL --- K
     end
 
+    subgraph SD["📘 System Docs (committed in your project, shared with the team)"]
+        direction TB
+        MODS["module READMEs · flows<br/>questions & decisions"]
+        DEPS["INDEX.md · dependencies.md<br/><i>generated, never hand-written</i>"]
+        MODS --> DEPS
+    end
+
     RT -.->|"lessons learned are saved as decisions"| KN
     KN -.->|"each agent loads its context at start"| RT
+    SD -.->|"impact analysis + briefing: only the modules in scope"| RT
+    RT -.->|"docs updated after each change"| SD
 ```
 
 - **Coordination:** each workflow returns a typed JSON contract (`shared/contracts/*.schema.json`) that the next agent consumes — e.g. frontend binds only to routes the backend actually declared. The bridge agent blocks the git commit if any frontend↔backend or backend↔database contract is inconsistent.
 - **Knowledge:** each agent owns an Obsidian vault + SQLite `knowledge.db`. Access is scoped — an agent writes only its own knowledge and reads only its own plus its upstream dependencies (the SRE and validation agents read everything). Database queries from agents are read-only and result-capped so they can't balloon context.
+- **System Docs:** the project's own source of truth, kept in its repo rather than on one machine. Agents read only the index, the dependency map and the modules in scope, which keeps token use down, and update the touched modules after each change.
 
 ---
 
