@@ -42,16 +42,26 @@ That's it. Then run:
 /software-engineer add CSP and security headers to the backend
 ```
 
-Other commands:
-```
-/software-engineer start        — one-command setup: install + scan project + build code graph
-/software-engineer test         — run health checks, verify install is working (no files modified)
-/software-engineer onboard      — force re-scan of current project (auto-runs on first use)
-/software-engineer graph        — build a filtered code knowledge graph of the project (Obsidian)
-/software-engineer status       — show recent sessions
-/software-engineer update       — pull latest version
-/software-engineer help         — show all commands
-```
+### All commands
+
+| Command | What it does |
+|---|---|
+| `/software-engineer <task>` | Plan, build, test and commit a feature or fix. Asks clarifying questions first. In projects with System Docs, it also checks which linked features the change affects and stops for your answers before coding |
+| `/software-engineer start` | One-command setup: install (if needed), scan the current project, build its code graph |
+| `/software-engineer test` | Health check of the install (no files modified) |
+| `/software-engineer status` | Show recent sessions |
+| `/software-engineer update` | Pull the latest version |
+| `/software-engineer onboard` | Re-scan the current project (runs automatically on first use) |
+| `/software-engineer graph` | Build a filtered Obsidian knowledge graph of the project's real code |
+| `/software-engineer docs [idea]` | Set up [System Docs](#system-docs): the project's source of truth in `docs/system/`. For a new project it plans modules and layers from your idea; for an existing one it documents the modules you choose |
+| `/software-engineer answer [module]` | Go through open System Docs questions in chat |
+| `/software-engineer approve <module>` | Approve a module's doc so coding on it can start (`approve layers` approves the build plan) |
+| `/software-engineer team` | Map git author emails to names, shared with your team in `docs/system/team.md` |
+| `/software-engineer uitest` | [UI-test](#ui-testing) the flows that changed and the flows linked to them. Shows the plan and asks before starting; never runs automatically |
+| `/software-engineer uitest full` | UI-test every flow |
+| `/software-engineer uitest <module>...` | UI-test the named modules' flows |
+| `/software-engineer uitest --workers N` | Set how many tests run in parallel (default: half your CPU cores, max 8) |
+| `/software-engineer help` | Show all commands |
 
 ---
 
@@ -82,6 +92,37 @@ Before writing code, the system asks plain-language questions to remove all gues
 For each decision, it shows you its recommendation first and asks if you agree. You can answer all questions at once or just say "use your recommendations" to accept all defaults.
 
 If you share a mockup image or screenshot, it reads it and only asks about the parts that are unclear — not generic "what do you want?" questions.
+
+---
+
+## System Docs
+
+`/software-engineer docs` creates `docs/system/` in your project: one folder per module with its flows, APIs, data examples, decisions and open questions, plus a generated index and a "who uses what" dependency map. It's committed, so your whole team shares it.
+
+- **Before coding,** each task checks which other modules use what it's about to change, explains the chain reaction in plain language, and asks you about any decision that isn't recorded yet. Every question comes with a technical example, a plain-language example and a sample of the data.
+- **Approval gate:** a module isn't coded until its doc is approved and has no open questions (`/software-engineer answer`, then `/software-engineer approve <module>`). Questions you can't answer yet can be shelved; they come back when that module is next worked on.
+- **After coding,** the module docs are updated and marked in sync with the commit. Manual code edits are detected next time and folded back into the docs.
+- **New projects** are planned in layers: foundation, then auth, then core data, then access control, so each layer builds on tested code below it.
+
+Design: [`design/system-docs.md`](design/system-docs.md). A/B comparison against the plain pipeline: [`design/ab-test-report.md`](design/ab-test-report.md).
+
+## UI testing
+
+`/software-engineer uitest` tests the running app the way users would:
+
+- logs in as each role and walks every flow
+- tries each form field with valid, missing, wrong, boundary, unicode and special-character input
+- has two users act on shared data at the same time
+- checks that what the UI shows matches the database
+
+It starts your app on spare ports with a throwaway test database, so your running services and data are never touched. Tests run only against local development addresses (`localhost`, `127.0.0.1`, `*.localhost`, `*.test`).
+
+- **Asks first:** it shows what it will test, what it needs to install, how many tests run in parallel, and the estimated token cost, then waits for your yes.
+- **Only what changed:** after a change it tests the changed flows plus the flows linked to them. Style-only or text-only changes don't trigger it.
+- **Cheap to rerun:** small models write Playwright scripts once (saved in `tests/ui/`). Running them costs no model tokens, and a script is only rewritten when its flow changes.
+- **Report:** `docs/system/testing/<date>-report.md` lists each bug with what went wrong, the intended result, what happened instead, how to fix it, and a ready-to-run `/software-engineer fix:` command.
+
+Requires System Docs. Design: [`design/ui-testing.md`](design/ui-testing.md).
 
 ---
 
@@ -299,3 +340,18 @@ Or manually:
 ```bash
 cd ~/.agents && git pull origin master && npm install && node init/bootstrap.js && node init/verify.js
 ```
+
+## Developer commands
+
+Run from the repo root (`~/.agents` once installed):
+
+| Command | What it does |
+|---|---|
+| `npm install` | Install dependencies |
+| `npm run init` | Bootstrap databases and contracts, seed vaults, verify. Run after changing agents, contracts or seed notes |
+| `npm run verify` | Health check (same as `/software-engineer test`) |
+| `npm test` | Verify, plus the MCP protocol, System Docs and UI-testing CLI tests |
+| `npm run test:mcp` / `test:sysdocs` / `test:uitest` | Run one test suite |
+| `npm run mcp` | Start the MCP server on stdio |
+| `node shared/lib/sysdocs.js <command> <project>` | System Docs CLI: `init`, `index`, `impact`, `drift`, `gate`, `approve`, `questions`, `ask`, `answer`, `defer`, `team` (see the file header) |
+| `node shared/lib/uitest.js <command> <project>` | UI testing CLI: `scope`, `env`, `check-host`, `record` (see the file header) |
