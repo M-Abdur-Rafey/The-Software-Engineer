@@ -1,0 +1,23 @@
+{
+  "suite": "inputs",
+  "appliesTo": "every form field and request body field in the flows in scope",
+  "pass": "Valid values are accepted and stored exactly as entered (round-trip through the UI and the DB). Invalid values are rejected with a clear message and nothing is stored. No variant causes a 500, a blank screen or a console error.",
+  "fail": "A 500, an unhandled exception, silently truncated or altered data, invalid data stored, or valid data rejected.",
+  "variants": {
+    "valid": "a realistic value matching the field's documented format",
+    "missing": null,
+    "empty": "",
+    "whitespaceOnly": "   ",
+    "wrongType": [12345, true, ["a"], {"a": 1}],
+    "boundary": ["<max length>", "<max length + 1>", "<min length - 1>", "0", "-1", "2147483648", "1e309"],
+    "unicode": ["Zoë Ångström", "日本語テキスト", "مرحبا", "😀🚀👩‍💻", "é"],
+    "special": ["O'Brien", "\"double\"", "back\\slash", "<b>tag</b>", "a&b", "50%_off", "semi;colon", "line\nbreak", "tab\tchar", "null\u0000byte"],
+    "long": "<10000 x 'a'>",
+    "random": "<12 random printable characters, different per run>"
+  },
+  "notes": [
+    "Derive max/min lengths and formats from the module README Data section and the recorded decisions; when undocumented, run the case as observed-only and raise a System Docs question.",
+    "For dates use the documented format plus 2026-02-30, 9999-12-31 and a non-date string.",
+    "For emails add: upper-case variant, leading/trailing spaces, missing @, two @, 254+ chars."
+  ]
+}
