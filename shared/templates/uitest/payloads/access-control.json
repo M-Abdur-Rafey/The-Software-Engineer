@@ -1,0 +1,17 @@
+{
+  "suite": "access-control",
+  "severity": "critical",
+  "appliesTo": "every endpoint in scope that reads or changes a resource owned by a user, project, team or role",
+  "setup": "Two users of the same role (A and B) and, if the app has roles, one user of each role. A creates resources; B and lower roles try to use them.",
+  "checks": [
+    { "name": "B reads A's resource by id (each GET with an id)", "expect": "403 or 404, never A's data" },
+    { "name": "B changes or deletes A's resource (each PATCH/PUT/DELETE)", "expect": "403 or 404, record unchanged in the DB" },
+    { "name": "B lists a collection", "expect": "only B's own or shared resources" },
+    { "name": "lower role calls each higher-role-only endpoint", "expect": "403" },
+    { "name": "B creates a child resource inside A's parent (e.g. a task in A's project)", "expect": "403 or 404, nothing stored" },
+    { "name": "the same checks through the UI: B opens A's resource URL directly", "expect": "access denied page or redirect, no data shown" }
+  ],
+  "pass": "Every check matches, and the read-only DB check shows A's records untouched.",
+  "fail": "Any of A's data visible to B, any change to A's records, or a lower role succeeding.",
+  "fix": "Check ownership/membership on the server for every resource id, in one shared guard per resource type; never rely on the UI hiding buttons."
+}

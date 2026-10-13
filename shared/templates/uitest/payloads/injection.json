@@ -1,0 +1,16 @@
+{
+  "suite": "injection",
+  "severity": "critical",
+  "payloadSource": "tests/ui/payloads/injection.txt",
+  "payloadSourceNote": "One test string per line, supplied by the project from a maintained open-source security testing list of its choice. If the file is missing, the suite is reported as 'not run: payload list missing' and nothing is sent.",
+  "appliesTo": "every text input, query parameter, path parameter and JSON body field of the endpoints in scope, sent through the UI and directly to the API",
+  "pass": "Each string is rejected with a 4xx or stored and shown literally. No 500, no database error text in any response, the record count only changes for the targeted record, and response times stay normal.",
+  "fail": "A 500, database or driver error text in a response, rows the caller should not see, records changed outside the targeted one, or a response noticeably slower than the same request with plain input.",
+  "detect": {
+    "status": "never 5xx",
+    "responseText": "no database/driver error messages or stack traces",
+    "dbCheck": "read-only count of the affected tables before and after; only the targeted record may differ",
+    "timing": "flag responses more than 3x slower than the plain-input baseline"
+  },
+  "fix": "Use parameterised queries / prepared statements everywhere input reaches the database; never build SQL by string concatenation; return generic error messages."
+}

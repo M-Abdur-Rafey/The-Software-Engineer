@@ -1,0 +1,19 @@
+{
+  "suite": "headers",
+  "severity": "medium",
+  "appliesTo": "the frontend's HTML responses and every API response (one sample per endpoint in scope); always runs",
+  "checks": [
+    { "header": "Content-Security-Policy", "on": "html", "expect": "present; no 'unsafe-inline' for scripts; default-src or script-src restricted" },
+    { "header": "X-Content-Type-Options", "on": "all", "expect": "nosniff" },
+    { "header": "X-Frame-Options or CSP frame-ancestors", "on": "html", "expect": "DENY/SAMEORIGIN or frame-ancestors 'none'/'self'" },
+    { "header": "Referrer-Policy", "on": "all", "expect": "no-referrer, same-origin or strict-origin-when-cross-origin" },
+    { "header": "Permissions-Policy", "on": "html", "expect": "present (recommended; reported as a recommendation if missing)" },
+    { "header": "Strict-Transport-Security", "on": "https only", "expect": "present with max-age >= 15552000 (skipped on plain http dev servers)" },
+    { "header": "X-Powered-By / Server version", "on": "all", "expect": "absent or without version details" },
+    { "header": "Access-Control-Allow-Origin", "on": "api", "expect": "not '*' together with Access-Control-Allow-Credentials: true; matches the documented CORS decision" },
+    { "header": "Set-Cookie", "on": "any cookie carrying a session or token", "expect": "HttpOnly; Secure (on https); SameSite=Lax or Strict" },
+    { "header": "Cache-Control", "on": "authenticated API responses", "expect": "no-store or private" }
+  ],
+  "errors": "Force a 404 and a 400 on each API in scope: the body must not contain stack traces, file paths or framework/version names.",
+  "fix": "Add a security-headers middleware (e.g. helmet for Express) with an explicit CSP; disable X-Powered-By; return generic error bodies in production."
+}

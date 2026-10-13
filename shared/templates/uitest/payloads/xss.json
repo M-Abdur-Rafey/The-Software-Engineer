@@ -1,0 +1,15 @@
+{
+  "suite": "xss",
+  "severity": "high",
+  "payloadSource": "tests/ui/payloads/xss.txt",
+  "payloadSourceNote": "One test string per line, supplied by the project from a maintained open-source security testing list of its choice. If the file is missing, the suite is reported as 'not run: payload list missing' and nothing is sent.",
+  "appliesTo": "every text field that is later displayed (stored), and every query parameter that is echoed back into a page (reflected)",
+  "pass": "The string is shown as literal text wherever it appears, for the user who entered it and for other users who view it. No script runs, no dialog opens, no new elements or event handlers appear in the DOM.",
+  "fail": "A browser dialog opens, a console message from the payload appears, or the rendered DOM contains elements/attributes created from the input.",
+  "detect": {
+    "dialog": "page.on('dialog') fails the test",
+    "dom": "the field's rendered textContent equals the input; no extra elements inside the rendering container",
+    "otherUsers": "view the stored value as a second user in a separate browser context"
+  },
+  "fix": "Render user content as text (framework escaping, never innerHTML/dangerouslySetInnerHTML with user data); sanitise any HTML that must be allowed; set a strict Content-Security-Policy."
+}

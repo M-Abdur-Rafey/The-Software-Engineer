@@ -1,0 +1,14 @@
+{
+  "suite": "scraping",
+  "severity": "medium",
+  "appliesTo": "list and lookup endpoints in scope",
+  "checks": [
+    { "name": "walk sequential ids as a normal user", "expect": "only the user's own or shared records; the response does not reveal whether other ids exist (same status for 'not yours' and 'missing', or documented otherwise)" },
+    { "name": "registration / login / password-reset messages for existing vs unknown emails", "expect": "indistinguishable (account enumeration)" },
+    { "name": "page size / limit parameters set very high", "expect": "capped at a documented maximum" },
+    { "name": "burst of 100 requests in a few seconds to login and list endpoints", "expect": "rate limited (429) where the docs require it; otherwise reported as a recommendation, not a failure, in dev" }
+  ],
+  "pass": "No bulk access to other users' data and no way to learn which accounts exist.",
+  "fail": "Other users' records reachable by walking ids, or account existence revealed.",
+  "fix": "Scope every query to the caller, use identical errors for 'missing' and 'forbidden' where appropriate, cap page sizes, add rate limiting to auth and list endpoints."
+}

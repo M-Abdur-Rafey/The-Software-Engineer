@@ -1,0 +1,16 @@
+{
+  "suite": "direct-api",
+  "severity": "high",
+  "appliesTo": "every mutating endpoint in scope, called directly (bypassing the UI)",
+  "checks": [
+    { "name": "every input variant from inputs.json sent straight to the API", "expect": "same validation result as the UI promises" },
+    { "name": "extra fields the client must not set (mass assignment): role, isAdmin, ownerId, userId of someone else, id, createdAt, archived, status flags", "expect": "ignored or 400; the stored record does not take them" },
+    { "name": "wrong content type and malformed JSON", "expect": "400 with a JSON error, not 500" },
+    { "name": "very large body (e.g. 5 MB)", "expect": "413 or 400, server stays up" },
+    { "name": "unexpected HTTP method on each path", "expect": "404 or 405" },
+    { "name": "ids that are negative, zero, non-numeric, or far out of range", "expect": "400 or 404" }
+  ],
+  "pass": "Server-side validation matches the documented rules and the DB never stores a field the client may not set.",
+  "fail": "A stored privileged field, a 500, or data the UI would have rejected being accepted.",
+  "fix": "Validate on the server with an allow-list of fields per endpoint; set ownership and roles from the authenticated user, never from the body; cap body size."
+}

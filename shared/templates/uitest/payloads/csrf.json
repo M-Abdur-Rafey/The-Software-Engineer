@@ -1,0 +1,15 @@
+{
+  "suite": "csrf",
+  "severity": "high",
+  "runWhen": "the app authenticates with cookies (skip for bearer-token-only APIs and report 'not applicable')",
+  "appliesTo": "every state-changing endpoint in scope",
+  "checks": [
+    { "name": "state-changing request without the app's CSRF token / custom header", "expect": "403" },
+    { "name": "state-changing request with an Origin header of a different site", "expect": "403" },
+    { "name": "session cookie SameSite attribute", "expect": "Lax or Strict" },
+    { "name": "GET requests never change state", "expect": "no DB change from any GET (read-only DB check)" }
+  ],
+  "pass": "Cross-site requests cannot change data.",
+  "fail": "A state change accepted without the CSRF protection.",
+  "fix": "Use SameSite cookies plus a CSRF token or required custom header on every state-changing route; verify Origin."
+}

@@ -1,0 +1,3 @@
+# Copied to <project>/tests/ui/.gitignore. Specs, fixtures and the app adapter are committed;
+# run output stays local.
+.results/

@@ -1,0 +1,15 @@
+{
+  "suite": "data-exposure",
+  "severity": "high",
+  "appliesTo": "every API response in scope and the built frontend bundle",
+  "checks": [
+    { "name": "sensitive fields in API responses", "expect": "no fields named or containing: password, passwordHash, password_hash, hash, salt, secret, token (except the login response's own token), refreshToken, apiKey, ssn, cardNumber" },
+    { "name": "other users' private fields", "expect": "member lists and lookups return only the documented public fields (e.g. id, name, role; email only where the docs allow)" },
+    { "name": "secrets in the frontend bundle", "expect": "built JS/HTML contain no private keys, JWT secrets, DB connection strings, or API keys other than documented public ones (search for: PRIVATE KEY, secret, DATABASE_URL, postgres://, mysql://, mongodb://, sk_live, AKIA)" },
+    { "name": "secrets in client storage", "expect": "no tokens in localStorage/sessionStorage unless the docs record that decision" },
+    { "name": "error responses", "expect": "no stack traces, SQL, file paths or internal ids of other users" }
+  ],
+  "pass": "No sensitive field, secret or other user's private data appears anywhere the client can read.",
+  "fail": "Any listed item found; report the exact response/file and field.",
+  "fix": "Map DB rows to explicit response DTOs (allow-list fields); keep secrets server-side; strip details from production errors."
+}
