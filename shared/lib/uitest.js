@@ -198,14 +198,28 @@ function portFree(port) {
   });
 }
 
-function playwrightBrowsersInstalled() {
+// Playwright needs the exact browser build its version pins (node_modules/playwright-core/
+// browsers.json); any other installed Chromium build is not enough. Returns true/false, or
+// null when the project has no Playwright yet and the required build can't be known.
+function requiredBrowser(project) {
+  try {
+    const b = JSON.parse(fs.readFileSync(path.join(project, 'node_modules', 'playwright-core', 'browsers.json'), 'utf8'));
+    const entry = b.browsers.find(x => x.name === 'chromium-headless-shell') || b.browsers.find(x => x.name === 'chromium');
+    return entry ? `${entry.name.replace(/-/g, '_')}-${entry.revision}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function playwrightBrowsersInstalled(required) {
+  if (!required) return null;
   const dirs = [
     process.env.PLAYWRIGHT_BROWSERS_PATH,
     process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'ms-playwright'),
     path.join(os.homedir(), '.cache', 'ms-playwright'),
     path.join(os.homedir(), 'Library', 'Caches', 'ms-playwright'),
   ].filter(Boolean);
-  return dirs.some(d => fs.existsSync(d) && fs.readdirSync(d).some(e => e.startsWith('chromium')));
+  return dirs.some(d => fs.existsSync(path.join(d, required)));
 }
 
 async function env(project, ...args) {
@@ -221,17 +235,18 @@ async function env(project, ...args) {
   try { pkg = JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 'utf8')); } catch { /* not a node project */ }
   const declared = Boolean((pkg.devDependencies || {})['@playwright/test'] || (pkg.dependencies || {})['@playwright/test']);
   const installed = fs.existsSync(path.join(project, 'node_modules', '@playwright', 'test'));
-  const browsers = playwrightBrowsersInstalled();
+  const browserBuild = requiredBrowser(project);
+  const browsers = playwrightBrowsersInstalled(browserBuild);
   const installs = [];
   if (!declared || !installed) installs.push('npm install -D @playwright/test');
-  if (!browsers) installs.push('npx playwright install chromium (browser download, ~150 MB)');
+  if (browsers !== true) installs.push(`npx playwright install chromium (downloads ~150 MB if ${browserBuild || 'the required build'} is not installed)`);
 
   const targets = urls.map(url => ({ url, allowed: hostAllowed(url) }));
   return {
     runningPorts: running,
     freePorts,
     scripts: pkg.scripts || {},
-    playwright: { declared, installed, browsers },
+    playwright: { declared, installed, browsers, browserBuild },
     installs,
     workers: Math.min(8, Math.max(1, Math.floor(os.cpus().length / 2))),
     targets,

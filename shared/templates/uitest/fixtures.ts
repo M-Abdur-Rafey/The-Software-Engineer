@@ -3,7 +3,9 @@
 //
 // Environment (set by the workflow's Environment phase):
 //   UITEST_BASE_URL   frontend URL       UITEST_API_URL  API URL (defaults to UITEST_BASE_URL)
-//   UITEST_USERS      JSON [{role,email,password,name}] seeded test users
+//   UITEST_USERS_FILE path to a JSON file [{role,email,password,name}] of seeded throwaway users
+//                     (tests/ui/.results/users.json, git-ignored); UITEST_USERS may hold the JSON inline
+import { readFileSync } from 'fs';
 import { test as base, expect, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { loginUi, loginApi, dbQuery } from './app';
 
@@ -24,7 +26,9 @@ for (const url of [BASE_URL, API_URL]) {
 }
 
 export interface TestUser { role: string; email: string; password: string; name?: string }
-export const USERS: TestUser[] = JSON.parse(process.env.UITEST_USERS || '[]');
+export const USERS: TestUser[] = JSON.parse(
+  process.env.UITEST_USERS_FILE ? readFileSync(process.env.UITEST_USERS_FILE, 'utf8') : (process.env.UITEST_USERS || '[]'),
+);
 
 export function userFor(role: string, index = 0): TestUser {
   const matches = USERS.filter(u => u.role === role);

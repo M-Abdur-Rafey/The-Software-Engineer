@@ -389,7 +389,9 @@ Let `UI` be `node <install-path>/shared/lib/uitest.js`.
              scope: <scope JSON>, env: <env JSON>, workers: <N or omit> } })
    ```
    Tell the user it is running in the background and what it is doing.
-5. **Report:** summarise `passed/total`. For each bug, show what went wrong, the intended result, what was got, how to fix, and its ready-to-run fix command; offer to run any of them. List tests that need updating separately, and any System Docs questions raised (offer the Answer section).
+5. **If `status` is `environment-failed`:** nothing was tested and the run state was not advanced. Explain `problem` in plain language. For example, a missing Playwright browser build means offering to run `npx playwright install chromium` (about 150 MB), with the user's OK. Then offer to run again.
+6. **Cleanup check:** if `cleanup.remaining` lists ports, tell the user that test services are still running on them and offer to stop them.
+7. **Report:** summarise `passed/total`. For each bug, show what went wrong, the intended result, what was got, how to fix, and its ready-to-run fix command; offer to run any of them. List tests that need updating separately, and any System Docs questions raised (offer the Answer section).
 
 ## Subcommand: team
 
