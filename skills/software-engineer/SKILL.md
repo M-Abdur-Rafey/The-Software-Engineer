@@ -73,6 +73,7 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 | `/software-engineer answer [module]` | Walk through open System Docs questions in chat — go to the Answer section |
 | `/software-engineer approve <module\|layers>` | Approve a module doc (or the layer plan) so coding can start — go to the Answer section |
 | `/software-engineer team` | Map git emails to names — go to the Team section |
+| `/software-engineer uitest [full] [module...] [--workers N]` | UI testing of changed and linked flows (never automatic) — go to the UI test section |
 | `/software-engineer help` | Print usage — go to the Help section |
 
 ---
@@ -365,6 +366,31 @@ Let `CLI` be `node <install-path>/shared/lib/sysdocs.js`.
 4. Teammates may also answer by editing `questions.md` directly; `CLI index <cwd>` picks those up.
 5. When a module has no open, conflicting or shelved questions, ask the user to approve it: `CLI approve <cwd> <module> "<name>"`. Anyone on the team may approve.
 
+## Subcommand: uitest (UI testing, always confirmed first)
+
+Functional UI testing from the project's System Docs: generated Playwright specs walk each flow as each role, try the documented input variants, run multi-user scenarios and compare the UI with the database (read-only). It never runs automatically and never starts without the user's yes. Design: `<install-path>/design/ui-testing.md`. Requires System Docs (`docs/system/`); if missing, offer the Docs section first.
+
+Let `UI` be `node <install-path>/shared/lib/uitest.js`.
+
+1. **Scope:** `UI scope <cwd>` (add `--full` for `full`, `--modules=a,b` for named modules). If `skip` is true, tell the user why (e.g. "only style or text files changed") and stop; offer `uitest full`.
+2. **Environment:** `UI env <cwd>`.
+3. **Confirm:** show the user, in plain language:
+   - what will be tested: `scope.mode`, `scope.reason`, modules, and the flows split into "new or changed specs" and "reused specs"
+   - installs that will run (`env.installs`, e.g. the Playwright browser download)
+   - that the app will be started on spare ports with a throwaway test database (their running services and data are not touched)
+   - parallel workers (`env.workers`, or `--workers N`)
+   - the token estimate (`scope.estimate.totalTokens`, noting whether it is measured or a default)
+
+   Ask with AskUserQuestion: "Start UI testing now?" with options Start / Cancel. Stop unless they choose Start.
+4. **Run** (only after Start):
+   ```javascript
+   Workflow({ scriptPath: `<install-path>/.claude/workflows/uitest.js`,
+     args: { confirmed: true, projectPath: "<cwd>", agentsDir: "<install-path>", date: "<today YYYY-MM-DD>",
+             scope: <scope JSON>, env: <env JSON>, workers: <N or omit> } })
+   ```
+   Tell the user it is running in the background and what it is doing.
+5. **Report:** summarise `passed/total`. For each bug, show what went wrong, the intended result, what was got, how to fix, and its ready-to-run fix command; offer to run any of them. List tests that need updating separately, and any System Docs questions raised (offer the Answer section).
+
 ## Subcommand: team
 
 Run `CLI team <cwd>`. For every email under `unknown`, ask the user for the person's name and role, then `CLI team-add <cwd> <email> "<name>" "<role>"`. The mapping lives in `docs/system/team.md`, so teammates see and reuse it.
@@ -481,6 +507,7 @@ Show:
 /software-engineer answer     — Answer open System Docs questions
 /software-engineer approve    — Approve a module doc (or the layer plan) so coding can start
 /software-engineer team       — Map git emails to names
+/software-engineer uitest     — UI-test changed and linked flows (asks before starting)
 /software-engineer help       — Show this
 
 Examples:

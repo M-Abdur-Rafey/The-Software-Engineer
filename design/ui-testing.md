@@ -121,9 +121,9 @@ Every security finding gets a severity, a plain-language explanation, a reproduc
 
 ## Build order
 
-1. `uitest.js` CLI (scope, skip rule, host allowlist, state) and its tests
-2. Payload suites and fixture templates
-3. `uitest.js` workflow plus the skill route with confirmation
+1. **Done:** `uitest.js` CLI (scope, skip rule, host allowlist, state) and its tests
+2. **Done:** suite definitions and fixture templates. Injection and XSS strings come from a project-supplied list (`tests/ui/payloads/*.txt`)
+3. **Done (functional testing):** `uitest.js` workflow plus the skill route with confirmation. The security suites are not wired into this version
 4. Validation run on the A/B task tracker (full run, then a changed-only run after the archiving change), measuring tokens and findings
 
 ## Parallelism

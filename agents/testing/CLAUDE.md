@@ -73,3 +73,14 @@ Return a `TestingOutput` object conforming to `shared/contracts/testing.schema.j
 
 1. Log session event: `node ~/.agents/shared/lib/db-cli.js log-session-event testing <sessionId> phase-complete completed "<N> routes, <M> test cases"`
 2. Write report: `agents/testing/vault/reports/<sessionId>.md` with route count, test count, coverage
+
+## UI testing (`/software-engineer uitest`, `.claude/workflows/uitest.js`)
+
+Manual only, and only after the user confirms the plan. Design: `design/ui-testing.md`.
+
+- **Scope** comes from `shared/lib/uitest.js scope`: changed modules plus their direct consumers; specs are regenerated only when their flow doc changed.
+- **Environment:** the app runs on free ports against a throwaway test database; the developer's services and data are never touched. Every URL must pass the local-dev-host check.
+- **Expected results** come from System Docs (flow docs, APIs, answered questions). Undocumented behaviour becomes an "observed only" case plus a System Docs question, never a guess.
+- **Specs** live in the project's `tests/ui/` and import `tests/ui/fixtures.ts`; app-specific login and read-only DB access live in `tests/ui/app.ts`.
+- **Triage:** a broken spec gets one repair and rerun; an app bug is reported with what went wrong, the intended result, what we got, how to fix, and a ready-to-run `/software-engineer fix:` command. Never change app code during triage.
+- Security suites are not part of this version of the command.
