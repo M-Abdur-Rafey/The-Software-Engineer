@@ -90,6 +90,7 @@ These run in the Claude Code **Workflow tool sandbox**, not plain Node:
 - Structure is `export const meta = {...}` followed by a body executed inside an async wrapper, so top-level `await` and top-level `return` are valid. `node --check file.js` will wrongly flag the `return`/`export`; to syntax-check, strip `export ` and wrap the body in `(async()=>{ … })()`.
 - The sandbox has **no fs/Node APIs**, and `Date.now()` / `Math.random()` / argless `new Date()` throw. Do file/DB side effects by having an `agent()` run a shell command (db-cli) or use the Write tool inside the agent prompt.
 - **No emoji or invisible characters** (variation selectors like U+FE0F, zero-width, bidi marks, BOM). The Workflow approval dialog rejects them and the script becomes un-launchable; `verify` scans every workflow for this — write plain text like `WARNING`.
+- **LF line endings only.** Carriage returns count as hidden characters too, so CRLF scripts won't launch. `.gitattributes` forces `eol=lf` for `.claude/workflows/*.js` (needed on Windows with `core.autocrlf=true`) and `verify` fails on any CR.
 - **Never hardcode the install path.** Each workflow uses `const AGENTS_DIR = (args && args.agentsDir) || '<dev fallback>'`, and `orchestrate.js` threads `agentsDir` into every sub-workflow's args.
 - Model tiers via `agent(prompt, { model })`: mechanical command-runners use `'haiku'`, the 3D phase uses opus, everything else inherits the host model.
 

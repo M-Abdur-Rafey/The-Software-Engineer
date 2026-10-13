@@ -112,7 +112,7 @@ CONTRACT_NAMES.forEach(name => {
 const workflowsDir = path.join(AGENTS_DIR, '.claude', 'workflows');
 function hiddenCharCode(code) {
   return (
-    (code < 32 && code !== 9 && code !== 10 && code !== 13) || // C0 control (allow tab/LF/CR)
+    (code < 32 && code !== 9 && code !== 10) ||                  // C0 control incl. CR (allow tab/LF): CRLF scripts are rejected too
     code === 127 || (code >= 128 && code < 160) ||             // DEL + C1 control
     (code >= 0xfe00 && code <= 0xfe0f) ||                      // variation selectors
     code === 0x200b || code === 0x200c || code === 0x200d ||   // zero-width
