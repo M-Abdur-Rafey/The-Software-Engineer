@@ -12,6 +12,14 @@ agents/testing/vault/reports/
 agents/mcpbridge/vault/contracts/
 agents/gitdevops/vault/security-scans/scan-results/
 agents/orchestrator/vault/sessions/
+agents/*/vault/decisions/
+agents/ponytail/vault/reviews/
+agents/sre/vault/diagnostics/
+# Session specs and schema notes share a folder with a seed note that does ship.
+agents/requirements/vault/specs/*
+!agents/requirements/vault/specs/spec-template.md
+agents/database/vault/schemas/*
+!agents/database/vault/schemas/sql-schema-management.md
 
 # Stray empty files occasionally created by Git Bash token quirks
 /AI

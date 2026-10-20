@@ -108,6 +108,6 @@ These run in the Claude Code **Workflow tool sandbox**, not plain Node:
 
 ## Privacy / git
 
-`.gitignore` keeps personal data local: all `knowledge.db`, `shared/orchestrator.db`, and runtime vault output (`vault/projects/`, testing collections/reports, bridge contracts, scan-results, orchestrator sessions). Only baseline seed vault notes ship to other users.
+`.gitignore` keeps personal data local: all `knowledge.db`, `shared/orchestrator.db`, and runtime vault output (`vault/projects/` including the project maps, `vault/decisions/`, session specs, ponytail reviews, SRE diagnostics, database schema notes, testing collections/reports, bridge contracts, scan-results, orchestrator sessions). Only baseline seed vault notes ship to other users.
 
 Windows/Git Bash caution: shell commands containing code-like tokens occasionally drop stray empty files (e.g. `Part`, `0)`, `f.severity`) into the repo root — check `git status` before `git add -A` so they aren't committed.
