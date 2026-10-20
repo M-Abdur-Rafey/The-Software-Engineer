@@ -75,6 +75,9 @@
         },
         "percentCovered": {
           "type": "number"
+        },
+        "needsSetup": {
+          "type": "number"
         }
       }
     },

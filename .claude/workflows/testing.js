@@ -57,7 +57,7 @@ if (routes.length === 0) {
     collectionPath: '',
     routeCount:   0,
     testCases:    [],
-    coverage:     { routesCovered: 0, totalRoutes: 0, percentCovered: 100 },
+    coverage:     { routesCovered: 0, totalRoutes: 0, percentCovered: 100, needsSetup: 0 },
     errors:       ['No routes provided — backend agent may not have run'],
   }
 }
@@ -65,8 +65,9 @@ if (routes.length === 0) {
 // ─── Phase: Generate Collection ───────────────────────────────────────────────
 phase('Generate Collection')
 
-const featureName = taskText.split(' ').slice(0, 4).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '')
-const collectionPath = `${AGENTS_DIR}/agents/testing/vault/collections/${featureName}.postman.json`
+const featureName = taskText.split(' ').slice(0, 4).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'session'
+// The session id keeps a re-run of the same task from overwriting an earlier collection.
+const collectionPath = `${AGENTS_DIR}/agents/testing/vault/collections/${featureName}-${String(sessionId).slice(0, 8)}.postman.json`
 
 const collection = await agent(
   `You are the Testing Agent. Generate a Postman Collection v2.1 JSON that tests ONLY what this session changed.\n\n` +
@@ -96,10 +97,13 @@ const collection = await agent(
   `- Assertions are unconditional: never wrap an expectation in a check of the response (no if (pm.response.code === ...), ` +
   `no early return, no skipping). Assert the expected status and body every time; a test whose setup or precondition fails must ` +
   `FAIL with a clear message, never pass or skip. Coverage counts only tests with unconditional assertions.\n` +
+  `- A test that needs anything the collection cannot set up through its own requests (a server started with a different ` +
+  `config or modified file, seeded data, a second service) gets needsSetup: true and a setupNote saying exactly what to prepare. ` +
+  `It stays in the collection but does not count as coverage.\n` +
   `- Group items into folders: "${featureName} / new", "${featureName} / changed", "${featureName} / flows"\n` +
   `- The collection variable block must include: baseUrl (value: http://localhost:3000) and bearerToken (value: "")\n\n` +
   `Write the collection JSON to: ${collectionPath}\n\n` +
-  `Return JSON: { testCases: [{routePath,method,scenarioName,type:"positive"|"negative"|"auth"|"change"|"smoke"|"flow",expectedStatus}], routeCount: ${routes.length}, written: boolean }`,
+  `Return JSON: { testCases: [{routePath,method,scenarioName,type:"positive"|"negative"|"auth"|"change"|"smoke"|"flow",expectedStatus,needsSetup,setupNote}], routeCount: ${routes.length}, written: boolean }`,
   {
     label: 'generate-collection',
     phase: 'Generate Collection',
@@ -117,7 +121,9 @@ const collection = await agent(
 
 log(`Generated ${collection.testCases.length} test case(s) for ${collection.routeCount} route(s)`)
 
-const routesCovered = new Set(collection.testCases.map(t => t.routePath)).size
+// A route counts as covered only by a test that runs as-is; tests needing extra setup are listed apart.
+const needsSetup = collection.testCases.filter(t => t && t.needsSetup)
+const routesCovered = new Set(collection.testCases.filter(t => t && !t.needsSetup).map(t => t.routePath)).size
 const pct = routes.length > 0 ? Math.round((routesCovered / routes.length) * 100) : 100
 
 const persistOps = [
@@ -125,7 +131,10 @@ const persistOps = [
     content: `# Test Report — Session ${sessionId}\n\n**Task:** ${taskText}\n` +
       `**Routes:** ${routes.length} changed (${newRoutes.length} new, ${modifiedRoutes.length} modified); unchanged routes are not retested\n` +
       `**Test cases:** ${collection.testCases.length}\n**Coverage:** ${pct}%\n**Collection:** ${collectionPath}\n\n## Test cases\n` +
-      collection.testCases.map(t => `- ${t.method} ${t.routePath} — ${t.scenarioName} (${t.type}, expect ${t.expectedStatus})`).join('\n') + '\n' },
+      collection.testCases.map(t => `- ${t.method} ${t.routePath} — ${t.scenarioName} (${t.type}, expect ${t.expectedStatus})${t.needsSetup ? ' [needs setup]' : ''}`).join('\n') + '\n' +
+      (needsSetup.length
+        ? `\n## Needs setup before running (not counted as coverage)\n` + needsSetup.map(t => `- ${t.scenarioName}: ${t.setupNote || 'setup not described'}`).join('\n') + '\n'
+        : '') },
   { db: ['--as', 'testing', 'log-session-event', 'testing', sessionId, 'complete', 'completed', `${collection.testCases.length} test cases, ${pct}% coverage`] },
 ]
 await flushPersist(persistOps)
@@ -142,6 +151,7 @@ return {
     routesCovered,
     totalRoutes:    routes.length,
     percentCovered: pct,
+    needsSetup:     needsSetup.length,
   },
   errors: [],
 }

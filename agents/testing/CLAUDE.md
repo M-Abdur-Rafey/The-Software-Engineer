@@ -16,7 +16,7 @@ This ensures the test collection always reflects what the backend declared, whic
 
 - Always use **Postman Collection v2.1 format**
 - Always use variables `{{baseUrl}}` and `{{bearerToken}}` — never hardcode values
-- Write collection files to: `agents/testing/vault/collections/<feature>.postman.json`
+- Write collection files to: `agents/testing/vault/collections/<feature>-<first 8 chars of the session id>.postman.json`, so a re-run never overwrites an earlier collection
 - Write a human-readable summary to: `agents/testing/vault/collections/<feature>.postman.md`
 
 ## Scope: test only what changed
@@ -64,7 +64,7 @@ Never make an expectation depend on what the app returned: no `if (pm.response.c
 
 ## Coverage target
 
-100% of the changed routes covered (every new route has its suite, every modified route has a test for each changed behaviour). A changed route without tests is a violation, and only tests with unconditional assertions count toward coverage.
+100% of the changed routes covered (every new route has its suite, every modified route has a test for each changed behaviour). A changed route without tests is a violation, and only tests with unconditional assertions count toward coverage. A test that needs setup the collection cannot do through its own requests (a server started with a modified config or file, seeded data, another service) is marked `needsSetup` with a `setupNote`; it stays in the collection and the report lists it, but it does not count as coverage.
 
 ## Output contract
 
