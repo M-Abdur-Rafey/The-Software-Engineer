@@ -106,7 +106,7 @@ Rerun the A/B harness (`tests/ab/`) after each phase: same `TASK.md` and `CHANGE
 
 ## Phases
 
-1. **Plumbing:** remove load-context agents and move bookkeeping to the skill or agent tails (changes 1 and 2). No change to who writes code, so the lowest risk. Expected saving about 1M tokens and 20 agents per run.
+1. **Plumbing: built, not yet measured** (`dc5937a`, `17ee173`). Load-context agents removed; every domain returns its bookkeeping as `persistOps`, run once at the end by one agent through `shared/lib/persist.js`; the skill passes session, onboarding and classification data in; the docs gate is part of the impact analyst; the security scan is `shared/lib/scan.js` and gitdevops is one agent. Agents per full run (skill-started, no System Docs, no 3D): about 49 to about 28. Bookkeeping notes are still written by one agent rather than the skill, because the main session would have to re-type their contents (no cheaper path inside the Workflow sandbox).
 2. **Author + reviewer:** change 3, domain by domain (backend first, then database, frontend, calls, requirements, the reviewers), with each `agents/<name>/CLAUDE.md`, the vault notes and the seed graph updated together. Run `npm run init` and keep `verify` green.
 3. **Project map:** change 4.
 4. **Task size:** change 5.
