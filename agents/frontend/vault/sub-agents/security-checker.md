@@ -1,6 +1,5 @@
 # security-checker
 
-Sub-agent of [[frontend]].
+Checklist of [[frontend]]: applied by [[frontend-designer]], verified by [[frontend-reviewer]].
 
-**Does:** Audits token placement, CSP, and storage.
-**Hands off to:** returns results to [[frontend]]
+**Covers:** Bearer token placement, CSP, CORS, X-headers and storage sensitivity.

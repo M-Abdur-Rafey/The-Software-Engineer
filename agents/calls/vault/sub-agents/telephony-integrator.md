@@ -1,6 +1,5 @@
 # telephony-integrator
 
-Sub-agent of [[calls]].
+Checklist of [[calls]]: applied by [[calls-author]], verified by [[calls-compliance]].
 
-**Does:** Writes webhook handlers and TwiML/NCCO.
-**Hands off to:** [[voice-script-writer]]
+**Covers:** Webhook handlers, TwiML/NCCO, SDK integration, signature validation on every webhook.

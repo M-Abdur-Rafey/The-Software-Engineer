@@ -1,6 +1,5 @@
 # layout-architect
 
-Sub-agent of [[frontend]].
+Checklist of [[frontend]]: applied by [[frontend-designer]], verified by [[frontend-reviewer]].
 
-**Does:** Owns parent-child CSS: Grid/Flex layout, container relationships, responsive structure.
-**Hands off to:** [[positioning-specialist]]
+**Covers:** Parent-child CSS: Grid/Flex layout, container relationships, responsive structure, min-width: 0 overflow guards.

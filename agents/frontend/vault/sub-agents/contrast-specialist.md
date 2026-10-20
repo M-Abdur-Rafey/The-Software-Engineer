@@ -1,6 +1,5 @@
 # contrast-specialist
 
-Sub-agent of [[frontend]].
+Checklist of [[frontend]]: applied by [[frontend-designer]], verified by [[frontend-reviewer]].
 
-**Does:** Owns colour contrast and visual accessibility (WCAG AA+), focus states.
-**Hands off to:** [[component-creator]]
+**Covers:** WCAG AA contrast across light/dark themes and visible focus states.

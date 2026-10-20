@@ -1,6 +1,5 @@
 # compliance-checker
 
-Sub-agent of [[calls]].
+Checklist of [[calls]]: applied by [[calls-author]], verified by [[calls-compliance]].
 
-**Does:** Validates TCPA/GDPR/DNC and recording consent.
-**Hands off to:** returns results to [[calls]]
+**Covers:** TCPA consent, GDPR data handling, DNC checks, calling hours, recording consent.

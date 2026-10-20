@@ -54,10 +54,16 @@ Verify `X-Nexmo-Signature` with HMAC-SHA256 using the Vonage API secret.
 
 ## Sub-agents
 
-1. **flow-designer** — designs the IVR tree (inbound) or campaign call flow (outbound) with states, transitions, and fallbacks
-2. **telephony-integrator** — writes webhook handlers, TwiML/NCCO responses, and SDK integration code
-3. **voice-script-writer** — writes all TTS prompts: greeting, menu, hold, transfer, voicemail, error messages
-4. **compliance-checker** — validates TCPA consent, GDPR data handling, DNC list integration, recording consent
+Two agents, split by independence rather than role (`design/agent-consolidation.md`):
+
+1. **author**: designs the call flow, writes the telephony integration and writes the voice scripts, to the checklists below. It receives the requirements spec, whose Decisions are binding.
+2. **compliance**: an independent reviewer that reads the code and scripts, never the author's reasoning. It checks TCPA, GDPR, DNC and recording consent, fixes clear code gaps (a missing signature check, consent script, calling-hours or DNC check, logging of full numbers), and reports legal or business choices (lawful basis, retention) instead of deciding them. Blocking failures make the output `status: failed`.
+
+Checklists (formerly separate sub-agents):
+
+- **flow-designer**: the IVR tree (inbound) or campaign flow (outbound) with states, transitions and fallbacks.
+- **telephony-integrator**: webhook handlers, TwiML/NCCO responses, SDK integration, signature validation on every webhook.
+- **voice-script-writer**: every TTS prompt (greeting, menu, hold, transfer, voicemail, error), written for speech.
 
 ## Output contract
 

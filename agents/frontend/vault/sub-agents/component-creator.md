@@ -1,6 +1,5 @@
 # component-creator
 
-Sub-agent of [[frontend]].
+Checklist of [[frontend]]: applied by [[frontend-designer]], verified by [[frontend-reviewer]].
 
-**Does:** Builds the component files.
-**Hands off to:** [[api-request-handler]]
+**Covers:** Components import from api/ files only, use design tokens, and craft loading/empty/error states.

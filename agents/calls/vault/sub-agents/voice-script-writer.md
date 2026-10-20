@@ -1,6 +1,5 @@
 # voice-script-writer
 
-Sub-agent of [[calls]].
+Checklist of [[calls]]: applied by [[calls-author]], verified by [[calls-compliance]].
 
-**Does:** Writes all TTS prompts.
-**Hands off to:** [[compliance-checker]]
+**Covers:** Every TTS prompt (greeting, menu, hold, transfer, voicemail, error), written for speech.

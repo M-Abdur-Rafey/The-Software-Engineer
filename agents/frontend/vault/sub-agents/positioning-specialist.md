@@ -1,6 +1,5 @@
 # positioning-specialist
 
-Sub-agent of [[frontend]].
+Checklist of [[frontend]]: applied by [[frontend-designer]], verified by [[frontend-reviewer]].
 
-**Does:** Owns positioning, stacking/z-index, overflow and scroll containers.
-**Hands off to:** [[contrast-specialist]]
+**Covers:** Positioning, stacking contexts and the z-index scale, overflow and scroll containers, sticky/fixed elements, portals.

@@ -2658,17 +2658,24 @@ const GRAPH = {
     title: 'Frontend Agent',
     role: 'Builds components, wires API calls, enforces client security.',
     upstream: ['backend'], downstream: ['ponytail'], validators: ['mcpbridge'],
+    // Split by independence (design/agent-consolidation.md): the designer sets the vision without writing code,
+    // the author builds, a fresh reviewer judges and fixes. The old roles are checklists.
     subAgents: [
-      ['art-director', 'Sets the artistic vision before any layout: focal point, palette philosophy, composition & visual flow, signature detail, and the cohesion rules that bind every component into one piece. Designs with the eye of the masters (da Vinci, Bauhaus, Rams).', 'ui-designer'],
-      ['ui-designer', 'Defines layout and design-system usage, guided by the art direction.', '3d-designer'],
-      ['3d-designer', 'Architects Three.js/WebGL scenes (Opus model).', 'layout-architect'],
-      ['layout-architect', 'Owns parent-child CSS: Grid/Flex layout, container relationships, responsive structure.', 'positioning-specialist'],
-      ['positioning-specialist', 'Owns positioning, stacking/z-index, overflow and scroll containers.', 'contrast-specialist'],
-      ['contrast-specialist', 'Owns colour contrast and visual accessibility (WCAG AA+), focus states.', 'component-creator'],
-      ['component-creator', 'Builds the component files.', 'api-request-handler'],
-      ['api-request-handler', 'Wires components to backend contracts.', 'atelier-curator'],
-      ['atelier-curator', 'Judges the assembled UI as one composition — does every part merge into a unified masterpiece? Applies final refinements for rhythm, alignment, harmony, and cohesion.', 'security-checker'],
-      ['security-checker', 'Audits token placement, CSP, and storage.', null],
+      ['frontend-designer', 'Sets the art direction with the eye of the masters (focal point, palette, composition, signature detail, cohesion rules) and the UI design (views, layout, tokens, states). Writes no code.', '3d-designer'],
+      ['3d-designer', 'Architects Three.js/WebGL scenes (Opus model); runs only for 3D tasks.', 'frontend-author'],
+      ['frontend-author', 'Builds the components, API files, wiring and state to the design, the spec and the checklists.', 'frontend-reviewer'],
+      ['frontend-reviewer', "Judges the screen as one composition and checks contrast and security without the author's reasoning; fixes what it safely can.", null],
+    ],
+    checklists: [
+      ['art-director', 'North star, one focal point, palette philosophy, composition and visual flow, signature detail, cohesion rules, motion.', 'frontend-designer'],
+      ['ui-designer', 'Views, layout, design-system tokens, responsive behaviour, loading/empty/error states.', 'frontend-designer'],
+      ['layout-architect', 'Parent-child CSS: Grid/Flex layout, container relationships, responsive structure, min-width: 0 overflow guards.'],
+      ['positioning-specialist', 'Positioning, stacking contexts and the z-index scale, overflow and scroll containers, sticky/fixed elements, portals.'],
+      ['contrast-specialist', 'WCAG AA contrast across light/dark themes and visible focus states.'],
+      ['component-creator', 'Components import from api/ files only, use design tokens, and craft loading/empty/error states.'],
+      ['api-request-handler', 'Wire only declared or existing routes, the right storage layer for response data, stores updated.'],
+      ['atelier-curator', 'One voice across components, one focal point per view, one spacing rhythm, cohesion with the art direction.'],
+      ['security-checker', 'Bearer token placement, CSP, CORS, X-headers and storage sensitivity.'],
     ],
   },
   testing: {
@@ -2680,11 +2687,16 @@ const GRAPH = {
     title: 'Calls Agent',
     role: 'Builds inbound IVR / outbound campaigns, webhooks, voice scripts, compliance.',
     upstream: ['backend', 'database'], downstream: [], validators: ['mcpbridge'],
+    // Split by independence (design/agent-consolidation.md): one author, one independent compliance reviewer.
     subAgents: [
-      ['flow-designer', 'Maps the IVR tree (inbound) or campaign flow (outbound).', 'telephony-integrator'],
-      ['telephony-integrator', 'Writes webhook handlers and TwiML/NCCO.', 'voice-script-writer'],
-      ['voice-script-writer', 'Writes all TTS prompts.', 'compliance-checker'],
-      ['compliance-checker', 'Validates TCPA/GDPR/DNC and recording consent.', null],
+      ['calls-author', 'Designs the call flow, writes the telephony integration and the voice scripts to the spec and the checklists.', 'calls-compliance'],
+      ['calls-compliance', "Checks TCPA/GDPR/DNC and recording consent against the code and scripts, without the author's reasoning; fixes clear code gaps.", null],
+    ],
+    checklists: [
+      ['flow-designer', 'The IVR tree (inbound) or campaign flow (outbound) with states, transitions and fallbacks.'],
+      ['telephony-integrator', 'Webhook handlers, TwiML/NCCO, SDK integration, signature validation on every webhook.'],
+      ['voice-script-writer', 'Every TTS prompt (greeting, menu, hold, transfer, voicemail, error), written for speech.'],
+      ['compliance-checker', 'TCPA consent, GDPR data handling, DNC checks, calling hours, recording consent.'],
     ],
   },
   ponytail: {
@@ -2754,12 +2766,14 @@ for (const [name, g] of Object.entries(GRAPH)) {
     ].join('\n'));
   }
 
-  // Old sub-agent roles that became checklists: applied by the first sub-agent, verified by the last.
-  for (const [sub, role] of g.checklists || []) {
+  // Old sub-agent roles that became checklists: applied by the given sub-agent (default: the first), verified by the last.
+  for (const [sub, role, by] of g.checklists || []) {
+    const applier = by || g.subAgents[0][0];
+    const verifier = g.subAgents[g.subAgents.length - 1][0];
     writeNote(name, `sub-agents/${sub}.md`, [
       `# ${sub}`,
       '',
-      `Checklist of ${link(name)}: applied by ${link(g.subAgents[0][0])}${g.subAgents.length > 1 ? `, verified by ${link(g.subAgents[g.subAgents.length - 1][0])}` : ''}.`,
+      `Checklist of ${link(name)}: applied by ${link(applier)}${verifier !== applier ? `, verified by ${link(verifier)}` : ''}.`,
       '',
       `**Covers:** ${role}`,
       '',

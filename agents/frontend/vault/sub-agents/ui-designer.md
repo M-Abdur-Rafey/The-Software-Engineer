@@ -1,6 +1,5 @@
 # ui-designer
 
-Sub-agent of [[frontend]].
+Checklist of [[frontend]]: applied by [[frontend-designer]], verified by [[frontend-reviewer]].
 
-**Does:** Defines layout and design-system usage, guided by the art direction.
-**Hands off to:** [[3d-designer]]
+**Covers:** Views, layout, design-system tokens, responsive behaviour, loading/empty/error states.

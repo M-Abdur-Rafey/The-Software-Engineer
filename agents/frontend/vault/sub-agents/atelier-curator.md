@@ -1,6 +1,5 @@
 # atelier-curator
 
-Sub-agent of [[frontend]].
+Checklist of [[frontend]]: applied by [[frontend-designer]], verified by [[frontend-reviewer]].
 
-**Does:** Judges the assembled UI as one composition — does every part merge into a unified masterpiece? Applies final refinements for rhythm, alignment, harmony, and cohesion.
-**Hands off to:** [[security-checker]]
+**Covers:** One voice across components, one focal point per view, one spacing rhythm, cohesion with the art direction.

@@ -11,7 +11,9 @@
 - **Validated by:** [[mcpbridge]]
 
 ## Internal pipeline (sub-agents)
-[[flow-designer]] → [[telephony-integrator]] → [[voice-script-writer]] → [[compliance-checker]]
+[[calls-author]] → [[calls-compliance]]
+
+**Checklists:** [[flow-designer]] · [[telephony-integrator]] · [[voice-script-writer]] · [[compliance-checker]]
 
 ## Knowledge
 Accumulated decisions and patterns live in this vault (see `INDEX.md`) and in `knowledge.db`.

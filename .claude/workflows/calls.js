@@ -1,11 +1,9 @@
 export const meta = {
   name: 'calls',
-  description: 'Calls domain agent — inbound IVR, outbound campaigns, webhook handlers, voice scripts, compliance',
+  description: 'Calls domain agent — one author builds the IVR/campaign, webhooks and voice scripts; an independent compliance reviewer checks them',
   phases: [
-    { title: 'Design Flow', detail: 'flow-designer maps IVR tree (inbound) or campaign logic (outbound)' },
-    { title: 'Build Integration', detail: 'telephony-integrator writes webhook handlers and TwiML/NCCO' },
-    { title: 'Voice Scripts', detail: 'voice-script-writer writes all TTS prompts and messages' },
-    { title: 'Compliance', detail: 'compliance-checker validates TCPA, GDPR, DNC, recording consent' },
+    { title: 'Author', detail: 'Design the call flow, write webhooks + TwiML/NCCO + client, write the voice scripts' },
+    { title: 'Compliance', detail: 'Independent compliance reviewer: TCPA, GDPR, DNC, recording consent; fixes clear code gaps' },
   ],
 }
 
@@ -30,6 +28,34 @@ function uniquePaths(list) {
 const backendOutput   = (args && args.backendOutput)   || null
 const databaseOutput  = (args && args.databaseOutput)  || null
 const callPreferences = (args && args.callPreferences) || null
+const requirementsOutput = (args && args.requirementsOutput) || null
+
+// The requirements spec for one domain. Decisions, the domain's tasks and their acceptance criteria are binding
+// and always passed in full; only the summary and scope lists are capped. The spec note is written at the end
+// of the run, so the brief must stand on its own.
+function specBrief(domain, max = 3000) {
+  const s = requirementsOutput && requirementsOutput.spec
+  if (!s) return '(no requirements spec for this session)'
+  const tasks = (requirementsOutput.tasks || []).filter(t => t.domain === domain)
+  const storyIds = new Set(tasks.map(t => t.storyId).filter(Boolean))
+  const stories = (requirementsOutput.userStories || []).filter(u => storyIds.has(u.id))
+  const list = (title, items) => (items && items.length ? `${title}:\n${items.map(x => `- ${x}`).join('\n')}` : '')
+  const binding = [
+    list('Decisions (binding)', (s.decisions || []).map(d => `${d.topic}: ${d.decision}`)),
+    list(`Tasks for ${domain}`, tasks.map(t => `${t.title}${t.description ? `: ${t.description}` : ''}`)),
+    list('Acceptance criteria', stories.flatMap(u => (u.acceptanceCriteria || []).map(c => `${u.id}: ${c}`))),
+  ].filter(Boolean).join('\n\n')
+  let context = [
+    s.summary ? `Summary: ${s.summary}` : '',
+    list('In scope', s.inScope),
+    list('Out of scope', s.outOfScope),
+  ].filter(Boolean).join('\n\n')
+  if (context.length > max) {
+    log(`spec context for ${domain} capped at ${max} of ${context.length} chars (decisions, tasks and criteria kept in full)`)
+    context = `${context.slice(0, max)}\n[... ${context.length - max} more chars of summary and scope omitted]`
+  }
+  return [context, binding].filter(Boolean).join('\n\n')
+}
 
 const callDirection = (callPreferences && callPreferences.callDirection) || 'both'
 const provider      = (callPreferences && callPreferences.provider)      || 'twilio'
@@ -57,248 +83,135 @@ log(`Provider: ${provider}`)
 
 const tableContext = databaseOutput ? JSON.stringify(databaseOutput.tables || []) : '[]'
 
-// ─── Phase: Design Flow ───────────────────────────────────────────────────────
-phase('Design Flow')
+const VAULT = `${AGENTS_DIR}/agents/calls/vault`
+const spec = specBrief('calls')
+const sigRule = provider === 'twilio' ? 'X-Twilio-Signature via twilio.validateRequest()' : 'X-Nexmo-Signature via HMAC-SHA256'
 
-const flow = await agent(
-  `You are the flow-designer sub-agent of the Calls Agent.\n\n` +
-  `Task: "${taskText}"\n` +
-  `Project: ${projectPath}\n` +
-  `${providerBrief}\n` +
-  `Database tables available: ${tableContext}\n` +
-  `Prior decisions: run cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls get-decisions calls telephony-patterns 5, and read ${AGENTS_DIR}/agents/calls/vault/INDEX.md plus the notes it lists that are relevant to this task.\n\n` +
-  `Read the project at ${projectPath} to understand any existing telephony code.\n\n` +
+// ─── Phase: Author ────────────────────────────────────────────────────────────
+// flow-designer, telephony-integrator and voice-script-writer worked on one feature in sequence and
+// only passed JSON summaries; one author now does all three (design/agent-consolidation.md, phase 2).
+phase('Author')
 
-  (callDirection === 'inbound' || callDirection === 'both'
-    ? `INBOUND IVR DESIGN — design a complete IVR call flow:\n` +
-      `- Greeting message (spoken on call connect)\n` +
-      `- Menu structure (press 1 for X, press 2 for Y) — maximum 3 levels deep\n` +
-      `- Each menu option leads to one of: sub-menu, transfer-to-agent, voicemail, message-and-hangup\n` +
-      `- Timeout handling: if caller presses nothing → repeat menu once → fallback to agent/voicemail\n` +
-      `- Invalid input handling: say "I didn't understand that" → repeat menu once → fallback\n` +
-      `- Business hours check: route to voicemail after hours\n` +
-      `${hasRecording ? '- Recording consent: announce at call start that the call may be recorded\n' : ''}\n`
+const built = await agent(
+  `You are the Calls author: design the call flow, build the telephony integration, and write the voice scripts for this ` +
+  `task, then check your own work. An independent compliance reviewer will check it after you.\n\n` +
+  `Task: "${taskText}"\nProject: ${projectPath}\n${providerBrief}\nDatabase tables available: ${tableContext}\n\n` +
+  `Requirements spec:\n${spec}\n\n` +
+  `Context to read first: prior decisions (cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls get-decisions calls telephony-patterns 5), ` +
+  `${VAULT}/INDEX.md and the notes it lists that apply, ${VAULT}/providers/twilio-setup.md (if missing: the twilio npm package, ` +
+  `auth token from TWILIO_AUTH_TOKEN), and any existing telephony code in the project.\n\n` +
+  `1. CALL FLOW (flow-designer)\n` +
+  ((callDirection === 'inbound' || callDirection === 'both')
+    ? `   Inbound IVR: greeting on connect; menu at most 3 levels deep, each option -> sub-menu, transfer-to-agent, voicemail or ` +
+      `message-and-hangup; timeout -> repeat once -> fallback; invalid input -> "I didn't understand that" -> repeat once -> fallback; ` +
+      `business-hours check routing to voicemail after hours${hasRecording ? '; recording consent announced at call start' : ''}.\n`
     : '') +
-
-  (callDirection === 'outbound' || callDirection === 'both'
-    ? `OUTBOUND CAMPAIGN DESIGN — design the outbound call flow:\n` +
-      `- Pre-dial compliance check: verify number is not on DNC list\n` +
-      `- Calling hours check: 8am–9pm local time for the callee's timezone\n` +
-      `- Call initiation: dial number, set caller ID, set timeout (30s)\n` +
-      `- AMD (Answering Machine Detection): define script for human answer vs voicemail\n` +
-      `- Human-answered script: introduction → purpose → action (transfer/info/collect)\n` +
-      `- Machine-answered: leave a voicemail message with callback number\n` +
-      `- Retry logic: busy/no-answer → retry up to 3 times, wait 1+ hour between attempts\n` +
-      `- Call result tracking: record outcome (answered, voicemail, busy, no-answer, failed)\n\n`
+  ((callDirection === 'outbound' || callDirection === 'both')
+    ? `   Outbound campaign: DNC check before every dial; 8am-9pm callee-local calling hours; dial with real caller ID and 30s timeout; ` +
+      `answering-machine detection with a human script (intro -> purpose -> action) and a voicemail message with callback number; ` +
+      `retry busy/no-answer up to 3 times, 1+ hour apart; record the outcome (answered, voicemail, busy, no-answer, failed).\n`
     : '') +
-
-  `Return JSON: {\n` +
-  `  callDirection: "inbound"|"outbound"|"both",\n` +
-  `  inboundFlow: { greeting: string, menuOptions: [{key,label,action,subMenu?}], timeoutFallback: string, afterHoursFallback: string } | null,\n` +
-  `  outboundFlow: { preDialChecks: [string], humanScript: string, voicemailScript: string, retryConfig: {maxAttempts,waitHours}, resultStates: [string] } | null,\n` +
-  `  webhookEndpoints: [{method,path,description,eventType}],\n` +
-  `  featureName: string\n` +
-  `}`,
+  `2. INTEGRATION (telephony-integrator) in ${projectPath}/src/features/<featureName>/ (unless the spec decides otherwise): ` +
+  `webhook.routes.js, webhook.controller.js (thin), telephony.service.js (IVR routing, dialing, call logging), ` +
+  `${provider === 'twilio' ? 'twiml.js and twilio.client.js' : 'ncco.js and vonage.client.js'} (SDK singleton, env vars only).\n` +
+  `   Mandatory security: validate ${sigRule} on EVERY webhook route, 403 { success: false, code: 'ERR_INVALID_SIGNATURE' } when ` +
+  `invalid; credentials only from env vars; never log full audio, full phone numbers (last 4 digits only) or plain-text transcripts.\n` +
+  `   Errors: { success: false, code: 'ERR_X', message }, no stack traces; webhooks always return a valid provider response, even on error.\n` +
+  ((callDirection === 'inbound' || callDirection === 'both') ? `   Inbound responses: <Say> (voice Polly.Joanna), <Gather input="dtmf" timeout="5" numDigits="1">, <Dial> with an action webhook, <Record maxLength=120 transcribe>, <Redirect> for loops.\n` : '') +
+  ((callDirection === 'outbound' || callDirection === 'both') ? `   Outbound: calls.create with machineDetection "Enable" and asyncAmd; AMD webhook (human vs machine); status callback storing a call_logs record on every update.\n` : '') +
+  `3. VOICE SCRIPTS (voice-script-writer, ${VAULT}/scripts/tts-writing-guide.md): sentences under 20 words; spoken contractions; ` +
+  `numbers spelled out, phone digits one by one; no punctuation TTS reads aloud; greetings under 8 seconds; phonetic hints for brand ` +
+  `names. Write every script that applies: greeting, main_menu, hold, transfer, voicemail_prompt, voicemail_closed, error, goodbye` +
+  `${hasRecording ? ', recording_consent' : ''}${(callDirection === 'outbound' || callDirection === 'both') ? ', outbound_intro (identifies the company immediately), voicemail_leave (with callback number)' : ''}.\n\n` +
+  `Return { featureName, callDirection: "inbound"|"outbound"|"both", ` +
+  `inboundFlow: { greeting, menuOptions: [{key,label,action,subMenu?}], timeoutFallback, afterHoursFallback } | null, ` +
+  `outboundFlow: { preDialChecks: [string], humanScript, voicemailScript, retryConfig: {maxAttempts,waitHours}, resultStates: [string] } | null, ` +
+  `webhookRoutes: [{method,path,handler,authRequired,description}], scripts: [{id, context, text, estimatedSeconds, ttsVoice}], ` +
+  `filesCreated: [string], filesUpdated: [string], specConflicts: [string] }`,
   {
-    label: 'flow-designer',
-    phase: 'Design Flow',
+    label: 'author',
+    phase: 'Author',
     schema: {
       type: 'object',
-      required: ['callDirection', 'webhookEndpoints', 'featureName'],
+      required: ['featureName', 'callDirection', 'webhookRoutes', 'scripts', 'filesCreated', 'filesUpdated', 'specConflicts'],
       properties: {
-        callDirection:    { type: 'string' },
-        inboundFlow:      { type: ['object', 'null'] },
-        outboundFlow:     { type: ['object', 'null'] },
-        webhookEndpoints: { type: 'array' },
-        featureName:      { type: 'string' },
-      },
-    },
-  }
-)
-
-log(`Designed flow: ${flow.featureName}, ${flow.webhookEndpoints.length} webhook endpoint(s)`)
-
-// ─── Phase: Build Integration ─────────────────────────────────────────────────
-phase('Build Integration')
-
-const integration = await agent(
-  `You are the telephony-integrator sub-agent of the Calls Agent.\n\n` +
-  `Task: "${taskText}"\n` +
-  `Project: ${projectPath}\n` +
-  `${providerBrief}\n` +
-  `Call flow design: ${JSON.stringify(flow)}\n` +
-  `Twilio setup reference: read ${AGENTS_DIR}/agents/calls/vault/providers/twilio-setup.md (if missing: use the twilio npm package, auth token from the TWILIO_AUTH_TOKEN env var)\n\n` +
-
-  `Create the telephony integration files at ${projectPath}/src/features/${flow.featureName}/:\n\n` +
-
-  `FILES TO CREATE:\n` +
-  `  webhook.routes.js  — Express routes for all webhook endpoints listed below\n` +
-  `  webhook.controller.js — thin controller, calls service\n` +
-  `  telephony.service.js — business logic: IVR routing, campaign dialing, call logging\n` +
-  `  twiml.js (or ncco.js for Vonage) — generates provider response XML/JSON\n` +
-  `  ${provider === 'twilio' ? 'twilio.client.js' : 'vonage.client.js'} — SDK singleton, env vars only\n\n` +
-
-  `WEBHOOK ENDPOINTS TO IMPLEMENT:\n` +
-  JSON.stringify(flow.webhookEndpoints) + '\n\n' +
-
-  `MANDATORY SECURITY (non-negotiable):\n` +
-  `- Validate ${provider === 'twilio' ? 'X-Twilio-Signature header using twilio.validateRequest()' : 'X-Nexmo-Signature header using HMAC-SHA256'} on EVERY webhook route\n` +
-  `- Return 403 with { success: false, code: 'ERR_INVALID_SIGNATURE' } for invalid signatures\n` +
-  `- All credentials from env vars: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER (or VONAGE equivalents)\n` +
-  `- Never log full call audio, full phone numbers (last 4 digits only in logs), or transcripts in plain text\n\n` +
-
-  (flow.inboundFlow
-    ? `INBOUND TwiML PATTERNS:\n` +
-      `- Use <Response><Say> for TTS messages (voice: "Polly.Joanna" for natural sound)\n` +
-      `- Use <Gather input="dtmf" timeout="5" numDigits="1"> for menu input\n` +
-      `- Use <Dial> to transfer to agent (with action webhook for call completion)\n` +
-      `- Use <Record> for voicemail (maxLength: 120s, transcribe: true)\n` +
-      `- Wrap in <Redirect> for timeout/invalid loops\n\n`
-    : '') +
-
-  (flow.outboundFlow
-    ? `OUTBOUND SDK PATTERNS:\n` +
-      `- Use twilio.calls.create({ to, from, twiml, machineDetection: "Enable", asyncAmd: true })\n` +
-      `- AMD webhook (AnsweredBy): check "human" vs "machine" and respond with correct TwiML\n` +
-      `- Status callback webhook: track call progress (initiated → ringing → in-progress → completed)\n` +
-      `- Store call_logs record on every status update\n\n`
-    : '') +
-
-  `ERROR HANDLING:\n` +
-  `- All errors return: { success: false, code: 'ERR_X', message: '...' }\n` +
-  `- No stack traces in responses\n` +
-  `- Webhook must always return a valid TwiML response (even on error) or provider will retry\n\n` +
-
-  `Return JSON: { filesCreated: [string], filesUpdated: [string], webhookRoutes: [{method,path,handler,authRequired,description}] }`,
-  {
-    label: 'telephony-integrator',
-    phase: 'Build Integration',
-    schema: {
-      type: 'object',
-      required: ['filesCreated', 'filesUpdated', 'webhookRoutes'],
-      properties: {
-        filesCreated:   { type: 'array', items: { type: 'string' } },
-        filesUpdated:   { type: 'array', items: { type: 'string' } },
-        webhookRoutes:  { type: 'array' },
-      },
-    },
-  }
-)
-
-log(`Created ${integration.filesCreated.length} file(s), ${integration.webhookRoutes.length} route(s)`)
-
-// ─── Phase: Voice Scripts ─────────────────────────────────────────────────────
-phase('Voice Scripts')
-
-const scripts = await agent(
-  `You are the voice-script-writer sub-agent of the Calls Agent.\n\n` +
-  `Task: "${taskText}"\n` +
-  `${providerBrief}\n` +
-  `Call flow: ${JSON.stringify(flow)}\n\n` +
-  `Write all TTS (text-to-speech) scripts for this telephony feature. Rules for great voice scripts:\n\n` +
-  `WRITING RULES:\n` +
-  `- Sentences must be short (under 20 words). Long sentences cause TTS to rush or stumble.\n` +
-  `- Use natural spoken language, not written language ("you'll" not "you will", "we've" not "we have")\n` +
-  `- Spell out numbers in words for TTS: "eight hundred" not "800"\n` +
-  `- For phone numbers, say each digit individually: "call us at 5-5-5, 1-2-3-4"\n` +
-  `- Avoid punctuation that TTS reads aloud: no em dashes, no parentheses in speech\n` +
-  `- Keep greetings under 8 seconds at normal TTS speed (~130 words/min)\n` +
-  `- Include phonetic spellings in brackets for brand names TTS mispronounces: "Aris[trull]"\n\n` +
-  `REQUIRED SCRIPTS (write all that apply):\n` +
-  `- greeting: what caller hears when call connects\n` +
-  `- main_menu: menu options read aloud\n` +
-  `- hold: message played while caller waits for agent\n` +
-  `- transfer: "please hold while I connect you"\n` +
-  `- voicemail_prompt: ask caller to leave a message\n` +
-  `- voicemail_closed: after-hours message\n` +
-  `- error: "I didn't understand that. Let me repeat..."\n` +
-  `- goodbye: end-of-call message\n` +
-  (hasRecording ? `- recording_consent: "This call may be recorded for quality and training purposes."\n` : '') +
-  (flow.outboundFlow ? `- outbound_intro: opening line for outbound calls (must identify company immediately)\n` : '') +
-  (flow.outboundFlow ? `- voicemail_leave: message to leave on answering machine with callback number\n` : '') +
-  `\nReturn JSON: { scripts: [{id, context, text, estimatedSeconds, ttsVoice}] }`,
-  {
-    label: 'voice-script-writer',
-    phase: 'Voice Scripts',
-    schema: {
-      type: 'object',
-      required: ['scripts'],
-      properties: {
+        featureName:   { type: 'string' },
+        callDirection: { type: 'string' },
+        inboundFlow:   { type: ['object', 'null'] },
+        outboundFlow:  { type: ['object', 'null'] },
+        webhookRoutes: { type: 'array' },
         scripts: {
           type: 'array',
           items: {
             type: 'object',
             required: ['id', 'context', 'text'],
             properties: {
-              id:               { type: 'string' },
-              context:          { type: 'string' },
-              text:             { type: 'string' },
-              estimatedSeconds: { type: 'number' },
-              ttsVoice:         { type: 'string' },
+              id: { type: 'string' }, context: { type: 'string' }, text: { type: 'string' },
+              estimatedSeconds: { type: 'number' }, ttsVoice: { type: 'string' },
             },
           },
         },
+        filesCreated:  { type: 'array', items: { type: 'string' } },
+        filesUpdated:  { type: 'array', items: { type: 'string' } },
+        specConflicts: { type: 'array', items: { type: 'string' } },
       },
     },
   }
 )
-
-log(`Wrote ${scripts.scripts.length} voice script(s)`)
+const flow = { featureName: built.featureName, callDirection: built.callDirection, inboundFlow: built.inboundFlow || null, outboundFlow: built.outboundFlow || null }
+const integration = { filesCreated: built.filesCreated, filesUpdated: built.filesUpdated, webhookRoutes: built.webhookRoutes }
+const scripts = { scripts: built.scripts }
+log(`Author: ${flow.featureName}, ${integration.webhookRoutes.length} webhook route(s), ${scripts.scripts.length} voice script(s)`)
 
 // ─── Phase: Compliance ────────────────────────────────────────────────────────
+// Independent on purpose: the compliance reviewer gets the code, the scripts and the rules, never
+// the author's reasoning.
 phase('Compliance')
 
 const compliance = await agent(
-  `You are the compliance-checker sub-agent of the Calls Agent.\n\n` +
-  `Task: "${taskText}"\n` +
-  `${providerBrief}\n` +
+  `You are the Calls compliance reviewer. You did not build this; review it independently.\n\n` +
+  `Task: "${taskText}"\n${providerBrief}\nProject: ${projectPath}\n` +
+  `Files built: ${JSON.stringify(uniquePaths([...integration.filesCreated, ...integration.filesUpdated]))}\n` +
   `Call flow: ${JSON.stringify(flow)}\n` +
-  `Voice scripts: ${JSON.stringify(scripts.scripts.map(s => ({ id: s.id, text: s.text })))}\n` +
-  `Compliance reference: read ${AGENTS_DIR}/agents/calls/vault/compliance/tcpa-gdpr.md (if missing: apply TCPA, GDPR, and FTC DNC rules)\n\n` +
-  `Audit the call system for compliance violations:\n\n` +
-  `TCPA (US — Telephone Consumer Protection Act):\n` +
-  `- [blocking] Outbound to mobile phones: is prior written consent documented or a consent-collection step included?\n` +
-  `- [blocking] Calling hours: is the 8am–9pm local-time restriction enforced per timezone?\n` +
-  `- [blocking] DNC list: is the federal and state DNC list checked before every outbound dial?\n` +
-  `- [blocking] Caller ID: is a real, working phone number presented as caller ID?\n` +
-  `- [warning] Auto-dialer: if using predictive/power dialing, is abandonment rate tracked (< 3%)?\n\n` +
-  `GDPR (EU — General Data Protection Regulation):\n` +
-  `- [blocking] Call recordings: if recording, is a lawful basis documented (consent or legitimate interest)?\n` +
-  `- [blocking] Transcript storage: are transcripts encrypted at rest and subject to retention limits?\n` +
-  `- [warning] Phone numbers: are they stored as PII with appropriate access controls?\n` +
-  `- [warning] Data minimisation: are only necessary call details logged (not full audio in plain text)?\n\n` +
-  `GENERAL:\n` +
-  `- [blocking] Recording consent: if recording, is the spoken consent script present and played before recording starts?\n` +
-  `- [warning] Voicemail message: does the outbound voicemail clearly identify the company and provide an opt-out?\n` +
-  `- [info] Webhook signature: is provider signature validation implemented on all webhook routes?\n\n` +
-  `Return JSON: { checks: [{rule, severity: "blocking"|"warning"|"info", passed: boolean, detail: string}], passed: boolean }`,
+  `Voice scripts: ${JSON.stringify(scripts.scripts.map(v => ({ id: v.id, text: v.text })))}\n` +
+  `Compliance reference: read ${VAULT}/compliance/tcpa-gdpr.md (if missing: apply TCPA, GDPR and FTC DNC rules)\n\n` +
+  `Check, reading the code itself:\n` +
+  `TCPA: [blocking] prior written consent (or a consent step) before outbound calls to mobiles; [blocking] 8am-9pm local-time ` +
+  `calling hours enforced per timezone; [blocking] federal and state DNC checked before every outbound dial; [blocking] a real, ` +
+  `working caller ID; [warning] abandonment rate tracked (< 3%) for predictive/power dialing.\n` +
+  `GDPR: [blocking] a documented lawful basis for recordings; [blocking] transcripts encrypted at rest with retention limits; ` +
+  `[warning] phone numbers treated as PII with access controls; [warning] only necessary call details logged.\n` +
+  `General: [blocking] if recording, the spoken consent plays before recording starts; [warning] outbound voicemail identifies the ` +
+  `company and offers an opt-out; [info] provider signature validation on every webhook route.\n\n` +
+  `Fix clear code gaps in place (a missing signature check, consent script, calling-hours or DNC check, logging of full numbers) and ` +
+  `mark those checks passed with what you changed in detail. Legal or business choices (which lawful basis, retention period) are ` +
+  `reported, never decided by you.\n` +
+  `Return { checks: [{rule, severity: "blocking"|"warning"|"info", passed, detail}], passed, filesFixed: [string] }`,
   {
-    label: 'compliance-checker',
+    label: 'compliance',
     phase: 'Compliance',
     schema: {
       type: 'object',
-      required: ['checks', 'passed'],
+      required: ['checks', 'passed', 'filesFixed'],
       properties: {
         checks: {
           type: 'array',
           items: {
             type: 'object',
             required: ['rule', 'severity', 'passed'],
-            properties: {
-              rule:     { type: 'string' },
-              severity: { type: 'string' },
-              passed:   { type: 'boolean' },
-              detail:   { type: 'string' },
-            },
+            properties: { rule: { type: 'string' }, severity: { type: 'string' }, passed: { type: 'boolean' }, detail: { type: 'string' } },
           },
         },
-        passed: { type: 'boolean' },
+        passed:     { type: 'boolean' },
+        filesFixed: { type: 'array', items: { type: 'string' } },
       },
     },
   }
 )
 
+// Pass/fail comes from the checks themselves, not the model's summary flag.
 const blockingFailures = compliance.checks.filter(c => !c.passed && c.severity === 'blocking')
+compliance.passed = blockingFailures.length === 0
 log(`Compliance: ${compliance.checks.length} checks, ${blockingFailures.length} blocking failure(s), passed=${compliance.passed}`)
 
 const callsNote = [
@@ -321,6 +234,7 @@ await flushPersist(persistOps)
 const allFiles = uniquePaths([
   ...integration.filesCreated,
   ...integration.filesUpdated,
+  ...(compliance.filesFixed || []),
 ])
 
 return {
@@ -336,5 +250,6 @@ return {
   voiceScripts:    scripts.scripts,
   complianceChecks: compliance.checks,
   filesChanged:    allFiles,
+  specConflicts:   built.specConflicts,
   errors:          blockingFailures.map(c => `${c.rule}: ${c.detail}`),
 }

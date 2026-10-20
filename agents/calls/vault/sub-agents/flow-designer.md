@@ -1,6 +1,5 @@
 # flow-designer
 
-Sub-agent of [[calls]].
+Checklist of [[calls]]: applied by [[calls-author]], verified by [[calls-compliance]].
 
-**Does:** Maps the IVR tree (inbound) or campaign flow (outbound).
-**Hands off to:** [[telephony-integrator]]
+**Covers:** The IVR tree (inbound) or campaign flow (outbound) with states, transitions and fallbacks.

@@ -1,6 +1,5 @@
 # api-request-handler
 
-Sub-agent of [[frontend]].
+Checklist of [[frontend]]: applied by [[frontend-designer]], verified by [[frontend-reviewer]].
 
-**Does:** Wires components to backend contracts.
-**Hands off to:** [[atelier-curator]]
+**Covers:** Wire only declared or existing routes, the right storage layer for response data, stores updated.

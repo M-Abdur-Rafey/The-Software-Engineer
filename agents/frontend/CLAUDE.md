@@ -45,7 +45,7 @@ src/api/<feature>.api.js
 
 Never place fetch/axios calls inline in JSX or component files. Components import from the api file.
 
-## Bearer token rule (blocking — enforced by security-checker)
+## Bearer token rule (blocking — security-checker checklist, verified by the reviewer)
 
 ```js
 // CORRECT — token in Authorization header from in-memory store
@@ -73,17 +73,24 @@ localStorage.getItem('token')           // token in localStorage
 
 ## Sub-agents
 
-Spawn in this order:
+Split by independence rather than role (`design/agent-consolidation.md`):
 
-1. **ui-designer** — layout decisions, typography choices, color token usage, responsive breakpoints
-2. **layout-architect** — owns parent-child CSS: CSS Grid / Flexbox structure, container–child sizing relationships, responsive breakpoints, and fragile-nesting fixes (`min-width: 0` overflow guards)
-3. **positioning-specialist** — owns positioning, stacking contexts and the z-index scale, overflow / scroll containers, sticky/fixed elements, and portal-rendered overlays
-4. **contrast-specialist** — owns colour contrast and visual accessibility: WCAG AA ratios across light/dark themes and visible `:focus-visible` states
-5. **component-creator** — builds actual component files; imports from api/ files only; applies the CSS specialists' rules
-6. **api-request-handler** — wires each component to its contractExport; decides storage layer for response data; ensures reducers/slices/stores are updated correctly
-7. **security-checker** — audits bearer token placement, CSP, CORS config, X-headers, storage sensitivity; BLOCKS if any error-severity violation is found
+1. **designer**: art direction with the masters' eye (north star, focal point, palette, composition, signature detail, cohesion rules, motion) plus the UI design (views, layout, tokens, responsive behaviour, loading/empty/error states). It writes no code, so the vision is set independently of the build.
+2. **3d-designer** (3D tasks only, Opus): the Three.js/WebGL scene, physics, shaders and scroll animation.
+3. **author**: builds the components, API files, wiring and state to the design and the checklists below. It receives the requirements spec, whose Decisions are binding (security rules are never overridden).
+4. **reviewer**: a fresh agent that sees only the design, the spec, the changed files and the checklists. It judges the screen as one composition (atelier), checks contrast and security, fixes what it safely can, and reports what remains.
 
-The security-checker runs LAST and its result determines whether the output is `status: completed` or `status: failed`.
+Checklists (formerly separate sub-agents):
+
+- **layout-architect**: parent-child CSS with Grid/Flexbox, container-child sizing, responsive breakpoints, fragile-nesting fixes (`min-width: 0` overflow guards).
+- **positioning-specialist**: positioning, stacking contexts and the z-index scale, overflow/scroll containers, sticky/fixed elements, portal-rendered overlays.
+- **contrast-specialist**: WCAG AA across light/dark themes, visible `:focus-visible` states.
+- **component-creator**: components import from `api/` files only, design tokens, loading/empty/error states, the cohesion rules.
+- **api-request-handler**: wire only declared or existing routes, the right storage layer for response data, slices/stores updated.
+- **atelier-curator**: one voice across components, one focal point per view, one spacing rhythm, crafted states.
+- **security-checker**: bearer token placement, CSP, CORS, X-headers, storage sensitivity.
+
+Any error-severity security flag left after the reviewer's fixes makes the output `status: failed`.
 
 ## Output contract
 

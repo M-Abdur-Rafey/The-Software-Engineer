@@ -549,11 +549,11 @@ Examples:
 
 | Agent | What it does | Experts inside |
 |-------|-------------|----------------|
-| **Database** | Writes migration SQL, checks foreign keys, adds indexes | table-creator, schema-validator, query-optimizer |
+| **Database** | Writes migration SQL, checks foreign keys, adds indexes | author → reviewer (checklists: table-creator, schema-validator, query-optimizer) |
 | **Backend** | Creates routes, controllers, services with documentation | author → reviewer (checklists: flow-planner, data-architect, route-creator, code-standards, folder-structure) |
-| **Frontend** | Builds components, wires API calls, enforces security rules. For 3D tasks: designs Three.js/WebGL scene, physics, shaders, and scroll animation using Opus model | ui-designer, 3d-designer (Opus), component-creator, api-wirer, security-checker |
+| **Frontend** | Builds components, wires API calls, enforces security rules. For 3D tasks: designs Three.js/WebGL scene, physics, shaders, and scroll animation using Opus model | designer → [3d-designer, Opus] → author → reviewer (checklists: layout, positioning, contrast, components, API wiring, atelier, security) |
 | **Testing** | Generates Postman tests (success case, error case, auth case per route) | — |
-| **Calls** | Inbound IVR flows, outbound campaigns, webhook handlers, TTS scripts, TCPA/GDPR compliance | flow-designer, telephony-integrator, voice-script-writer, compliance-checker |
+| **Calls** | Inbound IVR flows, outbound campaigns, webhook handlers, TTS scripts, TCPA/GDPR compliance | author → compliance reviewer (checklists: flow-designer, telephony-integrator, voice-script-writer, compliance-checker) |
 | **Ponytail** | "Lazy senior dev" pass — reviews the generated code against a minimal-code decision ladder (reuse > stdlib > native > deps > one-liner) and trims over-engineering. Never touches validation, security, or requested features. Advisory — never blocks. | — |
 | **Bridge** | Checks that frontend and backend are talking to each other correctly | — |
 | **Git** | Runs 10 security checks, creates branch, writes structured commit | — |

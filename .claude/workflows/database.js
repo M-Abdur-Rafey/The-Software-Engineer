@@ -25,7 +25,9 @@ const dbBrief = dbPreferences ? [
   dbPreferences.idType                ? `Primary key type: ${dbPreferences.idType === 'uuid' ? 'UUID (TEXT)' : 'auto-increment INTEGER'}` : null,
 ].filter(Boolean).join('. ') : 'Follow existing project conventions. Add created_at/updated_at timestamps and use UUIDs by default.'
 
-// The requirements spec, capped: its Decisions are binding for every domain agent.
+// The requirements spec for one domain. Decisions, the domain's tasks and their acceptance criteria are binding
+// and always passed in full; only the summary and scope lists are capped. The spec note is written at the end
+// of the run, so the brief must stand on its own.
 function specBrief(domain, max = 3000) {
   const s = requirementsOutput && requirementsOutput.spec
   if (!s) return '(no requirements spec for this session)'
@@ -33,17 +35,21 @@ function specBrief(domain, max = 3000) {
   const storyIds = new Set(tasks.map(t => t.storyId).filter(Boolean))
   const stories = (requirementsOutput.userStories || []).filter(u => storyIds.has(u.id))
   const list = (title, items) => (items && items.length ? `${title}:\n${items.map(x => `- ${x}`).join('\n')}` : '')
-  const text = [
-    s.summary ? `Summary: ${s.summary}` : '',
+  const binding = [
     list('Decisions (binding)', (s.decisions || []).map(d => `${d.topic}: ${d.decision}`)),
-    list('In scope', s.inScope),
-    list('Out of scope', s.outOfScope),
     list(`Tasks for ${domain}`, tasks.map(t => `${t.title}${t.description ? `: ${t.description}` : ''}`)),
     list('Acceptance criteria', stories.flatMap(u => (u.acceptanceCriteria || []).map(c => `${u.id}: ${c}`))),
   ].filter(Boolean).join('\n\n')
-  if (text.length <= max) return text
-  log(`spec brief for ${domain} capped at ${max} of ${text.length} chars; full spec: ${s.specFile || 'n/a'}`)
-  return `${text.slice(0, max)}\n[... ${text.length - max} more chars: read ${s.specFile || 'the full spec'}]`
+  let context = [
+    s.summary ? `Summary: ${s.summary}` : '',
+    list('In scope', s.inScope),
+    list('Out of scope', s.outOfScope),
+  ].filter(Boolean).join('\n\n')
+  if (context.length > max) {
+    log(`spec context for ${domain} capped at ${max} of ${context.length} chars (decisions, tasks and criteria kept in full)`)
+    context = `${context.slice(0, max)}\n[... ${context.length - max} more chars of summary and scope omitted]`
+  }
+  return [context, binding].filter(Boolean).join('\n\n')
 }
 
 // Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
@@ -132,6 +138,9 @@ const review = await agent(
   `1. Check the migration against every checklist item and the spec's Decisions.\n` +
   `2. Fix violations directly in the migration file (missing FKs or indexes, naming, types). Fix only what the checklist or spec requires.\n` +
   `3. Flag N+1 risks the schema invites.\n\n` +
+  `A checklist item that one of the spec's Decisions overrides is not a violation: leave it out (the author records it in specConflicts).
+
+` +
   `Return { violations: [{ table, column, issue, severity: "error"|"warning", fixed }], migrationSQL: "<the final file content>", ` +
   `schemaGraph: { nodes: [{ table }], edges: [{ from, to, fkColumn }] }, n1Risks: [string] }.`,
   {
