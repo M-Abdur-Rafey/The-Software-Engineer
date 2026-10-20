@@ -35,6 +35,8 @@ Return a `RequirementsOutput` conforming to `shared/contracts/requirements.schem
 
 ## Session close protocol
 
+When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
+
 1. Write the spec: `agents/requirements/vault/specs/<sessionId>.md`
 2. Save each spec decision: `node ~/.agents/shared/lib/db-cli.js --as requirements save-decision requirements <sessionId> spec "<summary>" "<rationale>"`
 3. Log session event via `log-session-event requirements <sessionId> complete completed "..."`

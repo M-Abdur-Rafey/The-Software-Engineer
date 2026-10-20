@@ -2,11 +2,9 @@ export const meta = {
   name: 'database',
   description: 'Database domain agent — table creation, schema validation, query optimization',
   phases: [
-    { title: 'Load Context', detail: 'Read vault notes and prior schema decisions' },
     { title: 'Design Tables', detail: 'table-creator writes migration SQL' },
     { title: 'Validate Schema', detail: 'schema-validator checks FKs and constraints' },
     { title: 'Optimize Queries', detail: 'query-optimizer adds indexes, flags N+1' },
-    { title: 'Persist', detail: 'Save decision and vault note' },
   ],
 }
 
@@ -24,30 +22,18 @@ const dbBrief = dbPreferences ? [
   dbPreferences.idType                ? `Primary key type: ${dbPreferences.idType === 'uuid' ? 'UUID (TEXT)' : 'auto-increment INTEGER'}` : null,
 ].filter(Boolean).join('. ') : 'Follow existing project conventions. Add created_at/updated_at timestamps and use UUIDs by default.'
 
-// ─── Phase: Load Context ─────────────────────────────────────────────────────
-phase('Load Context')
+// Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
+// (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
+async function flushPersist(ops) {
+  if (!ops.length || (args && args.deferPersist)) return
+  const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.database.persist.json`
+  await agent(
+    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
+    { label: 'persist', model: 'haiku', effort: 'low' }
+  )
+}
 
-const context = await agent(
-  `Load context for the Database Agent (session: ${sessionId}).\n\n` +
-  `Run these commands:\n` +
-  `1. cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database get-decisions database schema-design 10\n` +
-  `2. Read ${AGENTS_DIR}/agents/database/vault/INDEX.md\n` +
-  `3. Read ${AGENTS_DIR}/agents/database/vault/optimizations/index-guidelines.md\n\n` +
-  `Return JSON: { decisions: <array from command 1>, indexGuidelines: "<text of index-guidelines.md>" }`,
-  {
-    label: 'load-context',
-    schema: {
-      type: 'object',
-      required: ['decisions'],
-      properties: {
-        decisions:      { type: 'array' },
-        indexGuidelines: { type: 'string' },
-      },
-    },
-  }
-)
-
-log(`Loaded ${context.decisions.length} prior schema decisions`)
 
 // ─── Phase: Design Tables ─────────────────────────────────────────────────────
 phase('Design Tables')
@@ -56,7 +42,7 @@ const tableDesign = await agent(
   `You are the table-creator sub-agent of the Database Agent.\n\n` +
   `Task: "${taskText}"\n` +
   `Project path: ${projectPath}\n` +
-  `Prior decisions: ${JSON.stringify(context.decisions.slice(0, 5))}\n\n` +
+  `Prior decisions: run cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database get-decisions database schema-design 5, and read ${AGENTS_DIR}/agents/database/vault/INDEX.md plus the notes it lists that are relevant to this task.\n\n` +
   `DATABASE DESIGN PREFERENCES (from user clarification — follow these exactly):\n${dbBrief}\n\n` +
   `Examine the project at ${projectPath} to understand existing tables and migrations.\n\n` +
   `Design and write the SQL migration for the tables needed by this task.\n\n` +
@@ -134,7 +120,7 @@ const optimization = await agent(
   `You are the query-optimizer sub-agent of the Database Agent.\n\n` +
   `Tables: ${JSON.stringify(tableDesign.tables)}\n` +
   `Migration SQL so far:\n${tableDesign.migrationSQL}\n` +
-  `Index guidelines: ${context.indexGuidelines || 'Add indexes for all WHERE/JOIN/ORDER BY columns on tables > 1000 rows'}\n\n` +
+  `Index guidelines: read ${AGENTS_DIR}/agents/database/vault/optimizations/index-guidelines.md (if missing: add indexes for all WHERE/JOIN/ORDER BY columns on tables > 1000 rows)\n\n` +
   `Analyze the expected query patterns for a typical CRUD application using these tables.\n\n` +
   `1. Add CREATE INDEX statements for columns that need them\n` +
   `2. Flag any N+1 risks you can identify from the schema\n` +
@@ -158,26 +144,29 @@ const optimization = await agent(
 
 log(`Added ${optimization.indexes.length} index(es), ${optimization.n1Risks.length} N+1 risk(s) flagged`)
 
-// ─── Phase: Persist ───────────────────────────────────────────────────────────
-phase('Persist')
-
-await agent(
-  `Persist database agent state for session ${sessionId}.\n\n` +
-  `Run these commands in order:\n\n` +
-  `1. Save a migration record:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database insert database migrations '{"id":"${sessionId}-mig","session_id":"${sessionId}","filename":"${tableDesign.migrationFile}","description":"${taskText.slice(0,80).replace(/'/g,'')}","status":"generated","created_at":0}'\n\n` +
-  `(Use any timestamp for created_at — the DB will use the insert time)\n\n` +
-  `2. Save a decision:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database save-decision database "${sessionId}" "schema-design" "Created ${tableDesign.tables.length} tables for: ${taskText.slice(0,60).replace(/"/g,'')}" "Task required new schema"\n\n` +
-  `3. Write a vault note to: ${AGENTS_DIR}/agents/database/vault/schemas/${tableDesign.tables.map(t=>t.name).join('-')}.md\n` +
-  `Content should include: table names, columns, FK relationships, estimated rows.\n\n` +
-  `Return "done".`,
-  { label: 'persist-state' }
-)
+const schemaNote = [
+  `# Schema: ${tableDesign.tables.map(t => t.name).join(', ')}`,
+  '',
+  `Session ${sessionId} · migration \`${tableDesign.migrationFile}\``,
+  '',
+  ...tableDesign.tables.flatMap(t => [
+    `## ${t.name}${t.estimatedRows ? ` (~${t.estimatedRows} rows)` : ''}`,
+    '',
+    ...(t.columns || []).map(c => `- \`${c.name}\` ${c.type || ''}${c.primaryKey ? ' PK' : ''}${c.nullable === false ? ' NOT NULL' : ''}${c.foreignKey ? ` FK -> ${typeof c.foreignKey === 'string' ? c.foreignKey : JSON.stringify(c.foreignKey)}` : ''}`),
+    '',
+  ]),
+].join('\n')
+const persistOps = [
+  { db: ['--as', 'database', 'insert', 'database', 'migrations', JSON.stringify({ id: `${sessionId}-mig`, session_id: sessionId, filename: tableDesign.migrationFile, description: taskText.slice(0, 80), status: 'generated', created_at: (args && args.startedAt) || 0 })] },
+  { db: ['--as', 'database', 'save-decision', 'database', sessionId, 'schema-design', `Created ${tableDesign.tables.length} tables for: ${taskText.slice(0, 60)}`, 'Task required new schema'] },
+  { write: `agents/database/vault/schemas/${tableDesign.tables.map(t => t.name).join('-')}.md`, content: schemaNote },
+]
+await flushPersist(persistOps)
 
 return {
   sessionId,
   agentName:     'database',
+  persistOps,
   status:        blockingViolations.length > 0 ? 'failed' : 'completed',
   migrationSQL:  optimization.optimizedMigrationSQL,
   migrationFile: tableDesign.migrationFile,

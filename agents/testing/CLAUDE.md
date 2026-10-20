@@ -71,6 +71,8 @@ Return a `TestingOutput` object conforming to `shared/contracts/testing.schema.j
 
 ## Session close protocol
 
+When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
+
 1. Log session event: `node ~/.agents/shared/lib/db-cli.js log-session-event testing <sessionId> phase-complete completed "<N> routes, <M> test cases"`
 2. Write report: `agents/testing/vault/reports/<sessionId>.md` with route count, test count, coverage
 

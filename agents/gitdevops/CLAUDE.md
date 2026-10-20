@@ -98,5 +98,7 @@ Return a `GitDevOpsOutput` object conforming to `shared/contracts/gitdevops.sche
 
 ## Session close protocol
 
+When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
+
 1. Save scan results: write to `agents/gitdevops/vault/security-scans/scan-results/<sessionId>.md`
 2. Log agent run: `node ~/.agents/shared/lib/db-cli.js log-agent-run <sessionId> gitdevops <status> '<outputJson>'`

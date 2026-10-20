@@ -4,7 +4,6 @@ export const meta = {
   phases: [
     { title: 'Collect', detail: 'Session outputs + project logs and deployment artifacts' },
     { title: 'Diagnose', detail: 'Root-cause analysis, health checks, outcome metrics' },
-    { title: 'Feedback', detail: 'Persist diagnostics + feedback for the next requirements cycle' },
   ],
 }
 
@@ -90,27 +89,35 @@ const diagnosis = await agent(
 
 log(`health: ${diagnosis.healthChecks.length} check(s) | diagnostics: ${diagnosis.diagnostics.length} | feedback: ${diagnosis.feedback.length}`)
 
-// ─── Phase: Feedback ─────────────────────────────────────────────────────────
-phase('Feedback')
-
-await agent(
-  `Persist the SRE session output for session ${sessionId}.\n\n` +
-  `1. Write the diagnostics report (Markdown: health checks table, each diagnostic with ` +
-  `symptom/root cause/evidence/fix/severity, outcome metrics table, feedback list) to:\n` +
-  `${AGENTS_DIR}/agents/sre/vault/diagnostics/${sessionId}.md\n\n` +
-  `Data:\n${JSON.stringify({ outcomeMetrics, ...diagnosis }, null, 2)}\n\n` +
-  `2. Save each feedback item as a decision so the requirements agent finds it next cycle:\n` +
-  `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as sre save-decision sre "${sessionId}" "feedback" "<forAgent>: <note>" "session ${sessionId}"\n` +
-  `(one command per feedback item, max 10)\n\n` +
-  `3. Log the session event:\n` +
-  `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as sre log-session-event sre "${sessionId}" "complete" "completed" "${diagnosis.diagnostics.length} diagnostics, ${diagnosis.feedback.length} feedback items"\n\n` +
-  `Return "done".`,
-  { label: 'persist-diagnostics', model: 'haiku' }
-)
+// Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
+// (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
+const fields = (o) => Object.entries(o || {}).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' · ')
+const diagnosticsNote = [
+  `# SRE diagnostics: session ${sessionId}`, '',
+  '## Health checks', '', ...(diagnosis.healthChecks.length ? diagnosis.healthChecks.map(h => `- ${fields(h)}`) : ['- none']), '',
+  '## Diagnostics', '', ...(diagnosis.diagnostics.length ? diagnosis.diagnostics.map(d => `- ${fields(d)}`) : ['- none']), '',
+  '## Outcome metrics', '', ...Object.entries(outcomeMetrics || {}).map(([k, v]) => `- ${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`), '',
+  '## Feedback for the next cycle', '', ...(diagnosis.feedback.length ? diagnosis.feedback.map(f => `- ${f.forAgent || 'all'}: ${f.note || fields(f)}`) : ['- none']), '',
+].join('\n')
+const persistOps = [
+  { write: `agents/sre/vault/diagnostics/${sessionId}.md`, content: diagnosticsNote },
+  ...diagnosis.feedback.slice(0, 10).map(f => ({ db: ['--as', 'sre', 'save-decision', 'sre', sessionId, 'feedback', `${f.forAgent || 'all'}: ${f.note || fields(f)}`, `session ${sessionId}`] })),
+  { db: ['--as', 'sre', 'log-session-event', 'sre', sessionId, 'complete', 'completed', `${diagnosis.diagnostics.length} diagnostics, ${diagnosis.feedback.length} feedback items`] },
+]
+if (persistOps.length && !(args && args.deferPersist)) {
+  const ops = persistOps
+  const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.sre.persist.json`
+  await agent(
+    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
+    { label: 'persist', model: 'haiku', effort: 'low' }
+  )
+}
 
 return {
   sessionId,
   agentName: 'sre',
+  persistOps,
   status: 'completed',
   healthChecks: diagnosis.healthChecks,
   diagnostics: diagnosis.diagnostics,

@@ -2,10 +2,8 @@ export const meta = {
   name: 'gitdevops',
   description: 'Git/DevOps agent — security scan, branch creation, conventional commit',
   phases: [
-    { title: 'Load Context', detail: 'Read security checklist and commit format rules' },
     { title: 'Security Scan', detail: 'Run 10-point scan on staged changes' },
     { title: 'Branch + Commit', detail: 'Create branch, write commit, verify no sensitive files' },
-    { title: 'Persist', detail: 'Save scan results and session log' },
   ],
 }
 
@@ -26,35 +24,21 @@ const filesChanged = [
 ]
 const commitNotes = (args && args.commitNotes) || ''
 
-// ─── Phase: Load Context ──────────────────────────────────────────────────────
-phase('Load Context')
+// Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
+// (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
+async function flushPersist(ops) {
+  if (!ops.length || (args && args.deferPersist)) return
+  const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.gitdevops.persist.json`
+  await agent(
+    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
+    { label: 'persist', model: 'haiku', effort: 'low' }
+  )
+}
 
-const context = await agent(
-  `Load context for the Git/DevOps Agent (session: ${sessionId}).\n\n` +
-  `Read these files:\n` +
-  `1. ${AGENTS_DIR}/agents/gitdevops/vault/security-scans/checklist.md\n` +
-  `2. ${AGENTS_DIR}/agents/gitdevops/vault/commit-format/examples.md\n` +
-  `3. ${AGENTS_DIR}/shared/standards/commit-format.md\n\n` +
-  `Also verify that the bridge validation passed. Bridge output:\n${JSON.stringify(bridgeOutput && bridgeOutput.contractValidation)}\n\n` +
-  `If contractValidation.passed is false, return: { abort: true, reason: "Bridge validation failed" }\n\n` +
-  `Otherwise return: { checklist: "<text of checklist.md>", commitFormat: "<text of commit-format.md>", abort: false }`,
-  {
-    label: 'load-context',
-    schema: {
-      type: 'object',
-      required: ['abort'],
-      properties: {
-        abort:        { type: 'boolean' },
-        reason:       { type: 'string' },
-        checklist:    { type: 'string' },
-        commitFormat: { type: 'string' },
-      },
-    },
-  }
-)
-
-if (context.abort) {
-  log(`ABORTED: ${context.reason}`)
+// The bridge result is plain data: no agent needed to check it.
+if (!(bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.passed)) {
+  log('ABORTED: Bridge validation failed')
   return {
     sessionId,
     agentName:    'gitdevops',
@@ -65,7 +49,7 @@ if (context.abort) {
     filesCommitted: [],
     securityFlags: [],
     blockedBy:    ['bridge_validation_failed'],
-    errors:       [context.reason || 'Bridge validation failed'],
+    errors:       ['Bridge validation failed'],
   }
 }
 
@@ -78,7 +62,7 @@ const scan = await agent(
   `You are running the security scan for the Git/DevOps Agent.\n\n` +
   `Target project: ${projectPath}\n` +
   `Files changed this session: ${JSON.stringify(filesChanged)}\n\n` +
-  `Security checklist:\n${context.checklist || 'See shared/standards/security-rules.md'}\n\n` +
+  `Security checklist: read ${AGENTS_DIR}/agents/gitdevops/vault/security-scans/checklist.md (if missing: ${AGENTS_DIR}/shared/standards/security-rules.md)\n\n` +
   `Run these checks against the staged changes in ${projectPath}.\n` +
   `For each check, run the appropriate git grep or file search command.\n\n` +
   `Checks (in order):\n` +
@@ -148,7 +132,7 @@ const commit = await agent(
   `Branch name: ${branchName}\n` +
   `Files changed: ${JSON.stringify(filesChanged)}\n` +
   `Task: "${taskText}"\n` +
-  `Commit format:\n${context.commitFormat || 'type(scope): subject\\n\\nbody'}\n\n` +
+  `Commit format: read ${AGENTS_DIR}/shared/standards/commit-format.md and ${AGENTS_DIR}/agents/gitdevops/vault/commit-format/examples.md (if missing: type(scope): subject, blank line, body)\n\n` +
   `IMPORTANT rules:\n` +
   `- NEVER push to main or master — use branch ${branchName}\n` +
   `- Subject: max 50 chars, imperative, no trailing period\n` +
@@ -180,24 +164,18 @@ const commit = await agent(
 
 log(`Branch: ${branchName} | Commit: ${commit.commitHash}`)
 
-// ─── Phase: Persist ───────────────────────────────────────────────────────────
-phase('Persist')
-
-await agent(
-  `Persist git/devops state for session ${sessionId}.\n\n` +
-  `1. Write scan results:\n` +
-  `Write to: ${AGENTS_DIR}/agents/gitdevops/vault/security-scans/scan-results/${sessionId}.md\n` +
-  `Content:\n# Security Scan — PASSED — Session ${sessionId}\n\n**Branch:** ${branchName}\n**Commit:** ${commit.commitHash}\n\n` +
-  scan.securityFlags.map(f => `- [${f.passed?'PASS':'FAIL'}] ${f.check}: ${f.detail||'ok'}`).join('\n') +
-  `\n\n2. Log agent run:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js log-agent-run "${sessionId}" "gitdevops" "completed" '{"branch":"${branchName}","commit":"${commit.commitHash}"}'\n\n` +
-  `Return "done".`,
-  { label: 'persist-state' }
-)
+const persistOps = [
+  { write: `agents/gitdevops/vault/security-scans/scan-results/${sessionId}.md`,
+    content: `# Security Scan — PASSED — Session ${sessionId}\n\n**Branch:** ${branchName}\n**Commit:** ${commit.commitHash}\n\n` +
+      scan.securityFlags.map(f => `- [${f.passed ? 'PASS' : 'FAIL'}] ${f.check}: ${f.detail || 'ok'}`).join('\n') + '\n' },
+  { db: ['log-agent-run', sessionId, 'gitdevops', 'completed', JSON.stringify({ branch: branchName, commit: commit.commitHash })] },
+]
+await flushPersist(persistOps)
 
 return {
   sessionId,
   agentName:    'gitdevops',
+  persistOps,
   status:       'completed',
   branch:       branchName,
   commitHash:   commit.commitHash,

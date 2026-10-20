@@ -36,6 +36,8 @@ Return an `SreOutput` conforming to `shared/contracts/sre.schema.json`: `healthC
 
 ## Session close protocol
 
+When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
+
 1. Write the report: `agents/sre/vault/diagnostics/<sessionId>.md`
 2. Save each feedback item: `node ~/.agents/shared/lib/db-cli.js --as sre save-decision sre <sessionId> feedback "<forAgent>: <note>" "session <sessionId>"`
 3. Log session event via `log-session-event sre <sessionId> complete completed "..."`

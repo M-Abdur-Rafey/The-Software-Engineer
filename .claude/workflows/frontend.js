@@ -2,7 +2,6 @@ export const meta = {
   name: 'frontend',
   description: 'Frontend domain agent — UI design, 3D scenes, components, API wiring, security checks',
   phases: [
-    { title: 'Load Context', detail: 'Read storage rules, security rules, prior decisions' },
     { title: 'Art Direction', detail: 'art-director sets the vision — composition, palette, flow, cohesion (eye of the masters)' },
     { title: 'UI Design', detail: 'ui-designer defines layout and design system usage' },
     { title: '3D Design', detail: '3d-designer architects scene, physics, shaders, scroll animation', model: 'claude-opus-4-8' },
@@ -38,33 +37,19 @@ const use3D = (designPreferences && designPreferences.use3D === true)
 const physicsHint      = designPreferences && designPreferences.usePhysics      != null ? `User requested physics: ${designPreferences.usePhysics ? 'YES — include rigid-body physics' : 'NO — skip physics'}.` : ''
 const scrollAnimHint   = designPreferences && designPreferences.useScrollAnimation != null ? `User requested scroll animation: ${designPreferences.useScrollAnimation ? 'YES — include scroll-driven camera path' : 'NO — skip scroll animation'}.` : ''
 
-// ─── Phase: Load Context ─────────────────────────────────────────────────────
-phase('Load Context')
+// Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
+// (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
+async function flushPersist(ops) {
+  if (!ops.length || (args && args.deferPersist)) return
+  const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.frontend.persist.json`
+  await agent(
+    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
+    { label: 'persist', model: 'haiku', effort: 'low' }
+  )
+}
 
-const context = await agent(
-  `Load context for the Frontend Agent (session: ${sessionId}).\n\n` +
-  `Run: cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as frontend get-decisions frontend storage-rules 10\n\n` +
-  `Also read these files:\n` +
-  `- ${AGENTS_DIR}/agents/frontend/vault/state-management/storage-rules.md\n` +
-  `- ${AGENTS_DIR}/agents/frontend/vault/security/bearer-token-rules.md\n` +
-  `- ${AGENTS_DIR}/agents/frontend/vault/design-system/tokens.md\n\n` +
-  `Return JSON: { decisions: <array from command>, storageRules: "<text>", bearerRules: "<text>", tokens: "<text>" }`,
-  {
-    label: 'load-context',
-    schema: {
-      type: 'object',
-      required: ['decisions'],
-      properties: {
-        decisions:    { type: 'array' },
-        storageRules: { type: 'string' },
-        bearerRules:  { type: 'string' },
-        tokens:       { type: 'string' },
-      },
-    },
-  }
-)
-
-log(`Loaded ${context.decisions.length} decisions. API contracts available: ${contractExports.length}`)
+log(`API contracts available: ${contractExports.length}`)
 
 // ─── Phase: Art Direction ─────────────────────────────────────────────────────
 // Before any layout, the art-director sets the artistic vision with the eye of the
@@ -136,7 +121,7 @@ const uiDesign = await agent(
   `You are the ui-designer sub-agent of the Frontend Agent.\n\n` +
   `Task: "${taskText}"\n` +
   `Project: ${projectPath}\n` +
-  `Design tokens: ${context.tokens || 'Use CSS custom properties from :root'}\n\n` +
+  `Design tokens: read ${AGENTS_DIR}/agents/frontend/vault/design-system/tokens.md (if missing: use CSS custom properties from :root)\n\n` +
   `USER DESIGN PREFERENCES (from clarification — follow these exactly):\n${designBrief}\n` +
   `${artContext}\n` +
   `Examine the existing frontend at ${projectPath} to understand the current design system.\n\n` +
@@ -434,7 +419,7 @@ const wiring = await agent(
   `Project: ${projectPath}\n` +
   `Components built: ${JSON.stringify(components.components)}\n` +
   `Backend contract exports: ${JSON.stringify(contractExports)}\n` +
-  `Storage rules (authoritative):\n${context.storageRules || 'Tokens in memory only; session data in sessionStorage; preferences in localStorage; app state in Redux/Zustand/context'}\n\n` +
+  `Storage rules (authoritative): read ${AGENTS_DIR}/agents/frontend/vault/state-management/storage-rules.md (if missing: tokens in memory only; session data in sessionStorage; preferences in localStorage; app state in Redux/Zustand/context)\n\n` +
   `Wire each component to its backend route. For each API binding:\n` +
   `1. Confirm the route exists in backendContractExports — only call declared routes\n` +
   `2. Decide where the response data goes (storageLayer from the rules above)\n` +
@@ -512,7 +497,7 @@ const security = await agent(
   `You are the security-checker sub-agent of the Frontend Agent.\n\n` +
   `Audit all frontend files changed in this session at ${projectPath}.\n` +
   `Files to audit: ${JSON.stringify([...components.filesCreated, ...wiring.filesUpdated])}\n\n` +
-  `Security rules (from vault):\n${context.bearerRules || 'Bearer token must be in Authorization header from in-memory store. NEVER in localStorage, sessionStorage, URL, or request body.'}\n\n` +
+  `Security rules: read ${AGENTS_DIR}/agents/frontend/vault/security/bearer-token-rules.md (if missing: bearer token in the Authorization header from an in-memory store, NEVER in localStorage, sessionStorage, URL, or request body)\n\n` +
   `Check:\n` +
   `1. [error] Bearer token accessed from localStorage anywhere\n` +
   `2. [error] Token included in request body or URL query params\n` +
@@ -538,14 +523,10 @@ const security = await agent(
 const errorFlags = security.securityFlags.filter(f => f.severity === 'error')
 log(`Security: ${security.securityFlags.length} flag(s), ${errorFlags.length} error(s), passed=${security.passed}`)
 
-// Persist
-await agent(
-  `Save frontend decision. Run:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as frontend save-decision frontend "${sessionId}" "storage-rules" ` +
-  `"Wired ${wiring.apiBindings.length} API bindings for: ${taskText.slice(0,60).replace(/"/g,'')}" "Security passed: ${security.passed}"\n\n` +
-  `Return "done".`,
-  { label: 'persist-state' }
-)
+const persistOps = [
+  { db: ['--as', 'frontend', 'save-decision', 'frontend', sessionId, 'storage-rules', `Wired ${wiring.apiBindings.length} API bindings for: ${taskText.slice(0, 60)}`, `Security passed: ${security.passed}`] },
+]
+await flushPersist(persistOps)
 
 const allFiles = [
   ...components.filesCreated,
@@ -555,6 +536,7 @@ const allFiles = [
 return {
   sessionId,
   agentName:    'frontend',
+  persistOps,
   status:       security.passed ? 'completed' : 'failed',
   components:   components.components,
   stateSlices:  wiring.stateSlices,

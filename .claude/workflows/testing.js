@@ -2,9 +2,7 @@ export const meta = {
   name: 'testing',
   description: 'Testing agent — generates Postman collections for the routes and flows this session changed',
   phases: [
-    { title: 'Load Context', detail: 'Read Postman templates and prior collections' },
     { title: 'Generate Collection', detail: 'Postman v2.1 tests for new routes, changed behaviour and affected flows only' },
-    { title: 'Write Output', detail: 'Save collection JSON and summary report' },
   ],
 }
 
@@ -28,28 +26,19 @@ const modifiedRoutes = routes.filter(r => r.change === 'modified')
 const unlabelled     = routes.filter(r => !r.change).length
 if (unlabelled) log(`${unlabelled} route(s) have no change label: treating them as new (full suite)`)
 
-// ─── Phase: Load Context ─────────────────────────────────────────────────────
-phase('Load Context')
+// Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
+// (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
+async function flushPersist(ops) {
+  if (!ops.length || (args && args.deferPersist)) return
+  const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.testing.persist.json`
+  await agent(
+    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
+    { label: 'persist', model: 'haiku', effort: 'low' }
+  )
+}
 
-const context = await agent(
-  `Load context for the Testing Agent (session: ${sessionId}).\n\n` +
-  `Read: ${AGENTS_DIR}/agents/testing/vault/templates/postman-item-template.md\n\n` +
-  `Also check if any prior collections exist in: ${AGENTS_DIR}/agents/testing/vault/collections/\n\n` +
-  `Return JSON: { template: "<text of postman-item-template.md>", priorCollections: [string] }`,
-  {
-    label: 'load-context',
-    schema: {
-      type: 'object',
-      required: ['template', 'priorCollections'],
-      properties: {
-        template:         { type: 'string' },
-        priorCollections: { type: 'array', items: { type: 'string' } },
-      },
-    },
-  }
-)
-
-log(`Template loaded. ${newRoutes.length} new + ${modifiedRoutes.length} modified route(s), ${flowDirs.length} flow folder(s). Prior collections: ${context.priorCollections.length}`)
+log(`${newRoutes.length} new + ${modifiedRoutes.length} modified route(s), ${flowDirs.length} flow folder(s)`)
 
 if (routes.length === 0) {
   return {
@@ -84,7 +73,7 @@ const collection = await agent(
       `ONE end-to-end scenario: a folder of chained requests following the flow's steps, passing ids/tokens between steps ` +
       `with collection variables, asserting the flow's expected outcome. Ignore flows that touch no changed route.\n\n`
     : '') +
-  `Template reference:\n${context.template}\n\n` +
+  `Template reference: read ${AGENTS_DIR}/agents/testing/vault/templates/postman-item-template.md\n\n` +
   `Rules:\n` +
   `- Collection name: "${featureName}"\n` +
   `- Use Postman variables: {{baseUrl}} and {{bearerToken}} — never hardcode URLs or tokens\n` +
@@ -115,35 +104,24 @@ const collection = await agent(
 
 log(`Generated ${collection.testCases.length} test case(s) for ${collection.routeCount} route(s)`)
 
-// ─── Phase: Write Output ──────────────────────────────────────────────────────
-phase('Write Output')
-
 const routesCovered = new Set(collection.testCases.map(t => t.routePath)).size
 const pct = routes.length > 0 ? Math.round((routesCovered / routes.length) * 100) : 100
 
-await agent(
-  `Write the testing session report and persist state.\n\n` +
-  `1. Write a report to: ${AGENTS_DIR}/agents/testing/vault/reports/${sessionId}.md\n` +
-  `Content:\n` +
-  `# Test Report — Session ${sessionId}\n\n` +
-  `**Task:** ${taskText}\n` +
-  `**Routes:** ${routes.length} changed (${newRoutes.length} new, ${modifiedRoutes.length} modified); unchanged routes are not retested\n` +
-  `**Test cases:** ${collection.testCases.length}\n` +
-  `**Coverage:** ${pct}%\n` +
-  `**Collection:** ${collectionPath}\n\n` +
-  `## Test cases\n` +
-  collection.testCases.map(t => `- ${t.method} ${t.routePath} — ${t.scenarioName} (${t.type}, expect ${t.expectedStatus})`).join('\n') +
-  `\n\n` +
-  `2. Log session event:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as testing log-session-event testing "${sessionId}" "complete" "completed" "${collection.testCases.length} test cases, ${pct}% coverage"\n\n` +
-  `Return "done".`,
-  { label: 'write-output' }
-)
+const persistOps = [
+  { write: `agents/testing/vault/reports/${sessionId}.md`,
+    content: `# Test Report — Session ${sessionId}\n\n**Task:** ${taskText}\n` +
+      `**Routes:** ${routes.length} changed (${newRoutes.length} new, ${modifiedRoutes.length} modified); unchanged routes are not retested\n` +
+      `**Test cases:** ${collection.testCases.length}\n**Coverage:** ${pct}%\n**Collection:** ${collectionPath}\n\n## Test cases\n` +
+      collection.testCases.map(t => `- ${t.method} ${t.routePath} — ${t.scenarioName} (${t.type}, expect ${t.expectedStatus})`).join('\n') + '\n' },
+  { db: ['--as', 'testing', 'log-session-event', 'testing', sessionId, 'complete', 'completed', `${collection.testCases.length} test cases, ${pct}% coverage`] },
+]
+await flushPersist(persistOps)
 
 return {
   sessionId,
   agentName:     'testing',
   status:        'completed',
+  persistOps,
   collectionPath,
   routeCount:    routes.length,
   testCases:     collection.testCases,

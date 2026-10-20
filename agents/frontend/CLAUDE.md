@@ -95,6 +95,8 @@ Return a `FrontendOutput` object conforming to `shared/contracts/frontend.schema
 
 ## Session close protocol
 
+When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
+
 1. Save decision: `node ~/.agents/shared/lib/db-cli.js save-decision frontend storage-rules "<summary>" "<rationale>"`
 2. Write vault note: `agents/frontend/vault/decisions/<timestamp>.md`
 3. If a new component was created: add a note to `agents/frontend/vault/components/`

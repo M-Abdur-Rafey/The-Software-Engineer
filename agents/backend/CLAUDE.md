@@ -149,5 +149,7 @@ The `contractExports` field is the most critical — it drives frontend API bind
 ## Session close protocol
 
 After completing work:
+When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
+
 1. Save a decision: `node ~/.agents/shared/lib/db-cli.js save-decision backend <sessionId> express-patterns "<summary>" "<rationale>"`
 2. Write a vault note: append a summary to `agents/backend/vault/decisions/<timestamp>.md`

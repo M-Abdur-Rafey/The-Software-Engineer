@@ -2,12 +2,10 @@ export const meta = {
   name: 'calls',
   description: 'Calls domain agent — inbound IVR, outbound campaigns, webhook handlers, voice scripts, compliance',
   phases: [
-    { title: 'Load Context', detail: 'Read telephony vault notes and prior decisions' },
     { title: 'Design Flow', detail: 'flow-designer maps IVR tree (inbound) or campaign logic (outbound)' },
     { title: 'Build Integration', detail: 'telephony-integrator writes webhook handlers and TwiML/NCCO' },
     { title: 'Voice Scripts', detail: 'voice-script-writer writes all TTS prompts and messages' },
     { title: 'Compliance', detail: 'compliance-checker validates TCPA, GDPR, DNC, recording consent' },
-    { title: 'Persist', detail: 'Save decisions and vault notes' },
   ],
 }
 
@@ -27,32 +25,19 @@ const callType      = (callPreferences && callPreferences.callType)      || 'aut
 
 const providerBrief = `Provider: ${provider}. Direction: ${callDirection}. Call type: ${callType}. Recording: ${hasRecording ? 'yes (include spoken consent)' : 'no'}.`
 
-// ─── Phase: Load Context ──────────────────────────────────────────────────────
-phase('Load Context')
+// Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
+// (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
+async function flushPersist(ops) {
+  if (!ops.length || (args && args.deferPersist)) return
+  const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.calls.persist.json`
+  await agent(
+    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
+    { label: 'persist', model: 'haiku', effort: 'low' }
+  )
+}
 
-const context = await agent(
-  `Load context for the Calls Agent (session: ${sessionId}).\n\n` +
-  `Run: cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls get-decisions calls telephony-patterns 10\n\n` +
-  `Then read:\n` +
-  `- ${AGENTS_DIR}/agents/calls/vault/INDEX.md\n` +
-  `- ${AGENTS_DIR}/agents/calls/vault/providers/twilio-setup.md\n` +
-  `- ${AGENTS_DIR}/agents/calls/vault/compliance/tcpa-gdpr.md\n\n` +
-  `Return JSON: { decisions: <array from command>, twilioSetup: "<text>", compliance: "<text>" }`,
-  {
-    label: 'load-context',
-    schema: {
-      type: 'object',
-      required: ['decisions'],
-      properties: {
-        decisions:   { type: 'array' },
-        twilioSetup: { type: 'string' },
-        compliance:  { type: 'string' },
-      },
-    },
-  }
-)
-
-log(`Loaded ${context.decisions.length} prior decisions. Provider: ${provider}`)
+log(`Provider: ${provider}`)
 
 const tableContext = databaseOutput ? JSON.stringify(databaseOutput.tables || []) : '[]'
 
@@ -65,7 +50,7 @@ const flow = await agent(
   `Project: ${projectPath}\n` +
   `${providerBrief}\n` +
   `Database tables available: ${tableContext}\n` +
-  `Prior decisions: ${JSON.stringify(context.decisions.slice(0, 5))}\n\n` +
+  `Prior decisions: run cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls get-decisions calls telephony-patterns 5, and read ${AGENTS_DIR}/agents/calls/vault/INDEX.md plus the notes it lists that are relevant to this task.\n\n` +
   `Read the project at ${projectPath} to understand any existing telephony code.\n\n` +
 
   (callDirection === 'inbound' || callDirection === 'both'
@@ -126,7 +111,7 @@ const integration = await agent(
   `Project: ${projectPath}\n` +
   `${providerBrief}\n` +
   `Call flow design: ${JSON.stringify(flow)}\n` +
-  `Twilio setup reference: ${context.twilioSetup || 'Use twilio npm package. Auth token from TWILIO_AUTH_TOKEN env var.'}\n\n` +
+  `Twilio setup reference: read ${AGENTS_DIR}/agents/calls/vault/providers/twilio-setup.md (if missing: use the twilio npm package, auth token from the TWILIO_AUTH_TOKEN env var)\n\n` +
 
   `Create the telephony integration files at ${projectPath}/src/features/${flow.featureName}/:\n\n` +
 
@@ -253,7 +238,7 @@ const compliance = await agent(
   `${providerBrief}\n` +
   `Call flow: ${JSON.stringify(flow)}\n` +
   `Voice scripts: ${JSON.stringify(scripts.scripts.map(s => ({ id: s.id, text: s.text })))}\n` +
-  `Compliance reference: ${context.compliance || 'Apply TCPA, GDPR, and FTC DNC rules'}\n\n` +
+  `Compliance reference: read ${AGENTS_DIR}/agents/calls/vault/compliance/tcpa-gdpr.md (if missing: apply TCPA, GDPR, and FTC DNC rules)\n\n` +
   `Audit the call system for compliance violations:\n\n` +
   `TCPA (US — Telephone Consumer Protection Act):\n` +
   `- [blocking] Outbound to mobile phones: is prior written consent documented or a consent-collection step included?\n` +
@@ -300,20 +285,22 @@ const compliance = await agent(
 const blockingFailures = compliance.checks.filter(c => !c.passed && c.severity === 'blocking')
 log(`Compliance: ${compliance.checks.length} checks, ${blockingFailures.length} blocking failure(s), passed=${compliance.passed}`)
 
-// ─── Phase: Persist ───────────────────────────────────────────────────────────
-phase('Persist')
-
-await agent(
-  `Save calls agent state for session ${sessionId}.\n\n` +
-  `Run:\n` +
-  `cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls save-decision calls "${sessionId}" "telephony-patterns" ` +
-  `"Built ${flow.callDirection} call system with ${integration.webhookRoutes.length} webhooks for: ${taskText.slice(0, 60).replace(/"/g, '')}" ` +
-  `"Provider: ${provider}, compliance passed: ${compliance.passed}"\n\n` +
-  `Then write a vault note to: ${AGENTS_DIR}/agents/calls/vault/decisions/${flow.featureName}.md\n` +
-  `Content: call direction, provider, IVR flow summary, webhook routes, compliance status, voice script IDs.\n\n` +
-  `Return "done".`,
-  { label: 'persist-state' }
-)
+const callsNote = [
+  `# ${flow.featureName}`,
+  '',
+  `- Direction: ${flow.callDirection}`,
+  `- Provider: ${provider}`,
+  `- Compliance: ${compliance.passed ? 'passed' : 'FAILED'}`,
+  `- Webhooks: ${integration.webhookRoutes.map(w => `${w.method} ${w.path}`).join(', ') || 'none'}`,
+  `- Voice scripts: ${(scripts.scripts || []).map(v => v.id).join(', ') || 'none'}`,
+  flow.inboundFlow ? `- IVR menu: ${(flow.inboundFlow.menuOptions || []).map(o => `${o.key}=${o.label}`).join(', ')}` : null,
+  flow.outboundFlow ? `- Outbound results: ${(flow.outboundFlow.resultStates || []).join(', ')}` : null,
+].filter(Boolean).join('\n')
+const persistOps = [
+  { db: ['--as', 'calls', 'save-decision', 'calls', sessionId, 'telephony-patterns', `Built ${flow.callDirection} call system with ${integration.webhookRoutes.length} webhooks for: ${taskText.slice(0, 60)}`, `Provider: ${provider}, compliance passed: ${compliance.passed}`] },
+  { write: `agents/calls/vault/decisions/${flow.featureName}.md`, content: callsNote },
+]
+await flushPersist(persistOps)
 
 const allFiles = [
   ...integration.filesCreated,
@@ -323,6 +310,7 @@ const allFiles = [
 return {
   sessionId,
   agentName:       'calls',
+  persistOps,
   status:          compliance.passed ? 'completed' : 'failed',
   provider,
   callDirection:   flow.callDirection,

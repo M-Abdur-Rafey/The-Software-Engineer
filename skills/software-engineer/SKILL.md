@@ -277,6 +277,14 @@ Summarise what you're going to do in one short paragraph before starting the wor
 
 ### Step 5: Run the orchestration
 
+**Session bookkeeping first, in this session.** Running these here costs no agents (design: `<install-path>/design/agent-consolidation.md`):
+
+1. `node <install-path>/shared/lib/db-cli.js init-session "<task text>" "<current working directory>"` prints `{ sessionId, startedAt }`.
+2. `node <install-path>/shared/lib/db-cli.js check-onboarded "<current working directory>"` prints `{ onboarded, techStack }`.
+3. Build the classification from Step 4c: `{ requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType (feat|fix|chore|test|docs|refactor|security), taskSlug (lowercase kebab-case, max 30 chars) }`.
+
+Pass all three into the workflow (below). If any step fails, leave those fields out; the workflow falls back to doing it itself.
+
 Now collect all the user's answers into a preferences object and invoke the workflow:
 
 ```javascript
@@ -284,6 +292,11 @@ Workflow({
   scriptPath: `<install-path>/.claude/workflows/orchestrate.js`,
   args: {
     task: "<original task text>",
+    sessionId: "<from init-session>",
+    startedAt: <from init-session>,
+    onboarded: <true|false from check-onboarded>,
+    techStack: "<from check-onboarded, or null>",
+    classification: { requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType, taskSlug },
     projectPath: "<current working directory>",
     agentsDir: "<install-path>",
     clarifications: {

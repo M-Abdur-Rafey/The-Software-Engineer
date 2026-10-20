@@ -14,8 +14,9 @@
     "mcp": "node mcp/server.mjs",
     "test:mcp": "node tests/mcp-protocol.mjs",
     "test:sysdocs": "node tests/sysdocs.test.js",
-    "test": "node init/verify.js && node tests/mcp-protocol.mjs && node tests/sysdocs.test.js && node tests/uitest.test.js",
-    "test:uitest": "node tests/uitest.test.js"
+    "test": "node init/verify.js && node tests/mcp-protocol.mjs && node tests/sysdocs.test.js && node tests/uitest.test.js && node tests/persist.test.js",
+    "test:uitest": "node tests/uitest.test.js",
+    "test:persist": "node tests/persist.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

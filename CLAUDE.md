@@ -21,7 +21,7 @@ Run from the repo root (`~/.agents` once installed):
 npm install              # deps incl. native better-sqlite3 + @modelcontextprotocol/sdk
 npm run init             # bootstrap + seed + verify — REQUIRED after changing agents/contracts/seed notes
 npm run verify           # health check: DBs/tables, vault INDEX.md, contract schemas, shared lib, workflow hidden-char scan (same as `/software-engineer test`)
-npm test                 # verify + MCP protocol test + sysdocs test
+npm test                 # verify + MCP protocol test + sysdocs, uitest and persist tests
 npm run test:mcp         # MCP stdio protocol test only (tests/mcp-protocol.mjs)
 npm run test:sysdocs     # System Docs CLI end-to-end test only (tests/sysdocs.test.js, throwaway git repo)
 npm run mcp              # run the MCP server on stdio
@@ -93,6 +93,7 @@ These run in the Claude Code **Workflow tool sandbox**, not plain Node:
 - **LF line endings only.** Carriage returns count as hidden characters too, so CRLF scripts won't launch. `.gitattributes` forces `eol=lf` for `.claude/workflows/*.js` (needed on Windows with `core.autocrlf=true`) and `verify` fails on any CR.
 - **Never hardcode the install path.** Each workflow uses `const AGENTS_DIR = (args && args.agentsDir) || '<dev fallback>'`, and `orchestrate.js` threads `agentsDir` into every sub-workflow's args.
 - Model tiers via `agent(prompt, { model })`: mechanical command-runners use `'haiku'`, the 3D phase uses opus, everything else inherits the host model.
+- **Don't spend an agent on bookkeeping** (`design/agent-consolidation.md`). Agents that write code read their vault notes themselves; there are no load-context agents. Domain workflows return `db-cli` calls and vault-note writes as `persistOps` data. With `deferPersist` (set by `orchestrate.js`) the orchestrator collects them and runs them all with one agent through `shared/lib/persist.js`, which only writes under `agents/<name>/vault/`. Run on their own, workflows flush with one agent. The skill passes `sessionId`, `onboarded` and `classification` into `orchestrate.js`; agent fallbacks cover direct calls.
 
 ## Editing the init pipeline — keep it in sync
 

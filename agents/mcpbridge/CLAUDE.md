@@ -76,6 +76,8 @@ Return an `MCPBridgeOutput` object conforming to `shared/contracts/mcpbridge.sch
 
 ## Session close protocol
 
+When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
+
 1. If violations found: save a decision recording the violation pattern for future learning
    `node ~/.agents/shared/lib/db-cli.js save-decision mcpbridge contract-violations "<summary>" "<rationale>"`
 2. Write contract note: `agents/mcpbridge/vault/contracts/<sessionId>.md`

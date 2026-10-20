@@ -4,7 +4,6 @@ export const meta = {
   phases: [
     { title: 'Gather Signals', detail: 'Task text, prior SRE feedback, logs/bug reports, onboarding context' },
     { title: 'Draft Spec', detail: 'User stories + specification + per-domain task breakdown' },
-    { title: 'Persist', detail: 'Write spec + stories to the vault, log decisions' },
   ],
 }
 
@@ -83,29 +82,53 @@ const draft = await agent(
 
 log(`${draft.userStories.length} stor(ies), ${draft.tasks.length} task(s), ${(draft.spec.openQuestions || []).length} open question(s)`)
 
-// ─── Phase: Persist ──────────────────────────────────────────────────────────
-phase('Persist')
+// Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
+// (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
+async function flushPersist(ops) {
+  if (!ops.length || (args && args.deferPersist)) return
+  const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.requirements.persist.json`
+  await agent(
+    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
+    { label: 'persist', model: 'haiku', effort: 'low' }
+  )
+}
 
 const specFile = `${AGENTS_DIR}/agents/requirements/vault/specs/${sessionId}.md`
+const list = (items) => (items && items.length ? items.map(x => `- ${x}`) : ['- none'])
+const spec = draft.spec || {}
+// Rendered here instead of by an agent: the layout follows vault/specs/spec-template.md.
+const specMarkdown = [
+  `# Spec: session ${sessionId}`,
+  '',
+  '## Summary', '', spec.summary || '', '',
+  '## In scope', '', ...list(spec.inScope), '',
+  '## Out of scope', '', ...list(spec.outOfScope), '',
+  '## Decisions', '', '| Topic | Decision | Rationale |', '|---|---|---|',
+  ...(spec.decisions || []).map(d => `| ${d.topic || ''} | ${String(d.decision || '').replace(/\|/g, '/')} | ${String(d.rationale || '').replace(/\|/g, '/')} |`), '',
+  '## Open questions', '', ...list(spec.openQuestions), '',
+  '## User stories', '',
+  ...draft.userStories.flatMap(u => [
+    `### ${u.id || ''} (${u.priority || 'should'})`,
+    `As ${u.asA}, I want ${u.iWant}, so that ${u.soThat}.`, '',
+    ...(u.acceptanceCriteria || []).map(c => `- ${c}`), '',
+  ]),
+  '## Tasks', '',
+  ...draft.tasks.map(t => `- [${t.domain}] ${t.title}${t.storyId ? ` (${t.storyId})` : ''}: ${t.description || ''}`),
+  '',
+].join('\n')
 
-await agent(
-  `Persist the requirements output for session ${sessionId}.\n\n` +
-  `1. Write the full specification (Markdown, following the spec template: summary, in scope, ` +
-  `out of scope, decisions table, open questions, then every user story with its acceptance criteria) to:\n` +
-  `${specFile}\n\n` +
-  `Spec data:\n${JSON.stringify(draft, null, 2)}\n\n` +
-  `2. Save each spec decision, e.g. for the first one:\n` +
-  `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as requirements save-decision requirements "${sessionId}" "spec" "<decision summary>" "<rationale>"\n` +
-  `(repeat per decision, max 10)\n\n` +
-  `3. Log the session event:\n` +
-  `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as requirements log-session-event requirements "${sessionId}" "complete" "completed" "${draft.userStories.length} stories, ${draft.tasks.length} tasks"\n\n` +
-  `Return "done".`,
-  { label: 'persist-spec', model: 'haiku' }
-)
+const persistOps = [
+  { write: `agents/requirements/vault/specs/${sessionId}.md`, content: specMarkdown },
+  ...(spec.decisions || []).slice(0, 10).map(d => ({ db: ['--as', 'requirements', 'save-decision', 'requirements', sessionId, 'spec', `${d.topic}: ${d.decision}`, d.rationale || ''] })),
+  { db: ['--as', 'requirements', 'log-session-event', 'requirements', sessionId, 'complete', 'completed', `${draft.userStories.length} stories, ${draft.tasks.length} tasks`] },
+]
+await flushPersist(persistOps)
 
 return {
   sessionId,
   agentName: 'requirements',
+  persistOps,
   status: 'completed',
   signalsAnalyzed: signals.signalsAnalyzed,
   rootCauses: signals.rootCauses,

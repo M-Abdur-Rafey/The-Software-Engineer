@@ -18,7 +18,13 @@ export const meta = {
 }
 
 // args: { task, projectPath, agentsDir?, clarifications?: { designPreferences, archPreferences, dbPreferences, callPreferences },
-//         systemDocs?: false to skip System Docs even if docs/system exists, modules?: [target module names] }
+//         systemDocs?: false to skip System Docs even if docs/system exists, modules?: [target module names],
+//         sessionId?, startedAt?, onboarded?, techStack?, classification?, deferBookkeeping? }
+//
+// Bookkeeping (design/agent-consolidation.md): the skill creates the session, checks onboarding and
+// classifies the task in the main session and passes the results in; a direct Workflow call falls back to
+// agents for each. Every domain's bookkeeping (persistOps) runs once at the end with one agent, or, with
+// deferBookkeeping, is returned for a caller that can run shared/lib/persist.js itself (e.g. the MCP server).
 //
 // Model policy (orchestrator = main model, sub-agents = cheaper):
 //   - Orchestrator-level reasoning (task classification) runs on the host's main/default model.
@@ -33,52 +39,39 @@ const clarifications  = (args && args.clarifications) || {}
 // ─── Phase: Init ─────────────────────────────────────────────────────────────
 phase('Init')
 
-const sessionResult = await agent(
-  `Initialize an orchestration session by running this command exactly in PowerShell:\n\n` +
-  `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js init-session "${taskText.replace(/"/g, '\\"')}" "${projectPath.replace(/"/g, '\\"')}"\n\n` +
-  `The command prints JSON like: {"sessionId":"...","startedAt":...}\n` +
-  `Return that JSON object.`,
-  {
-    label: 'init-session',
-    model: 'haiku',
-    schema: {
-      type: 'object',
-      required: ['sessionId', 'startedAt'],
-      properties: {
-        sessionId:  { type: 'string' },
-        startedAt:  { type: 'number' },
-      },
-    },
-  }
-)
-
-const sessionId = sessionResult.sessionId
+const deferBookkeeping = !!(args && args.deferBookkeeping)
+let sessionId = (args && args.sessionId) || null
+let startedAt = (args && args.startedAt) || 0
+if (!sessionId) {
+  const sessionResult = await agent(
+    `Initialize an orchestration session by running this command exactly:\n\n` +
+    `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js init-session "${taskText.replace(/"/g, '\\"')}" "${projectPath.replace(/"/g, '\\"')}"\n\n` +
+    `The command prints JSON like: {"sessionId":"...","startedAt":...}\nReturn that JSON object.`,
+    { label: 'init-session', model: 'haiku', schema: { type: 'object', required: ['sessionId', 'startedAt'], properties: { sessionId: { type: 'string' }, startedAt: { type: 'number' } } } }
+  )
+  sessionId = sessionResult.sessionId
+  startedAt = sessionResult.startedAt
+}
 log(`Session ${sessionId} started`)
 
 // ─── Auto-onboard: first time this project is used, scan entire codebase ─────
 const isOnboardTask = taskText.trim().toUpperCase().startsWith('ONBOARD')
 
 if (!isOnboardTask && projectPath) {
-  const onboardCheck = await agent(
-    `Check if this project has been onboarded. Run this command:\n\n` +
-    `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js check-onboarded "${projectPath.replace(/"/g, '\\"')}"\n\n` +
-    `The command prints JSON. Return it as-is.`,
-    {
-      label: 'check-onboarded',
-      model: 'haiku',
-      schema: {
-        type: 'object',
-        required: ['onboarded'],
-        properties: {
-          onboarded:   { type: 'boolean' },
-          onboardedAt: { type: ['number', 'null'] },
-          techStack:   { type: ['string', 'null'] },
-        },
-      },
-    }
-  )
+  let onboarded = args && typeof args.onboarded === 'boolean' ? args.onboarded : null
+  let techStack = (args && args.techStack) || null
+  if (onboarded === null) {
+    const onboardCheck = await agent(
+      `Check if this project has been onboarded. Run this command:\n\n` +
+      `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js check-onboarded "${projectPath.replace(/"/g, '\\"')}"\n\n` +
+      `The command prints JSON. Return it as-is.`,
+      { label: 'check-onboarded', model: 'haiku', schema: { type: 'object', required: ['onboarded'], properties: { onboarded: { type: 'boolean' }, onboardedAt: { type: ['number', 'null'] }, techStack: { type: ['string', 'null'] } } } }
+    )
+    onboarded = onboardCheck.onboarded
+    techStack = onboardCheck.techStack
+  }
 
-  if (!onboardCheck.onboarded) {
+  if (!onboarded) {
     phase('Onboard')
     log('First use on this project — running deep codebase scan before starting work...')
     log('This happens once per project. All future sessions skip this step.')
@@ -88,11 +81,11 @@ if (!isOnboardTask && projectPath) {
     )
     log('Onboarding complete — all agents now have full context for this project')
   } else {
-    log(`Project already onboarded (${onboardCheck.techStack || 'stack unknown'}) — skipping scan`)
+    log(`Project already onboarded (${techStack || 'stack unknown'}) — skipping scan`)
   }
 }
 
-const classification = await agent(
+const classification = (args && args.classification) || await agent(
   `Classify this software development task:\n"${taskText}"\n\n` +
   `Rules:\n` +
   `- requiresDatabase: true if new tables, schema changes, or data model work is needed\n` +
@@ -139,7 +132,7 @@ if (args && args.systemDocs !== false && projectPath) {
     const fixedTargets = (args && args.modules) || []
     const IMPACT_SCHEMA = {
       type: 'object',
-      required: ['targetModules', 'newModules', 'consumers', 'otherOwners', 'chainReaction', 'questionsAdded', 'briefing'],
+      required: ['targetModules', 'newModules', 'consumers', 'otherOwners', 'chainReaction', 'questionsAdded', 'briefing', 'gates'],
       properties: {
         targetModules:  { type: 'array', items: { type: 'string' } },
         newModules:     { type: 'array', items: { type: 'string' } },
@@ -148,6 +141,7 @@ if (args && args.systemDocs !== false && projectPath) {
         chainReaction:  { type: 'string' },
         questionsAdded: { type: 'array', items: { type: 'string' } },
         briefing:       { type: 'string' },
+        gates:          { type: 'array', items: { type: 'object', required: ['module', 'pass'], properties: { module: { type: 'string' }, pass: { type: 'boolean' }, reason: { type: ['string', 'null'] } } } },
       },
     }
     const impact = await agent(
@@ -174,33 +168,21 @@ if (args && args.systemDocs !== false && projectPath) {
       `- chainReaction: 2-6 plain-language sentences on what else changes\n- questionsAdded: ids\n` +
       `- briefing: <= 3000 chars for the coding agents: per target module its purpose, the recorded decisions to follow, ` +
       `the touchpoints it provides that others use (who uses them and how) which MUST keep working or be updated together with ` +
-      `their consumers, and the exact doc paths to read for details.`,
+      `their consumers, and the exact doc paths to read for details.\n` +
+      `- gates: last, after any questions were added, run ${CLI} gate "${projectPath}" <module> for every target and new ` +
+      `module and return each printed { module, pass, reason }.`,
       { label: 'impact-analyst', schema: IMPACT_SCHEMA }
     )
     log(`impact: targets=${impact.targetModules.join(',')} new=${impact.newModules.join(',') || '-'} consumers=${impact.consumers.map(c => c.module).join(',') || '-'} questions=${impact.questionsAdded.length}`)
 
     const targets = [...new Set([...impact.targetModules, ...impact.newModules])]
-    const GATE_SCHEMA = {
-      type: 'object',
-      required: ['results'],
-      properties: { results: { type: 'array', items: { type: 'object', required: ['module', 'pass'], properties: { module: { type: 'string' }, pass: { type: 'boolean' }, reason: { type: ['string', 'null'] }, blocking: { type: 'array', items: { type: 'object' } } } } } },
-    }
-    const gate = await agent(
-      `Run each command and collect the printed JSON:\n` + targets.map(t => `${CLI} gate "${projectPath}" ${t}`).join('\n') +
-      `\n\nReturn { results: [<each printed object: module, pass, reason, blocking>] }.`,
-      { label: 'docs-gate', model: 'haiku', schema: GATE_SCHEMA }
-    )
-    const failing = gate.results.filter(r => !r.pass)
+    const failing = impact.gates.filter(r => !r.pass)
     // Impact-based bug fixes: no approval round when nothing else depends on what changes.
     const lightFix = classification.taskType === 'fix' && impact.consumers.length === 0
 
     if ((failing.length && !lightFix) || (sync.questionsAdded || []).length) {
       log(`waiting for answers/approval: ${failing.map(f => `${f.module} (${f.reason})`).join('; ') || 'doc/code conflicts from manual edits'}`)
-      await agent(
-        `Run: cd "${AGENTS_DIR}"; node shared/lib/db-cli.js update-session-status "${sessionId}" "awaiting-answers"\nReturn "done".`,
-        { label: 'session-awaiting', model: 'haiku' }
-      )
-      return {
+      return await finish({
         sessionId,
         status: 'awaiting-answers',
         targets,
@@ -210,7 +192,7 @@ if (args && args.systemDocs !== false && projectPath) {
         consumers: impact.consumers,
         questionsAdded: impact.questionsAdded,
         next: `Ask the user the open questions (${CLI} questions "${projectPath}" <module>), record answers with sysdocs answer/defer, approve each target with sysdocs approve, then re-run this task.`,
-      }
+      }, 'awaiting-answers')
     }
 
     docs = { targets, impact }
@@ -220,6 +202,23 @@ if (args && args.systemDocs !== false && projectPath) {
   } else {
     log('No docs/system in this project: running without System Docs')
   }
+}
+
+// Every domain workflow returns its bookkeeping as persistOps (deferPersist: true); finish() adds the
+// session status and note, then either returns them to the skill or runs them with one agent.
+const persistOps = []
+const collect = (out) => { if (out && Array.isArray(out.persistOps)) persistOps.push(...out.persistOps); return out }
+async function finish(result, status, note) {
+  const ops = [...persistOps, { db: ['update-session-status', sessionId, status] }]
+  if (note) ops.push({ write: `agents/orchestrator/vault/sessions/${sessionId}.md`, content: note })
+  if (deferBookkeeping) return Object.assign({}, result, { persistOps: ops })
+  const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.persist.json`
+  await agent(
+    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
+    { label: 'persist', model: 'haiku', effort: 'low' }
+  )
+  return result
 }
 
 let requirementsOutput = null
@@ -238,29 +237,29 @@ let sreOutput      = null
 // logs/bug reports, user feedback) into user stories + a specification with
 // explicit decisions, so no domain agent has to guess at unstated requirements.
 phase('Requirements')
-requirementsOutput = await workflow(
+requirementsOutput = collect(await workflow(
   { scriptPath: `${AGENTS_DIR}/.claude/workflows/requirements.js` },
-  { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, clarifications }
-)
+  { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, clarifications }
+))
 log(`requirements → ${requirementsOutput && requirementsOutput.status} (${requirementsOutput && requirementsOutput.userStories && requirementsOutput.userStories.length} stories, ${requirementsOutput && requirementsOutput.spec && requirementsOutput.spec.openQuestions && requirementsOutput.spec.openQuestions.length} open questions)`)
 
 // ─── Phase: Database ─────────────────────────────────────────────────────────
 if (classification.requiresDatabase) {
   phase('Database')
-  databaseOutput = await workflow(
+  databaseOutput = collect(await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/database.js` },
-    { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null }
-  )
+    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null }
+  ))
   log(`database → ${databaseOutput && databaseOutput.status}`)
 }
 
 // ─── Phase: Backend ───────────────────────────────────────────────────────────
 if (classification.requiresBackend) {
   phase('Backend')
-  backendOutput = await workflow(
+  backendOutput = collect(await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/backend.js` },
-    { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null }
-  )
+    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null }
+  ))
   log(`backend → ${backendOutput && backendOutput.status}`)
 }
 
@@ -273,14 +272,14 @@ phase('Frontend + Testing + Calls')
   if (classification.requiresFrontend) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/frontend.js` },
-      { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null }
+      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null }
     ))
   }
 
   if (backendOutput) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/testing.js` },
-      { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, requirementsOutput, backendOutput,
+      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput,
         flowDirs: docs ? docs.targets.map(t => `${DOCS}/modules/${t}/flows`) : [] }
     ))
   }
@@ -288,16 +287,16 @@ phase('Frontend + Testing + Calls')
   if (classification.requiresCalls) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/calls.js` },
-      { agentsDir: AGENTS_DIR, sessionId, taskText: domainTask, projectPath, requirementsOutput, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null }
+      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null }
     ))
   }
 
   if (parallelTasks.length > 0) {
     const results = await parallel(parallelTasks)
     let idx = 0
-    if (classification.requiresFrontend)                  { frontendOutput = results[idx++] }
-    if (backendOutput)                                    { testingOutput  = results[idx++] }
-    if (classification.requiresCalls)                     { callsOutput    = results[idx++] }
+    if (classification.requiresFrontend)                  { frontendOutput = collect(results[idx++]) }
+    if (backendOutput)                                    { testingOutput  = collect(results[idx++]) }
+    if (classification.requiresCalls)                     { callsOutput    = collect(results[idx++]) }
     log(`frontend → ${frontendOutput && frontendOutput.status} | testing → ${testingOutput && testingOutput.status} | calls → ${callsOutput && callsOutput.status}`)
   }
 }
@@ -308,11 +307,13 @@ phase('Frontend + Testing + Calls')
 // Advisory — never blocks the pipeline. Vendored from github.com/DietrichGebert/ponytail.
 if (backendOutput || frontendOutput || callsOutput || (databaseOutput && databaseOutput.migrationFile)) {
   phase('Ponytail')
-  ponytailOutput = await workflow(
+  ponytailOutput = collect(await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/ponytail.js` },
     {
       agentsDir: AGENTS_DIR,
       sessionId,
+      deferPersist: true,
+      startedAt,
       taskText: domainTask,
       projectPath,
       mode: clarifications.ponytailMode || 'full',
@@ -321,32 +322,28 @@ if (backendOutput || frontendOutput || callsOutput || (databaseOutput && databas
       callsOutput,
       databaseOutput,
     }
-  )
+  ))
   log(`ponytail → ${ponytailOutput && ponytailOutput.status} (${ponytailOutput && ponytailOutput.metrics && ponytailOutput.metrics.simplificationsApplied} applied, ~${ponytailOutput && ponytailOutput.metrics && ponytailOutput.metrics.estimatedLinesRemoved} lines removed)`)
 }
 
 // ─── Phase: Bridge ────────────────────────────────────────────────────────────
 phase('Bridge')
-bridgeOutput = await workflow(
+bridgeOutput = collect(await workflow(
   { scriptPath: `${AGENTS_DIR}/.claude/workflows/mcpbridge.js` },
-  { agentsDir: AGENTS_DIR, sessionId, taskText, projectPath, backendOutput, frontendOutput, databaseOutput, callsOutput }
-)
+  { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText, projectPath, backendOutput, frontendOutput, databaseOutput, callsOutput }
+))
 const bridgePassed = bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.passed
 log(`bridge → passed=${bridgePassed}`)
 
 if (!bridgePassed) {
   const violations = (bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.violations) || []
   log(`BLOCKED by ${violations.length} contract violation(s)`)
-  await agent(
-    `Mark this session as failed. Run:\n\ncd "${AGENTS_DIR}"; node shared/lib/db-cli.js update-session-status "${sessionId}" "failed"\n\nReturn "done".`,
-    { label: 'session-failed', model: 'haiku' }
-  )
-  return {
+  return await finish({
     sessionId,
     status: 'blocked',
     reason: 'contract_violations',
     violations: (bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.violations) || [],
-  }
+  }, 'failed')
 }
 
 // ─── Phase: Docs Update ──────────────────────────────────────────────────────
@@ -366,11 +363,13 @@ if (docs) {
 // ─── Phase: Git ───────────────────────────────────────────────────────────────
 phase('Git')
 const otherOwners = (docs && docs.impact.otherOwners) || []
-gitOutput = await workflow(
+gitOutput = collect(await workflow(
   { scriptPath: `${AGENTS_DIR}/.claude/workflows/gitdevops.js` },
   {
     agentsDir: AGENTS_DIR,
     sessionId,
+    deferPersist: true,
+    startedAt,
     taskText,
     projectPath,
     taskType: classification.taskType,
@@ -385,7 +384,7 @@ gitOutput = await workflow(
       ? `Affects other owners:\n${otherOwners.map(o => `- ${o.owner} (${o.module}): ${o.how}`).join('\n')}`
       : '',
   }
-)
+))
 log(`git → ${gitOutput && gitOutput.status} branch=${gitOutput && gitOutput.branch}`)
 
 // Docs now match the committed code: record that commit as each module's sync
@@ -407,11 +406,13 @@ if (docs && gitOutput && gitOutput.status === 'completed') {
 // Advisory — never blocks. Its feedback is read by requirements next session,
 // closing the lifecycle loop.
 phase('SRE')
-sreOutput = await workflow(
+sreOutput = collect(await workflow(
   { scriptPath: `${AGENTS_DIR}/.claude/workflows/sre.js` },
   {
     agentsDir: AGENTS_DIR,
     sessionId,
+    deferPersist: true,
+    startedAt,
     taskText,
     projectPath,
     backendOutput,
@@ -423,34 +424,24 @@ sreOutput = await workflow(
     bridgeOutput,
     gitOutput,
   }
-)
+))
 log(`sre → ${sreOutput && sreOutput.status} (${sreOutput && sreOutput.diagnostics && sreOutput.diagnostics.length} diagnostics, ${sreOutput && sreOutput.feedback && sreOutput.feedback.length} feedback items)`)
 
 const finalStatus = gitOutput && gitOutput.status === 'completed' ? 'completed' : 'failed'
-await agent(
-  `Mark this session as ${finalStatus}. Run:\n\ncd "${AGENTS_DIR}"; node shared/lib/db-cli.js update-session-status "${sessionId}" "${finalStatus}"\n\nReturn "done".`,
-  { label: 'session-final', model: 'haiku' }
-)
-
-// Real-time: write this run's summary into the orchestrator's own vault (git-ignored).
-await agent(
-  `Write a session summary note to this exact path (create parent folders if needed):\n` +
-  `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.md\n\n` +
-  `File content (Markdown):\n\n` +
-  `# Session ${sessionId}\n\n` +
-  `- Task: ${taskText.replace(/`/g, "'").slice(0, 300)}\n` +
-  `- Project: ${projectPath}\n` +
-  `- Status: ${finalStatus}\n` +
+// This run's summary goes into the orchestrator's own vault (git-ignored).
+const sessionNote = [
+  `# Session ${sessionId}`, '',
+  `- Task: ${taskText.slice(0, 300)}`,
+  `- Project: ${projectPath}`,
+  `- Status: ${finalStatus}`,
   `- Domains: ${['requirements', 'database', 'backend', 'frontend', 'testing', 'calls', 'ponytail', 'mcpbridge', 'gitdevops', 'sre']
     .filter((_, i) => [requirementsOutput, databaseOutput, backendOutput, frontendOutput, testingOutput, callsOutput, ponytailOutput, bridgeOutput, gitOutput, sreOutput][i])
-    .map((d) => '[[' + d + ']]').join(' · ')}\n` +
-  `- Branch: ${(gitOutput && gitOutput.branch) || 'n/a'}\n` +
-  `- Orchestrated by: [[orchestrator]]\n\n` +
-  `Return "done".`,
-  { label: 'orchestrator-session-note', model: 'haiku' }
-)
+    .map((d) => '[[' + d + ']]').join(' · ')}`,
+  `- Branch: ${(gitOutput && gitOutput.branch) || 'n/a'}`,
+  '- Orchestrated by: [[orchestrator]]', '',
+].join('\n')
 
-return {
+return await finish({
   sessionId,
   status: finalStatus,
   completedAgents: [
@@ -475,4 +466,4 @@ return {
   contractsPassed: bridgePassed,
   systemDocs:      docs ? { targets: docs.targets, consumers: docs.impact.consumers, chainReaction: docs.impact.chainReaction, otherOwners, updated: docsUpdate && docsUpdate.modules } : null,
   securityPassed:  gitOutput && !(gitOutput.blockedBy && gitOutput.blockedBy.length),
-}
+}, finalStatus, sessionNote)

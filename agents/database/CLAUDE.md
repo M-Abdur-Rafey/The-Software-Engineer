@@ -87,6 +87,8 @@ Return a `DatabaseOutput` object conforming to `shared/contracts/database.schema
 
 ## Session close protocol
 
+When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
+
 1. Save migration record: `node ~/.agents/shared/lib/db-cli.js insert database migrations '<json>'`
 2. Save decision: `node ~/.agents/shared/lib/db-cli.js save-decision database schema-design "<summary>" "<rationale>"`
 3. Write schema note: `agents/database/vault/schemas/<entity>.md` — document the table columns, constraints, and expected query patterns
