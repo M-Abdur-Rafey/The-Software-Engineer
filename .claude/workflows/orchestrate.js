@@ -21,6 +21,11 @@ export const meta = {
 //         systemDocs?: false to skip System Docs even if docs/system exists, modules?: [target module names],
 //         sessionId?, startedAt?, onboarded?, techStack?, classification?, deferBookkeeping?, projectMap? }
 //
+// classification.size (design/agent-consolidation.md, change 5): "small" is set by the skill only after the
+// user agreed to the short pipeline. It counts only for a fix or chore touching one domain and, with System
+// Docs, nothing that depends on what changes; it skips requirements, ponytail and SRE. The bridge, the
+// security scan and testing of changed routes always run.
+//
 // projectMap: the project's map (shared/lib/projectmap.js), read by the skill. Every domain gets it so no
 // agent re-explores the repo; without it they get the map file's path. Onboarding builds it, and a
 // committed session merges its new routes, tables and the reviewers' notes back in (persistOps).
@@ -141,7 +146,12 @@ const classification = (args && args.classification) || await agent(
   }
 )
 
-log(`db=${classification.requiresDatabase} be=${classification.requiresBackend} fe=${classification.requiresFrontend} calls=${classification.requiresCalls} type=${classification.taskType}`)
+log(`db=${classification.requiresDatabase} be=${classification.requiresBackend} fe=${classification.requiresFrontend} calls=${classification.requiresCalls} type=${classification.taskType} size=${classification.size || 'normal'}`)
+
+// Short pipeline, re-checked here so a wrong size can never skip stages a task needs.
+const domainCount = ['requiresDatabase', 'requiresBackend', 'requiresFrontend', 'requiresCalls'].filter(k => classification[k]).length
+let small = classification.size === 'small' && ['fix', 'chore'].includes(classification.taskType) && domainCount === 1
+if (classification.size === 'small' && !small) log('size=small ignored: only a fix or chore touching exactly one domain qualifies')
 
 // ─── Phase: System Docs ──────────────────────────────────────────────────────
 // When the project has docs/system (see design/system-docs.md): sync docs with
@@ -226,6 +236,10 @@ if (args && args.systemDocs !== false && projectPath) {
     }
 
     docs = { targets, impact }
+    if (small && impact.consumers.length) {
+      small = false
+      log(`size=small ignored: ${impact.consumers.map(c => c.module).join(', ')} depend on what changes`)
+    }
     domainTask =
       `${taskText}\n\n---\nSYSTEM DOCS BRIEFING (the project's source of truth in ${DOCS}; follow its decisions and do not break ` +
       `the listed consumers; if a consumer must change, change it in the same session):\n${impact.briefing}`
@@ -249,6 +263,9 @@ async function finish(result, status, note) {
   return result
 }
 
+const skipped = small ? ['requirements', 'ponytail', 'sre'] : []
+if (small) log('small task: skipping requirements, ponytail and SRE (the task text is the spec)')
+
 let requirementsOutput = null
 let databaseOutput = null
 let backendOutput  = null
@@ -264,12 +281,14 @@ let sreOutput      = null
 // Spec-driven development: synthesize signals (task text, prior SRE feedback,
 // logs/bug reports, user feedback) into user stories + a specification with
 // explicit decisions, so no domain agent has to guess at unstated requirements.
-phase('Requirements')
-requirementsOutput = collect(await workflow(
-  { scriptPath: `${AGENTS_DIR}/.claude/workflows/requirements.js` },
-  { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, clarifications, ...MAP }
-))
-log(`requirements → ${requirementsOutput && requirementsOutput.status} (${requirementsOutput && requirementsOutput.userStories && requirementsOutput.userStories.length} stories, ${requirementsOutput && requirementsOutput.spec && requirementsOutput.spec.openQuestions && requirementsOutput.spec.openQuestions.length} open questions)`)
+if (!small) {
+  phase('Requirements')
+  requirementsOutput = collect(await workflow(
+    { scriptPath: `${AGENTS_DIR}/.claude/workflows/requirements.js` },
+    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, clarifications, ...MAP }
+  ))
+  log(`requirements → ${requirementsOutput && requirementsOutput.status} (${requirementsOutput && requirementsOutput.userStories && requirementsOutput.userStories.length} stories, ${requirementsOutput && requirementsOutput.spec && requirementsOutput.spec.openQuestions && requirementsOutput.spec.openQuestions.length} open questions)`)
+}
 
 // ─── Phase: Database ─────────────────────────────────────────────────────────
 if (classification.requiresDatabase) {
@@ -333,7 +352,7 @@ phase('Frontend + Testing + Calls')
 // Lazy-senior-dev refinement: trim over-engineering from the code that backend /
 // frontend / calls just generated, BEFORE the bridge re-validates contracts.
 // Advisory — never blocks the pipeline. Vendored from github.com/DietrichGebert/ponytail.
-if (backendOutput || frontendOutput || callsOutput || (databaseOutput && databaseOutput.migrationFile)) {
+if (!small && (backendOutput || frontendOutput || callsOutput || (databaseOutput && databaseOutput.migrationFile))) {
   phase('Ponytail')
   ponytailOutput = collect(await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/ponytail.js` },
@@ -435,28 +454,30 @@ if (docs && gitOutput && gitOutput.status === 'completed') {
 // outcome metrics (system health, coverage, violations — never lines of code).
 // Advisory — never blocks. Its feedback is read by requirements next session,
 // closing the lifecycle loop.
-phase('SRE')
-sreOutput = collect(await workflow(
-  { scriptPath: `${AGENTS_DIR}/.claude/workflows/sre.js` },
-  {
-    agentsDir: AGENTS_DIR,
-    sessionId,
-    deferPersist: true,
-    startedAt,
-    taskText,
-    projectPath,
-    backendOutput,
-    frontendOutput,
-    databaseOutput,
-    testingOutput,
-    callsOutput,
-    ponytailOutput,
-    bridgeOutput,
-    gitOutput,
-    ...MAP,
-  }
-))
-log(`sre → ${sreOutput && sreOutput.status} (${sreOutput && sreOutput.diagnostics && sreOutput.diagnostics.length} diagnostics, ${sreOutput && sreOutput.feedback && sreOutput.feedback.length} feedback items)`)
+if (!small) {
+  phase('SRE')
+  sreOutput = collect(await workflow(
+    { scriptPath: `${AGENTS_DIR}/.claude/workflows/sre.js` },
+    {
+      agentsDir: AGENTS_DIR,
+      sessionId,
+      deferPersist: true,
+      startedAt,
+      taskText,
+      projectPath,
+      backendOutput,
+      frontendOutput,
+      databaseOutput,
+      testingOutput,
+      callsOutput,
+      ponytailOutput,
+      bridgeOutput,
+      gitOutput,
+      ...MAP,
+    }
+  ))
+  log(`sre → ${sreOutput && sreOutput.status} (${sreOutput && sreOutput.diagnostics && sreOutput.diagnostics.length} diagnostics, ${sreOutput && sreOutput.feedback && sreOutput.feedback.length} feedback items)`)
+}
 
 const finalStatus = gitOutput && gitOutput.status === 'completed' ? 'completed' : 'failed'
 
@@ -513,4 +534,6 @@ return await finish({
   contractsPassed: bridgePassed,
   systemDocs:      docs ? { targets: docs.targets, consumers: docs.impact.consumers, chainReaction: docs.impact.chainReaction, otherOwners, updated: docsUpdate && docsUpdate.modules } : null,
   securityPassed:  gitOutput && !(gitOutput.blockedBy && gitOutput.blockedBy.length),
+  size:            small ? 'small' : 'normal',
+  skipped,
 }, finalStatus, sessionNote)

@@ -42,7 +42,7 @@ const requirementsOutput = (args && args.requirementsOutput) || null
 // of the run, so the brief must stand on its own.
 function specBrief(domain, max = 3000) {
   const s = requirementsOutput && requirementsOutput.spec
-  if (!s) return '(no requirements spec for this session)'
+  if (!s) return '(no separate spec for this session: the task text is the spec)'
   const tasks = (requirementsOutput.tasks || []).filter(t => t.domain === domain)
   const storyIds = new Set(tasks.map(t => t.storyId).filter(Boolean))
   const stories = (requirementsOutput.userStories || []).filter(u => storyIds.has(u.id))

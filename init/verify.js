@@ -137,6 +137,30 @@ if (fs.existsSync(workflowsDir)) {
   });
 }
 
+// ─── The skill and orchestrate.js agree on the args shape ─────────────────────
+// The skill passes session, onboarding, classification and map data into orchestrate.js
+// (design/agent-consolidation.md); a key the workflow never reads is silently lost.
+const skillFile = path.join(AGENTS_DIR, 'skills', 'software-engineer', 'SKILL.md');
+const orchestrateFile = path.join(workflowsDir, 'orchestrate.js');
+if (fs.existsSync(skillFile) && fs.existsSync(orchestrateFile)) {
+  check('skill and orchestrate.js agree on the args shape', () => {
+    const skill = fs.readFileSync(skillFile, 'utf8').replace(/\r\n/g, '\n');
+    const workflow = fs.readFileSync(orchestrateFile, 'utf8');
+    const start = skill.indexOf('scriptPath: `<install-path>/.claude/workflows/orchestrate.js`');
+    if (start < 0) throw new Error('no orchestrate.js Workflow example in SKILL.md');
+    const block = skill.slice(start, skill.indexOf('\n```', start));
+    const keys = [...block.matchAll(/^ {4}(\w+):/gm)].map(m => m[1]);
+    const classMatch = block.match(/classification: \{([^}]*)\}/);
+    const classKeys = classMatch ? classMatch[1].split(',').map(k => k.trim()).filter(Boolean) : [];
+    const missing = [
+      ...keys.filter(k => !new RegExp(`args\\.${k}\\b`).test(workflow)).map(k => `args.${k}`),
+      ...classKeys.filter(k => !new RegExp(`classification\\.${k}\\b|'${k}'`).test(workflow)).map(k => `classification.${k}`),
+    ];
+    if (!keys.length) throw new Error('could not read the args keys from SKILL.md');
+    if (missing.length) throw new Error(`SKILL.md passes ${missing.join(', ')} but orchestrate.js never reads it`);
+  });
+}
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 console.log('');
 log.table([

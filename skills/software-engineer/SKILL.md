@@ -158,6 +158,12 @@ Decide which of these apply:
 - **Frontend** — new pages, components, UI changes, anything the user sees
 - **Calls** — phone calls, voice, IVR menus, Twilio/Vonage, dialing, voicemail, call recordings
 
+**Small tasks: offer the short pipeline.** If the task is a bug fix or a chore (not a feature) and touches exactly one of the domains above, add this question to the 4d message (ask it on its own if there are no 4d questions):
+
+> _"This looks like a small [fix/chore] in the [domain] only. I can run the short pipeline: skip writing a separate spec (your request is the spec), the simplification pass and the post-run review. The contract check, the security scan and the tests for the routes that change still run. If the project has System Docs and other modules depend on what changes, I'll run everything anyway. Use the short pipeline? (yes / no — run everything)"_
+
+Use `size: "small"` only if they say yes; anything else (no answer, "not sure", "run everything") is `size: "normal"`. Never offer it for features, refactors, security work, or tasks touching more than one domain.
+
 ---
 
 ### 4d: Ask domain-specific questions
@@ -284,7 +290,7 @@ Summarise what you're going to do in one short paragraph before starting the wor
 1. `node <install-path>/shared/lib/db-cli.js init-session "<task text>" "<current working directory>"` prints `{ sessionId, startedAt }`.
 2. `node <install-path>/shared/lib/db-cli.js check-onboarded "<current working directory>"` prints `{ onboarded, techStack }`.
 3. `node <install-path>/shared/lib/projectmap.js show "<current working directory>"` prints the project map (stack, layout, conventions, routes, tables, commands), or nothing before the first onboarding.
-4. Build the classification from Step 4c: `{ requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType (feat|fix|chore|test|docs|refactor|security), taskSlug (lowercase kebab-case, max 30 chars) }`.
+4. Build the classification from Step 4c: `{ requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType (feat|fix|chore|test|docs|refactor|security), taskSlug (lowercase kebab-case, max 30 chars), size ("small" only if the user agreed to the short pipeline, else "normal") }`.
 
 Pass all four into the workflow (below); leave `projectMap` out when step 3 printed nothing. If any step fails, leave those fields out; the workflow falls back to doing it itself.
 
@@ -299,7 +305,7 @@ Workflow({
     startedAt: <from init-session>,
     onboarded: <true|false from check-onboarded>,
     techStack: "<from check-onboarded, or null>",
-    classification: { requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType, taskSlug },
+    classification: { requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType, taskSlug, size },
     projectMap: "<output of projectmap.js show, verbatim>",
     deferBookkeeping: true,   // Step 6 records the session with shared/lib/persist.js, no agent needed
     projectPath: "<current working directory>",
@@ -361,6 +367,7 @@ Then summarise clearly:
 - **Contract check:** whether frontend/backend/database were consistent
 - If anything was **blocked** (contract violation, security issue): explain in plain language what failed and what the user should do to fix it
 - **System Docs** (when `systemDocs` is set): which module docs were updated and which other owners are affected
+- **Short pipeline** (when `skipped` is not empty): which stages were skipped. If you asked for `small` but `size` came back `normal`, say why (more than one domain, not a fix/chore, or other modules depend on the change) and that everything ran
 
 **If the result has `status: "awaiting-answers"`**, nothing was coded: the project's System Docs need decisions first. Explain the `chainReaction` and the affected `consumers` in plain language, then follow the Answer section for every target module in `blocking`. When every target passes `gate`, re-run Step 5 with the same task.
 

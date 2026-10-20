@@ -245,6 +245,8 @@ Frontend, Testing, and Calls run **in parallel** once the backend contract exist
 
 Onboarding also writes a **project map**: one short note (at most 3000 characters) with the stack, folder layout, conventions, main modules, routes, tables and run commands. Every agent gets it in its prompt instead of exploring the repo again, and it is updated after each committed session with the new routes, tables and any structural changes.
 
+For a **small task** (a bug fix or chore touching one area) the skill offers a short pipeline: it skips the separate spec, the simplification pass and the post-run review, and asks you first every time. The contract check, the security scan and the tests for changed routes always run.
+
 | Agent | Icon | Does |
 |-------|------|------|
 | **Impact analyst** | 🧭 | System Docs projects only. Before any code, maps the task to modules, lists every module that uses what will change and how it could break, records the chain reaction in plain language, and asks about any decision that isn't recorded. Stops for your answers if a target module's doc isn't approved |
