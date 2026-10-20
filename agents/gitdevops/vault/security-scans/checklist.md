@@ -1,6 +1,6 @@
 # Security Scan Checklist
 
-Runs against `git diff --staged` before every commit.
+Runs before every commit, on the lines the session adds. Implemented exactly by `shared/lib/scan.js` (deterministic, no model, no override): change the script and its tests in `tests/scan.test.js` together with this table. Example env files (`.env.example` etc.), placeholder values and environment-variable reads are not treated as secrets; test and documentation files are exempt from the localhost check.
 
 | Severity | Check | Pattern |
 |----------|-------|---------|

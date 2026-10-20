@@ -89,7 +89,7 @@ CONTRACT_NAMES.forEach(name => {
 });
 
 // ─── Shared lib ───────────────────────────────────────────────────────────────
-['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js'].forEach(f => {
+['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js'].forEach(f => {
   check(`shared/lib/${f} exists`, () => {
     const p = path.join(AGENTS_DIR, 'shared', 'lib', f);
     if (!fs.existsSync(p)) throw new Error('file missing');

@@ -28,6 +28,8 @@ Deployment references: `deployment/docker.md`, `deployment/server-hardening.md`,
 
 ## Pre-commit security scan (blocking)
 
+The scan is run by `node shared/lib/scan.js <project> <changed paths>`, which implements the checklist exactly and prints { passed, securityFlags, blockingFailures }. Its result is final: never edit code to make it pass, never commit when it fails; explain each blocking failure in plain language instead.
+
 Run all checks against `git diff --staged` in the target project directory:
 
 | # | Severity | What to check |
