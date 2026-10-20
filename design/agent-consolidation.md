@@ -1,6 +1,6 @@
 # Agent consolidation (issue #8): design
 
-Status: **draft for review** · 2026-10-20 · Issue: [MARafey/The-Software-Engineer#8](https://github.com/MARafey/The-Software-Engineer/issues/8)
+Status: **approved design** · 2026-10-20 · Issue: [MARafey/The-Software-Engineer#8](https://github.com/MARafey/The-Software-Engineer/issues/8)
 
 ## Problem
 
@@ -83,7 +83,7 @@ The skill's classification adds a `size`:
 | `small` | `fix` or `chore` touching one domain, and (with System Docs) no consumers of what changes, the existing `lightFix` condition | Requirements (the task text plus the briefing is the spec), ponytail, SRE |
 | `normal` | everything else | nothing |
 
-The bridge, the security scan and testing of changed routes always run. The confirmation shown before a run says which stages a small task skips.
+The bridge, the security scan and testing of changed routes always run. For a `small` task the skill asks before running: it names the stages it would skip and why the task qualifies, and runs the full pipeline unless you agree.
 
 ## Expected result (estimates, to be measured)
 
@@ -118,11 +118,18 @@ Rerun the A/B harness (`tests/ab/`) after each phase: same `TASK.md` and `CHANGE
 | Merged author prompts get long and lose specialist depth (e.g. CSS layout, contrast) | Checklists are short rule lists, not whole notes; the reviewer re-checks each item; the quality gate catches regressions |
 | A reviewer that shares context with the author stops being independent | Reviewers receive only the spec, the diff, the rules and the map, never the author's transcript or reasoning |
 | The skill and workflows drift (bookkeeping moved out) | `orchestrate.js` keeps fallbacks when `args` lack session or classification data; `verify` gains a check that the skill and workflow agree on the args shape |
-| `small` tasks skip something they needed | Only `lightFix`-type tasks qualify; the bridge, scan and testing never skip; the user sees the skip list before the run |
+| `small` tasks skip something they needed | Only `lightFix`-type tasks qualify; the bridge, scan and testing never skip; the user approves the skip list every time |
+| The scan script misses something an agent would have caught | The script implements exactly the 10 documented checks (`agents/gitdevops/vault/security-scans/checklist.md`), tested on fixtures for each check; blocking stays blocking, with no override |
 | A stale project map misleads agents | Reviewers update their section each session; `onboard` rebuilds it from scratch |
+
+## Decisions
+
+| Topic | Decision |
+|---|---|
+| Frontend design | Keep a **separate designer** before the author: art direction stays independent of the code (designer → author → reviewer) |
+| Security scan | The 10 checks become a **deterministic script** (`shared/lib/scan.js`, zero tokens). The gitdevops agent only writes the commit, or explains blocking findings in plain language |
+| Small tasks | The skill **asks each time**: it shows which stages a `small` task would skip and runs the short pipeline only if you agree; otherwise the full pipeline runs |
 
 ## Open questions
 
-1. **Frontend design:** keep a separate designer before the author (art direction stays independent of code, 3 agents), or fold design into the author (2 agents, cheaper, less separation)?
-2. **Security scan:** move the 10 pattern checks into a deterministic script, as proposed above, so the gitdevops agent only writes the commit or explains findings?
-3. **Small tasks:** should the skill skip stages for `small` tasks automatically, or ask you each time?
+None.
