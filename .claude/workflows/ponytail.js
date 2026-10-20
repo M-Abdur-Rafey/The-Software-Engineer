@@ -18,18 +18,32 @@ const AGENTS_DIR     = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Ag
 const sessionId      = (args && args.sessionId)      || 'no-session'
 const taskText       = (args && args.taskText)       || ''
 const projectPath    = (args && args.projectPath)    || ''
+
+// One entry per file: agents report the same file more than once (created, then fixed) and in
+// mixed absolute/relative or slash styles, which inflated counts and repeated scan/review work.
+function uniquePaths(list) {
+  const root = String(projectPath || '').replace(/\\/g, '/').replace(/\/+$/, '')
+  const seen = new Map()
+  for (const raw of list) {
+    if (!raw) continue
+    let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
+    if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (!seen.has(p)) seen.set(p, p)
+  }
+  return [...seen.values()]
+}
 const mode           = (args && args.mode)           || 'full'   // lite | full | ultra
 const backendOutput  = (args && args.backendOutput)  || null
 const frontendOutput = (args && args.frontendOutput) || null
 const callsOutput    = (args && args.callsOutput)    || null
 const databaseOutput = (args && args.databaseOutput) || null
 
-const filesChanged = [
+const filesChanged = uniquePaths([
   ...((backendOutput  && backendOutput.filesChanged)  || []),
   ...((frontendOutput && frontendOutput.filesChanged) || []),
   ...((callsOutput    && callsOutput.filesChanged)    || []),
   ...((databaseOutput && databaseOutput.migrationFile) ? [databaseOutput.migrationFile] : []),
-]
+])
 
 // Nothing was generated this session — nothing to simplify.
 if (filesChanged.length === 0) {

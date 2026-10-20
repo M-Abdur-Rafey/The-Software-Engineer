@@ -10,17 +10,31 @@ const AGENTS_DIR    = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Age
 const sessionId     = (args && args.sessionId)    || 'no-session'
 const taskText      = (args && args.taskText)     || ''
 const projectPath   = (args && args.projectPath)  || ''
+
+// One entry per file: agents report the same file more than once (created, then fixed) and in
+// mixed absolute/relative or slash styles, which inflated counts and repeated scan/review work.
+function uniquePaths(list) {
+  const root = String(projectPath || '').replace(/\\/g, '/').replace(/\/+$/, '')
+  const seen = new Map()
+  for (const raw of list) {
+    if (!raw) continue
+    let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
+    if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (!seen.has(p)) seen.set(p, p)
+  }
+  return [...seen.values()]
+}
 const taskType      = (args && args.taskType)     || 'feat'
 const taskSlug      = (args && args.taskSlug)     || 'task'
 const backendOutput = (args && args.backendOutput) || null
 const bridgeOutput  = (args && args.bridgeOutput) || null
 
-const filesChanged = [
+const filesChanged = uniquePaths([
   ...((backendOutput  && backendOutput.filesChanged)  || []),
   ...((args && args.frontendOutput  && args.frontendOutput.filesChanged)  || []),
   ...((args && args.databaseOutput  && args.databaseOutput.migrationFile ? [args.databaseOutput.migrationFile] : [])),
   ...((args && args.extraFiles) || []),   // e.g. docs/system when System Docs updated module docs
-]
+])
 const commitNotes = (args && args.commitNotes) || ''
 
 // Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js

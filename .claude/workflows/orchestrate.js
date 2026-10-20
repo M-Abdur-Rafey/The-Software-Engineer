@@ -34,6 +34,20 @@ export const meta = {
 const AGENTS_DIR      = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
 const taskText        = (args && args.task)           || ''
 const projectPath     = (args && args.projectPath)    || ''
+
+// One entry per file: agents report the same file more than once (created, then fixed) and in
+// mixed absolute/relative or slash styles, which inflated counts and repeated scan/review work.
+function uniquePaths(list) {
+  const root = String(projectPath || '').replace(/\\/g, '/').replace(/\/+$/, '')
+  const seen = new Map()
+  for (const raw of list) {
+    if (!raw) continue
+    let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
+    if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (!seen.has(p)) seen.set(p, p)
+  }
+  return [...seen.values()]
+}
 const clarifications  = (args && args.clarifications) || {}
 
 // ─── Phase: Init ─────────────────────────────────────────────────────────────
@@ -352,12 +366,12 @@ if (!bridgePassed) {
 let docsUpdate = null
 if (docs) {
   phase('Docs Update')
-  const changedFiles = [
+  const changedFiles = uniquePaths([
     ...((backendOutput && backendOutput.filesChanged) || []),
     ...((frontendOutput && frontendOutput.filesChanged) || []),
     ...((callsOutput && callsOutput.filesChanged) || []),
     ...((databaseOutput && databaseOutput.migrationFile) ? [databaseOutput.migrationFile] : []),
-  ]
+  ])
   docsUpdate = await workflow(SYSDOCS, { mode: 'update', projectPath, agentsDir: AGENTS_DIR, sessionId, modules: docs.targets, taskText, changedFiles })
   log(`docs updated for ${(docsUpdate && docsUpdate.modules || []).join(', ')}`)
 }

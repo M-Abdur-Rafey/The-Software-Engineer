@@ -85,6 +85,9 @@ const collection = await agent(
   `plus ONE positive smoke test (type "smoke") proving the route still works. Do NOT regenerate negative/auth tests ` +
   `for behaviour that did not change.\n` +
   `- Do not test any route or flow not listed or referenced above.\n` +
+  `- Assertions are unconditional: never wrap an expectation in a check of the response (no if (pm.response.code === ...), ` +
+  `no early return, no skipping). Assert the expected status and body every time; a test whose setup or precondition fails must ` +
+  `FAIL with a clear message, never pass or skip. Coverage counts only tests with unconditional assertions.\n` +
   `- Group items into folders: "${featureName} / new", "${featureName} / changed", "${featureName} / flows"\n` +
   `- The collection variable block must include: baseUrl (value: http://localhost:3000) and bearerToken (value: "")\n\n` +
   `Write the collection JSON to: ${collectionPath}\n\n` +

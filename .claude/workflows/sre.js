@@ -13,6 +13,20 @@ const AGENTS_DIR     = (args && args.agentsDir)      || 'C:/Users/Hp/Desktop/Ide
 const sessionId      = (args && args.sessionId)      || 'no-session'
 const taskText       = (args && args.taskText)       || ''
 const projectPath    = (args && args.projectPath)    || ''
+
+// One entry per file: agents report the same file more than once (created, then fixed) and in
+// mixed absolute/relative or slash styles, which inflated counts and repeated scan/review work.
+function uniquePaths(list) {
+  const root = String(projectPath || '').replace(/\\/g, '/').replace(/\/+$/, '')
+  const seen = new Map()
+  for (const raw of list) {
+    if (!raw) continue
+    let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
+    if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (!seen.has(p)) seen.set(p, p)
+  }
+  return [...seen.values()]
+}
 const backendOutput  = (args && args.backendOutput)  || null
 const frontendOutput = (args && args.frontendOutput) || null
 const databaseOutput = (args && args.databaseOutput) || null
@@ -24,10 +38,10 @@ const gitOutput      = (args && args.gitOutput)      || null
 
 // Outcome metrics — computed deterministically from contracts, not by a model.
 // Measure outcomes, never lines of code.
-const filesChanged = []
+const filesChanged = uniquePaths([]
   .concat((backendOutput  && backendOutput.filesChanged)  || [])
   .concat((frontendOutput && frontendOutput.filesChanged) || [])
-  .concat((callsOutput    && callsOutput.filesChanged)    || [])
+  .concat((callsOutput    && callsOutput.filesChanged)    || []))
 
 const outcomeMetrics = {
   filesChangedCount:      filesChanged.length,

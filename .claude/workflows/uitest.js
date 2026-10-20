@@ -163,7 +163,8 @@ await pipeline(plan.flows, f => agent(
   `Cases:\n${f.cases.map(c => `- ${c}`).join('\n')}\n` +
   ((f.multiUser || []).length ? `Multi-user cases (use asUsers(browser, [...roles]); each page is a separate user):\n${f.multiUser.map(c => `- ${c}`).join('\n')}\n` : '') +
   ((f.consistency || []).length ? `UI-vs-DB checks (await dbQuery(sql, params) and compare with what the page shows):\n${f.consistency.map(c => `- ${c}`).join('\n')}\n` : '') +
-  `\nName each test after its case. Make tests independent (each creates its own data). Return "done".`,
+  `\nName each test after its case. Make tests independent (each creates its own data). Assertions are unconditional: never ` +
+  `branch an expect on what the app returned and never call test.skip at run time; an unmet precondition fails the test. Return "done".`,
   Object.assign({ label: `spec:${f.module}/${f.flow}`, phase: 'Generate' }, SMALL)
 ))
 

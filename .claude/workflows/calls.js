@@ -13,6 +13,20 @@ const AGENTS_DIR      = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/A
 const sessionId       = (args && args.sessionId)       || 'no-session'
 const taskText        = (args && args.taskText)        || ''
 const projectPath     = (args && args.projectPath)     || ''
+
+// One entry per file: agents report the same file more than once (created, then fixed) and in
+// mixed absolute/relative or slash styles, which inflated counts and repeated scan/review work.
+function uniquePaths(list) {
+  const root = String(projectPath || '').replace(/\\/g, '/').replace(/\/+$/, '')
+  const seen = new Map()
+  for (const raw of list) {
+    if (!raw) continue
+    let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
+    if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (!seen.has(p)) seen.set(p, p)
+  }
+  return [...seen.values()]
+}
 const backendOutput   = (args && args.backendOutput)   || null
 const databaseOutput  = (args && args.databaseOutput)  || null
 const callPreferences = (args && args.callPreferences) || null
@@ -304,10 +318,10 @@ const persistOps = [
 ]
 await flushPersist(persistOps)
 
-const allFiles = [
+const allFiles = uniquePaths([
   ...integration.filesCreated,
   ...integration.filesUpdated,
-]
+])
 
 return {
   sessionId,

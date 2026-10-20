@@ -58,9 +58,13 @@ pm.test('success field correct', () => {
 });
 ```
 
+## Assertions are unconditional
+
+Never make an expectation depend on what the app returned: no `if (pm.response.code === ...)` around an assertion, no early return, no skip (in Playwright, no run-time `test.skip`). Assert the expected status and body every time. A test whose setup or precondition fails must **fail** with a clear message, never pass or skip. In the smoke test of the phase 1 pipeline, a skipped assertion let 100% coverage be reported over a real spec violation.
+
 ## Coverage target
 
-100% of the changed routes covered (every new route has its suite, every modified route has a test for each changed behaviour). A changed route without tests is a violation.
+100% of the changed routes covered (every new route has its suite, every modified route has a test for each changed behaviour). A changed route without tests is a violation, and only tests with unconditional assertions count toward coverage.
 
 ## Output contract
 
