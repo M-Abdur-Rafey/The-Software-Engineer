@@ -41,7 +41,7 @@ const discovery = await agent(
   `3. modules: up to 15 main modules or features [{name, path, purpose}].\n` +
   `4. commands from package.json scripts / README: install, dev, test, build, migrate (null when absent).\n` +
   `5. conventions: commitStyle, usesConventionalCommits, importStyle (commonjs|esm|mixed), usesBarrelFiles, codingStyle ` +
-  `{semicolons, quotes, indent, trailingCommas}, linterConfig, envVarNames, inputValidation, corsConfigured, cspConfigured.\n\n` +
+  `{semicolons, quotes, indent (a number of spaces, or "tabs"), trailingCommas}, linterConfig, envVarNames, inputValidation, corsConfigured, cspConfigured.\n\n` +
   `Return JSON matching the schema.`,
   {
     label: 'discover',
@@ -64,7 +64,7 @@ const discovery = await agent(
             usesConventionalCommits: { type: 'boolean' },
             importStyle:             { type: 'string' },
             usesBarrelFiles:         { type: 'boolean' },
-            codingStyle:             { type: 'object' },
+            codingStyle:             { type: 'object', properties: { semicolons: { type: 'boolean' }, quotes: { type: 'string' }, indent: { type: ['number', 'string'] }, trailingCommas: { type: 'boolean' } } },
             linterConfig:            { type: ['string', 'null'] },
             envVarNames:             { type: 'array', items: { type: 'string' } },
             inputValidation:         { type: ['string', 'null'] },
@@ -190,6 +190,9 @@ const securityNotes = [
   !conventions.corsConfigured ? 'CORS not configured' : null,
 ].filter(Boolean)
 const style = conventions.codingStyle || {}
+// Agents sometimes answer "2 spaces" or "tabs" where a number was asked for.
+const indentText = /^d+$/.test(String(style.indent).trim()) ? `${String(style.indent).trim()}-space indent`
+  : style.indent ? `indent: ${style.indent}` : 'indent: ?'
 const cmd = discovery.commands || {}
 
 // The project map: what every agent needs before touching code (shared/lib/projectmap.js caps it).
@@ -210,7 +213,7 @@ const mapSections = {
     discovery.entryPoints && discovery.entryPoints.length ? `Entry points: ${discovery.entryPoints.join(', ')}` : null,
   ]),
   Conventions: lines([
-    `${conventions.importStyle}; ${style.semicolons === false ? 'no semicolons' : 'semicolons'}, ${style.quotes || '?'} quotes, ${style.indent || '?'}-space indent`,
+    `${conventions.importStyle}; ${style.semicolons === false ? 'no semicolons' : 'semicolons'}, ${style.quotes || '?'} quotes, ${indentText}`,
     scanBackend ? `Backend layout: ${backendScan.folderPattern}` : null,
     scanBackend ? `Error responses: ${backendScan.errorFormat}` : null,
     conventions.inputValidation || backendScan.validationLibrary ? `Validation: ${conventions.inputValidation || backendScan.validationLibrary}` : 'Validation: none found',

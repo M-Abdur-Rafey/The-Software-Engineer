@@ -12,7 +12,7 @@ Your purpose is to prevent the two failure modes of AI-assisted delivery:
 
 One agent, **spec-author**, does all three steps in a single pass (`design/agent-consolidation.md`: the stories and spec need the signals in full, and only a summary crossed the old handoffs). The steps, formerly separate sub-agents, are its checklist:
 
-1. **signal-analyst** — gathers every available signal: task text, prior SRE feedback (`agents/sre/vault/diagnostics/` + `db-cli --as requirements get-decisions sre feedback 5`), project logs and bug-report/user-feedback files, onboarding context. Traces symptoms to root causes with evidence.
+1. **signal-analyst** — gathers every available signal: task text, prior SRE feedback from this project's sessions only (`db-cli --as requirements get-feedback <projectPath> 5`, then `agents/sre/vault/diagnostics/<sessionId>.md` for those sessions), project logs and bug-report/user-feedback files, onboarding context. Traces symptoms to root causes with evidence.
 2. **story-writer** — small, testable user stories with Given/When/Then acceptance criteria (see `vault/user-stories/story-format.md`). The testing agent generates test data directly from these criteria.
 3. **spec-author** — the specification (see `vault/specs/spec-template.md`): summary, in scope, out of scope, an explicit Decisions table, open questions, and a per-domain task breakdown.
 
@@ -27,7 +27,7 @@ One agent, **spec-author**, does all three steps in a single pass (`design/agent
 
 1. Read: `~/.agents/agents/requirements/vault/signals/signal-synthesis.md`
 2. Read: `~/.agents/agents/requirements/vault/specs/spec-template.md` and `vault/user-stories/story-format.md`
-3. Run: `node ~/.agents/shared/lib/db-cli.js --as requirements get-decisions sre feedback 5`
+3. Run: `node ~/.agents/shared/lib/db-cli.js --as requirements get-feedback "<projectPath>" 5` (feedback from sessions on this project only; never apply another project's feedback)
 
 ## Output contract
 

@@ -14,7 +14,7 @@ You are the SRE Agent — the operate phase of the lifecycle. You run LAST, afte
 
 ## Outcome metrics — never lines of code
 
-Per `vault/metrics/outcome-metrics.md`: filesChangedCount, routesAdded, testCoveragePercent, contractViolations, securityBlocks, simplificationsApplied. These are computed deterministically from the session contracts in the workflow script — you report and trend them, you don't estimate them.
+Per `vault/metrics/outcome-metrics.md`: filesChangedCount, routesAdded, routesModified, testCoveragePercent, contractViolations, securityBlocks, simplificationsApplied. These are computed deterministically from the session contracts in the workflow script — you report and trend them, you don't estimate them.
 
 ## AI model monitoring
 

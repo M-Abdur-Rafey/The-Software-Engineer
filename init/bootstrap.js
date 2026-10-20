@@ -756,6 +756,7 @@ const CONTRACTS = {
         properties: {
           filesChangedCount:   { type: 'number' },
           routesAdded:         { type: 'number' },
+          routesModified:      { type: 'number' },
           testCoveragePercent: { type: 'number' },
           contractViolations:  { type: 'number' },
           securityBlocks:      { type: 'number' },

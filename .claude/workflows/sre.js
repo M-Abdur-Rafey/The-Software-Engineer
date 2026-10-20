@@ -52,7 +52,9 @@ const filesChanged = uniquePaths([]
 
 const outcomeMetrics = {
   filesChangedCount:      filesChanged.length,
-  routesAdded:            (backendOutput && backendOutput.routes && backendOutput.routes.length) || 0,
+  // The route contract lists every route the session touched; only change "new" is an added route.
+  routesAdded:            ((backendOutput && backendOutput.routes) || []).filter(r => r && r.change !== 'modified').length,
+  routesModified:         ((backendOutput && backendOutput.routes) || []).filter(r => r && r.change === 'modified').length,
   testCoveragePercent:    (testingOutput && testingOutput.coverage && testingOutput.coverage.percentCovered) || 0,
   contractViolations:     (bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.violations && bridgeOutput.contractValidation.violations.length) || 0,
   securityBlocks:         (gitOutput && gitOutput.blockedBy && gitOutput.blockedBy.length) || 0,

@@ -32,8 +32,9 @@ const draft = await agent(
   projectMapBrief +
   `Task text:\n"${taskText}"\n\n` +
   `1. Signals (read only what exists; never invent sources):\n` +
-  `   - SRE feedback from the previous cycle: recent files in ${AGENTS_DIR}/agents/sre/vault/diagnostics/ and ` +
-  `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as requirements get-decisions sre feedback 5\n` +
+  `   - SRE feedback from earlier sessions on THIS project only: cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as requirements ` +
+  `get-feedback "${projectPath}" 5 (prints the matching session ids and their feedback). For detail, read only ` +
+  `${AGENTS_DIR}/agents/sre/vault/diagnostics/<sessionId>.md for those ids. Never apply feedback from other projects.\n` +
   `   - Project signals in "${projectPath}": logs, issue/bug-report exports, user-feedback files (e.g. logs/, *.log, ISSUES.md, feedback/)\n` +
   `   - Onboarding context: cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as requirements get-decisions requirements project-context 5\n` +
   `   For symptoms in logs or bug reports, trace symptom -> root cause -> evidence.\n` +

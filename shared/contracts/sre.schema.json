@@ -89,6 +89,9 @@
         "routesAdded": {
           "type": "number"
         },
+        "routesModified": {
+          "type": "number"
+        },
         "testCoveragePercent": {
           "type": "number"
         },

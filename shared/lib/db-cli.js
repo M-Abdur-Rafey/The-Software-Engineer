@@ -12,6 +12,7 @@
  *   log-agent-run <sessionId> <agentName> <status> [outputJson] [errorText]
  *   log-session-event <agentName> <sessionId> <phase> <status> [message] [durationMs]
  *   get-decisions <agentName> <topic> [limit]       (output capped)
+ *   get-feedback <projectPath> [limit]              SRE feedback from sessions on this project only
  *   save-decision <agentName> <sessionId> <topic> <summary> [rationale]
  *   check-onboarded <projectPath>
  *   mark-onboarded <projectPath> <techStack> <summary>
@@ -135,6 +136,29 @@ try {
         created_at: r.created_at,
       }));
       console.log(capRows(trimmed).json);
+      break;
+    }
+
+    // SRE feedback from earlier sessions on this project only: the sessions table knows which
+    // project each session ran on, the sre knowledge.db only the session id.
+    case 'get-feedback': {
+      const [projectPath, limit = '5'] = cmdArgs;
+      assertRead(caller, 'sre');
+      const norm = (p) => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      const orch = openDb('orchestrator');
+      const sessions = orch.prepare('SELECT id, project_path FROM sessions').all()
+        .filter(s => norm(s.project_path) === norm(projectPath)).map(s => s.id);
+      orch.close();
+      let feedback = [];
+      if (sessions.length) {
+        const db = openDb('sre');
+        feedback = db.prepare(
+          `SELECT session_id, summary, created_at FROM decisions WHERE topic = 'feedback' AND session_id IN (${sessions.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT ?`
+        ).all(...sessions, parseInt(limit, 10));
+        db.close();
+      }
+      const capped = capRows(feedback.map(f => ({ session_id: f.session_id, summary: truncate(f.summary, 500), created_at: f.created_at })));
+      console.log(JSON.stringify({ sessions: [...new Set(capped.rows.map(f => f.session_id))], feedback: capped.rows }));
       break;
     }
 

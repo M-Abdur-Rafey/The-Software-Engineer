@@ -5,7 +5,8 @@ Lines of code generated is NOT a success metric. Per session, report:
 | Metric | Source |
 |--------|--------|
 | filesChangedCount | union of all domain `filesChanged[]` |
-| routesAdded | `BackendOutput.routes[]` length |
+| routesAdded | `BackendOutput.routes[]` with `change` other than "modified" |
+| routesModified | `BackendOutput.routes[]` with `change: "modified"` |
 | testCoveragePercent | `TestingOutput.coverage.percentCovered` |
 | contractViolations | `MCPBridgeOutput.contractValidation.violations[]` length |
 | securityBlocks | gitdevops `blockedBy[]` length |
