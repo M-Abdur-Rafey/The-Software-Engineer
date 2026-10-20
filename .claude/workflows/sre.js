@@ -10,6 +10,13 @@ export const meta = {
 // args: { sessionId, taskText, projectPath, agentsDir, backendOutput?, frontendOutput?,
 //         databaseOutput?, testingOutput?, callsOutput?, ponytailOutput?, bridgeOutput?, gitOutput? }
 const AGENTS_DIR     = (args && args.agentsDir)      || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId      = (args && args.sessionId)      || 'no-session'
 const taskText       = (args && args.taskText)       || ''
 const projectPath    = (args && args.projectPath)    || ''
@@ -61,6 +68,7 @@ const diagnosis = await agent(
   `${AGENTS_DIR}/agents/sre/vault/runbooks/root-cause-analysis.md and ` +
   `${AGENTS_DIR}/agents/sre/vault/runbooks/iac-review.md\n\n` +
   `Task: "${taskText}"\nProject: "${projectPath}"\n\n` +
+  projectMapBrief +
   `Session outcome metrics (already computed):\n${JSON.stringify(outcomeMetrics, null, 2)}\n\n` +
   `Session summary:\n` +
   `- git: ${JSON.stringify(gitOutput && { status: gitOutput.status, branch: gitOutput.branch, blockedBy: gitOutput.blockedBy })}\n` +

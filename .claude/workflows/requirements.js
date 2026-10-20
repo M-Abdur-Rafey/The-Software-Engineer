@@ -8,6 +8,13 @@ export const meta = {
 
 // args: { sessionId, taskText, projectPath, agentsDir, clarifications? }
 const AGENTS_DIR  = (args && args.agentsDir)   || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId   = (args && args.sessionId)   || 'no-session'
 const taskText    = (args && args.taskText)    || ''
 const projectPath = (args && args.projectPath) || ''
@@ -22,6 +29,7 @@ const draft = await agent(
   `First read your instructions and formats: ${AGENTS_DIR}/agents/requirements/CLAUDE.md, ` +
   `${AGENTS_DIR}/agents/requirements/vault/signals/signal-synthesis.md, ${AGENTS_DIR}/agents/requirements/vault/user-stories/story-format.md ` +
   `and ${AGENTS_DIR}/agents/requirements/vault/specs/spec-template.md.\n\n` +
+  projectMapBrief +
   `Task text:\n"${taskText}"\n\n` +
   `1. Signals (read only what exists; never invent sources):\n` +
   `   - SRE feedback from the previous cycle: recent files in ${AGENTS_DIR}/agents/sre/vault/diagnostics/ and ` +

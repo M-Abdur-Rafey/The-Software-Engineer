@@ -14,6 +14,13 @@ export const meta = {
 // ponytail simplified. This agent is ADVISORY: it never blocks the pipeline.
 // Vendored from the "ponytail" philosophy (github.com/DietrichGebert/ponytail, MIT).
 const AGENTS_DIR     = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId      = (args && args.sessionId)      || 'no-session'
 const taskText       = (args && args.taskText)       || ''
 const projectPath    = (args && args.projectPath)    || ''
@@ -86,6 +93,7 @@ const result = await agent(
   `(lite = suggest only, edit nothing; full = enforce the ladder; ultra = YAGNI extremist, challenge the requirement itself).\n\n` +
   `Task that produced this code: "${taskText}"\n` +
   `Project: ${projectPath}\n` +
+  projectMapBrief +
   `Files generated/changed this session (review ONLY these):\n${JSON.stringify(filesChanged, null, 2)}\n\n` +
   `Decision ladder to judge against: read ${AGENTS_DIR}/agents/ponytail/vault/philosophy/decision-ladder.md and modes.md (if missing: reuse > stdlib > native > installed dep > one-liner > minimal code)\n\n` +
   `NEVER touch what ${AGENTS_DIR}/agents/ponytail/vault/philosophy/never-simplify.md protects (if missing: input validation, error handling, security, accessibility, or explicitly requested features)\n\n` +

@@ -21,7 +21,7 @@ Run from the repo root (`~/.agents` once installed):
 npm install              # deps incl. native better-sqlite3 + @modelcontextprotocol/sdk
 npm run init             # bootstrap + seed + verify — REQUIRED after changing agents/contracts/seed notes
 npm run verify           # health check: DBs/tables, vault INDEX.md, contract schemas, shared lib, workflow hidden-char scan (same as `/software-engineer test`)
-npm test                 # verify + MCP protocol test + sysdocs, uitest and persist tests
+npm test                 # verify + MCP protocol test + sysdocs, uitest, persist, scan and projectmap tests
 npm run test:mcp         # MCP stdio protocol test only (tests/mcp-protocol.mjs)
 npm run test:sysdocs     # System Docs CLI end-to-end test only (tests/sysdocs.test.js, throwaway git repo)
 npm run mcp              # run the MCP server on stdio
@@ -41,6 +41,8 @@ Workflow({ scriptPath: '~/.agents/.claude/workflows/orchestrate.js',
 Individual domain workflows (`requirements.js`, `backend.js`, `frontend.js`, `database.js`, `testing.js`, `calls.js`, `ponytail.js`, `gitdevops.js`, `mcpbridge.js`, `sre.js`, `onboard.js`, `codegraph.js`) can be invoked the same way.
 
 `codegraph.js` sits outside the pipeline (driven by `/software-engineer graph` and `start` = onboard → codegraph): it builds a lean Obsidian graph of only entities that exist in the target project's code, capped per node type (`maxNodesPerType`, default 60), written to `agents/orchestrator/vault/projects/<name>/graph/` (git-ignored). The root `skill.md` is only a pointer to `skills/software-engineer/SKILL.md`.
+
+**Project map** (`shared/lib/projectmap.js`, change 4 of `design/agent-consolidation.md`): one compact note per target project, at most 3000 characters (stack, layout, conventions, modules, routes, tables, run commands), at `agents/orchestrator/vault/projects/<name>/map.md` (git-ignored). Onboarding builds it: one `discover` agent, then the backend/frontend/database scans in parallel, skipping layers the project lacks (at most 4 agents); the map, the per-domain project notes, the decisions and the onboarded mark are persistOps. The skill reads the map (`projectmap.js show <projectPath>`) and passes it as `projectMap`; `orchestrate.js` hands it (or its path, `projectMapFile`) to every domain workflow except the bridge, and each prompt includes it through `projectMapBrief`. After a committed session, orchestrate adds a `{ map, update }` persist op: the routes and tables from the contracts plus the reviewers' `mapNotes` (layout, modules, conventions, run). The map is never edited by an agent directly.
 
 ## System Docs (in progress — `design/system-docs.md`)
 

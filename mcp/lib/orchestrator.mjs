@@ -11,9 +11,13 @@ import { fileURLToPath } from 'url'
 import { dirname, join, resolve, sep } from 'path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs'
 import { execFileSync } from 'child_process'
+import { createRequire } from 'module'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..', '..') // mcp/lib -> install root
+
+// The shared project map (shared/lib/projectmap.js), built by onboarding in Claude Code.
+const projectmap = createRequire(import.meta.url)('../../shared/lib/projectmap.js')
 
 const AGENTS = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls']
 const CONTRACTS = ['task', 'backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls']
@@ -105,6 +109,8 @@ const FILES_SCHEMA = {
 
 async function runDomain(agent, { task, projectPath, prior, clarifications, model }) {
   const ctx = vaultContext(agent)
+  let map = null
+  try { map = projectmap.read(projectPath, ROOT) } catch { map = null }
   const out = await model.generate({
     system: DOMAIN_SYS[agent],
     tier: 'main',
@@ -112,6 +118,7 @@ async function runDomain(agent, { task, projectPath, prior, clarifications, mode
     prompt:
       `Task: ${task}\nProject root: ${projectPath}\n` +
       `Preferences: ${JSON.stringify(clarifications || {})}\n\n` +
+      (map ? `Project map (trust it instead of exploring the repo):\n${map}\n\n` : '') +
       `Team knowledge (vault index for ${agent}):\n${ctx}\n\n` +
       `Prior domain outputs (summaries): ${JSON.stringify(
         Object.fromEntries(Object.entries(prior).map(([k, v]) => [k, v.summary]))

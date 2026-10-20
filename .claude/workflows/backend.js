@@ -12,6 +12,13 @@ export const meta = {
 // folder-structure used to do in sequence is one author's checklist; one reviewer who never sees
 // the author's reasoning checks it.
 const AGENTS_DIR      = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId       = (args && args.sessionId)       || 'no-session'
 const taskText        = (args && args.taskText)        || ''
 const projectPath     = (args && args.projectPath)     || ''
@@ -120,6 +127,7 @@ const build = await agent(
   `You are the Backend author. You plan, design the data access, and write the code for this task, then check your own work ` +
   `against the checklist before returning. A separate reviewer will check it after you.\n\n` +
   `Task: "${taskText}"\nProject: ${projectPath}\n` +
+  projectMapBrief +
   `Database tables available: ${tableContext}\n` +
   `Architecture preferences (from the user, follow exactly): ${archBrief}\n\n` +
   `Requirements spec:\n${spec}\n\n` +
@@ -161,6 +169,7 @@ phase('Review')
 const review = await agent(
   `You are the Backend reviewer. You did not write this code; review it with fresh eyes.\n\n` +
   `Project: ${projectPath}\nTask: "${taskText}"\n` +
+  projectMapBrief +
   `Files changed this session: ${JSON.stringify(authored)}\n` +
   `Read them (and git -C "${projectPath}" diff for files that existed before).\n\n` +
   `Requirements spec:\n${spec}\n\n` +
@@ -169,21 +178,21 @@ const review = await agent(
   `2. Fix violations in place when the fix is behaviour-preserving or restores what the spec requires (e.g. missing validation, ` +
   `wrong error shape, missing JSDoc or README). Do not add features the spec doesn't ask for.\n` +
   `3. Check that routes.js (or the route registration) matches these declared contracts: ${JSON.stringify(build.routeContracts.map(r => `${r.method} ${r.path}`))}.\n\n` +
-  `A checklist item that one of the spec's Decisions overrides is not a violation: leave it out (the author records it in specConflicts).
-
-` +
-  `Return { violations: [{ file, rule, issue, fixed }], filesFixed: [string], filesCreated: [string], contractMismatches: [string] }.`,
+  `A checklist item that one of the spec's Decisions overrides is not a violation: leave it out (the author records it in specConflicts).\n\n` +
+  `mapNotes: only if this session added, moved or removed a folder or module, changed a project-wide convention, or changed how to install, run or test the project, one line each for the project map: [{ section: "Layout"|"Modules"|"Conventions"|"Run", note }] (e.g. "src/features/orders/: order routes, controller, service"). Routes and tables are recorded automatically. Otherwise [].\n` +
+  `Return { violations: [{ file, rule, issue, fixed }], filesFixed: [string], filesCreated: [string], contractMismatches: [string], mapNotes }.`,
   {
     label: 'reviewer',
     phase: 'Review',
     schema: {
       type: 'object',
-      required: ['violations', 'filesFixed', 'filesCreated', 'contractMismatches'],
+      required: ['violations', 'filesFixed', 'filesCreated', 'contractMismatches', 'mapNotes'],
       properties: {
         violations:         { type: 'array', items: { type: 'object' } },
         filesFixed:         { type: 'array', items: { type: 'string' } },
         filesCreated:       { type: 'array', items: { type: 'string' } },
         contractMismatches: { type: 'array', items: { type: 'string' } },
+        mapNotes: { type: 'array', items: { type: 'object', required: ['section', 'note'], properties: { section: { type: 'string', enum: ['Layout', 'Modules', 'Conventions', 'Run'] }, note: { type: 'string' } } } },
       },
     },
   }
@@ -217,6 +226,7 @@ return {
   filesChanged:   allFiles,
   contractExports,
   specConflicts:  build.specConflicts,
+  mapNotes:       review.mapNotes || [],
   errors:         [
     ...unfixed.map(v => `${v.file}: ${v.issue}`),
     ...review.contractMismatches.map(m => `contract: ${m}`),

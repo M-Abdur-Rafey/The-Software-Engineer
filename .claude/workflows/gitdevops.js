@@ -7,6 +7,13 @@ export const meta = {
 }
 
 const AGENTS_DIR    = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId     = (args && args.sessionId)    || 'no-session'
 const taskText      = (args && args.taskText)     || ''
 const projectPath   = (args && args.projectPath)  || ''
@@ -78,6 +85,7 @@ phase('Scan + Commit')
 const quoted = filesChanged.map(f => `"${f}"`).join(' ')
 const result = await agent(
   `You are the Git/DevOps Agent for the project at ${projectPath}.\n\n` +
+  projectMapBrief +
   `1. Run the security scan: node "${AGENTS_DIR}/shared/lib/scan.js" "${projectPath}" ${quoted}\n` +
   `   It prints { passed, securityFlags, blockingFailures, notFound }. Return that object unchanged as "scan". Its result ` +
   `is final: never edit code to make it pass and never commit when it fails.\n` +

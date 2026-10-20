@@ -7,6 +7,13 @@ export const meta = {
 }
 
 const AGENTS_DIR    = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId     = (args && args.sessionId)    || 'no-session'
 const taskText      = (args && args.taskText)     || ''
 const projectPath   = (args && args.projectPath)  || ''
@@ -63,6 +70,7 @@ const collectionPath = `${AGENTS_DIR}/agents/testing/vault/collections/${feature
 
 const collection = await agent(
   `You are the Testing Agent. Generate a Postman Collection v2.1 JSON that tests ONLY what this session changed.\n\n` +
+  projectMapBrief +
   (newRoutes.length ? `NEW routes (full suite):\n${JSON.stringify(newRoutes, null, 2)}\n\n` : '') +
   (modifiedRoutes.length ? `MODIFIED routes (test the changeSummary only):\n${JSON.stringify(modifiedRoutes, null, 2)}\n\n` : '') +
   (userStories.length

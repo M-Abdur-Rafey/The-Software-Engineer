@@ -93,9 +93,11 @@ Do these in order, reporting progress as you go:
    ```javascript
    Workflow({
      scriptPath: `<install-path>/.claude/workflows/onboard.js`,
-     args: { sessionId: "start-onboard", projectPath: "<current working directory>", agentsDir: "<install-path>" }
+     args: { sessionId: "start-onboard", projectPath: "<current working directory>", agentsDir: "<install-path>", deferPersist: true }
    })
    ```
+   Then record what it found (the project map, per-domain notes, the onboarded mark) with no agent:
+   `node <install-path>/shared/lib/persist.js "<output-file from the completion notice>"`
 
 3. **Build the code knowledge graph** (reuses the scan from step 2):
    ```javascript
@@ -281,9 +283,10 @@ Summarise what you're going to do in one short paragraph before starting the wor
 
 1. `node <install-path>/shared/lib/db-cli.js init-session "<task text>" "<current working directory>"` prints `{ sessionId, startedAt }`.
 2. `node <install-path>/shared/lib/db-cli.js check-onboarded "<current working directory>"` prints `{ onboarded, techStack }`.
-3. Build the classification from Step 4c: `{ requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType (feat|fix|chore|test|docs|refactor|security), taskSlug (lowercase kebab-case, max 30 chars) }`.
+3. `node <install-path>/shared/lib/projectmap.js show "<current working directory>"` prints the project map (stack, layout, conventions, routes, tables, commands), or nothing before the first onboarding.
+4. Build the classification from Step 4c: `{ requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType (feat|fix|chore|test|docs|refactor|security), taskSlug (lowercase kebab-case, max 30 chars) }`.
 
-Pass all three into the workflow (below). If any step fails, leave those fields out; the workflow falls back to doing it itself.
+Pass all four into the workflow (below); leave `projectMap` out when step 3 printed nothing. If any step fails, leave those fields out; the workflow falls back to doing it itself.
 
 Now collect all the user's answers into a preferences object and invoke the workflow:
 
@@ -297,6 +300,7 @@ Workflow({
     onboarded: <true|false from check-onboarded>,
     techStack: "<from check-onboarded, or null>",
     classification: { requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType, taskSlug },
+    projectMap: "<output of projectmap.js show, verbatim>",
     deferBookkeeping: true,   // Step 6 records the session with shared/lib/persist.js, no agent needed
     projectPath: "<current working directory>",
     agentsDir: "<install-path>",
@@ -485,9 +489,16 @@ Workflow({
   args: {
     sessionId: "manual-onboard",
     projectPath: "<current working directory>",
-    agentsDir: "<install-path>"
+    agentsDir: "<install-path>",
+    deferPersist: true
   }
 })
+```
+
+Then record the results (project map, per-domain notes, decisions, the onboarded mark) with no agent:
+
+```bash
+node <install-path>/shared/lib/persist.js "<output-file from the completion notice>"
 ```
 
 Tell the user what was found: tech stack, number of routes, components, tables.

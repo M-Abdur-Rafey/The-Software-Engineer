@@ -8,6 +8,13 @@ export const meta = {
 }
 
 const AGENTS_DIR      = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId       = (args && args.sessionId)       || 'no-session'
 const taskText        = (args && args.taskText)        || ''
 const projectPath     = (args && args.projectPath)     || ''
@@ -96,6 +103,7 @@ const built = await agent(
   `You are the Calls author: design the call flow, build the telephony integration, and write the voice scripts for this ` +
   `task, then check your own work. An independent compliance reviewer will check it after you.\n\n` +
   `Task: "${taskText}"\nProject: ${projectPath}\n${providerBrief}\nDatabase tables available: ${tableContext}\n\n` +
+  projectMapBrief +
   `Requirements spec:\n${spec}\n\n` +
   `Context to read first: prior decisions (cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls get-decisions calls telephony-patterns 5), ` +
   `${VAULT}/INDEX.md and the notes it lists that apply, ${VAULT}/providers/twilio-setup.md (if missing: the twilio npm package, ` +
@@ -171,6 +179,7 @@ phase('Compliance')
 const compliance = await agent(
   `You are the Calls compliance reviewer. You did not build this; review it independently.\n\n` +
   `Task: "${taskText}"\n${providerBrief}\nProject: ${projectPath}\n` +
+  projectMapBrief +
   `Files built: ${JSON.stringify(uniquePaths([...integration.filesCreated, ...integration.filesUpdated]))}\n` +
   `Call flow: ${JSON.stringify(flow)}\n` +
   `Voice scripts: ${JSON.stringify(scripts.scripts.map(v => ({ id: v.id, text: v.text })))}\n` +

@@ -243,6 +243,8 @@ flowchart TD
 
 Frontend, Testing, and Calls run **in parallel** once the backend contract exists. Frontend-only tasks still run the frontend agent. The System Docs steps (purple, plus the docs update and sync after the bridge) only run when the project has `docs/system/`; without it the pipeline goes straight from onboarding to requirements.
 
+Onboarding also writes a **project map**: one short note (at most 3000 characters) with the stack, folder layout, conventions, main modules, routes, tables and run commands. Every agent gets it in its prompt instead of exploring the repo again, and it is updated after each committed session with the new routes, tables and any structural changes.
+
 | Agent | Icon | Does |
 |-------|------|------|
 | **Impact analyst** | 🧭 | System Docs projects only. Before any code, maps the task to modules, lists every module that uses what will change and how it could break, records the chain reaction in plain language, and asks about any decision that isn't recorded. Stops for your answers if a target module's doc isn't approved |

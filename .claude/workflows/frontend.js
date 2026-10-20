@@ -10,6 +10,13 @@ export const meta = {
 }
 
 const AGENTS_DIR         = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId          = (args && args.sessionId)          || 'no-session'
 const taskText           = (args && args.taskText)           || ''
 const projectPath        = (args && args.projectPath)        || ''
@@ -103,6 +110,7 @@ const design = await agent(
   `You are the Frontend designer. You design with the eye of the great masters — da Vinci's composition and sfumato, the ` +
   `Bauhaus, Dieter Rams's restraint — and you turn that vision into concrete views. You write no code.\n\n` +
   `Task: "${taskText}"\nProject: ${projectPath}\n` +
+  projectMapBrief +
   `USER DESIGN PREFERENCES (honour these — the vision serves them, never overrides them):\n${designBrief}\n\n` +
   `Requirements spec:\n${spec}\n\n` +
   `Read first: ${VAULT}/art-direction/masters-and-principles.md, color-and-light.md, composition-and-flow.md, ` +
@@ -355,6 +363,7 @@ const built = await agent(
   `You are the Frontend author. Build the components, API files, wiring and state for this task, to the design and the ` +
   `checklist, then check your own work before returning. A separate reviewer will check it after you.\n\n` +
   `Task: "${taskText}"\nProject: ${projectPath}\n` +
+  projectMapBrief +
   `Backend contract exports (routes touched this session): ${JSON.stringify(contractExports)}\n\n` +
   `Requirements spec:\n${spec}\n` +
   `${artContext}${threeDContext}\n` +
@@ -396,6 +405,7 @@ const review = await agent(
   `You are the Frontend reviewer. You did not build this; review it with fresh eyes, with the eye of a master and of a ` +
   `security auditor.\n\n` +
   `Task: "${taskText}"\nProject: ${projectPath}\n` +
+  projectMapBrief +
   `Files built this session (review and refine ONLY these): ${JSON.stringify(builtFiles)}\n` +
   `Requirements spec:\n${spec}\n` +
   `${artContext}\n` +
@@ -407,17 +417,16 @@ const review = await agent(
   `3. Security: check each security rule. Fix a violation in place when the fix is unambiguous (e.g. move a token from storage ` +
   `into the in-memory store); otherwise report it. Report only what remains after your fixes.\n` +
   `Do NOT change functionality, API routes or wiring beyond what a fix requires.\n\n` +
-  `A checklist item that one of the spec's Decisions overrides is not a violation (security rules are never overridden): leave it out (the author records it in specConflicts).
-
-` +
+  `A checklist item that one of the spec's Decisions overrides is not a violation (security rules are never overridden): leave it out (the author records it in specConflicts).\n\n` +
   `Return { cohesionScore: number (0-10), refinementsApplied: [{file, change}], recommendations: [string], verdict: string, ` +
-  `securityFlags: [{severity: "error"|"warning"|"info", rule, location, message}], filesFixed: [string] }.`,
+  `mapNotes: only if this session added, moved or removed a folder or module, changed a project-wide convention, or changed how to install, run or test the project, one line each for the project map: [{ section: "Layout"|"Modules"|"Conventions"|"Run", note }] (e.g. "src/features/orders/: order routes, controller, service"). Routes and tables are recorded automatically. Otherwise [].\n` +
+  `securityFlags: [{severity: "error"|"warning"|"info", rule, location, message}], filesFixed: [string], mapNotes }.`,
   {
     label: 'reviewer',
     phase: 'Review',
     schema: {
       type: 'object',
-      required: ['cohesionScore', 'refinementsApplied', 'verdict', 'securityFlags', 'filesFixed'],
+      required: ['cohesionScore', 'refinementsApplied', 'verdict', 'securityFlags', 'filesFixed', 'mapNotes'],
       properties: {
         cohesionScore:      { type: 'number' },
         refinementsApplied: { type: 'array', items: { type: 'object', properties: { file: { type: 'string' }, change: { type: 'string' } } } },
@@ -425,6 +434,7 @@ const review = await agent(
         verdict:            { type: 'string' },
         securityFlags:      { type: 'array' },
         filesFixed:         { type: 'array', items: { type: 'string' } },
+        mapNotes: { type: 'array', items: { type: 'object', required: ['section', 'note'], properties: { section: { type: 'string', enum: ['Layout', 'Modules', 'Conventions', 'Run'] }, note: { type: 'string' } } } },
       },
     },
   }
@@ -466,5 +476,6 @@ return {
     recommendations: atelier.recommendations || [],
   },
   specConflicts: built.specConflicts,
+  mapNotes:      review.mapNotes || [],
   errors:       errorFlags.map(f => `${f.location}: ${f.message}`),
 }

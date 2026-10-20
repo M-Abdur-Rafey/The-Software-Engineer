@@ -11,6 +11,13 @@ export const meta = {
 // schema-validator and query-optimizer become one author's checklist and one independent reviewer.
 // The old chain also left the optimizer's indexes out of the migration file it never rewrote.
 const AGENTS_DIR     = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+
+// The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
+const projectMapBrief = (args && args.projectMap)
+  ? `Project map (trust it; open only the files you need):\n${args.projectMap}\n\n`
+  : (args && args.projectMapFile)
+    ? `Project map: read ${args.projectMapFile} first if it exists, and trust it instead of exploring the repo.\n\n`
+    : ''
 const sessionId      = (args && args.sessionId)     || 'no-session'
 const taskText       = (args && args.taskText)      || ''
 const projectPath    = (args && args.projectPath)   || ''
@@ -88,6 +95,7 @@ const tableDesign = await agent(
   `You are the Database author. Design the tables and indexes this task needs, write the complete migration file, then check ` +
   `your own work against the checklist before returning. A separate reviewer will check it after you.\n\n` +
   `Task: "${taskText}"\nProject: ${projectPath}\n` +
+  projectMapBrief +
   `Database preferences (from the user, follow exactly): ${dbBrief}\n\n` +
   `Requirements spec:\n${spec}\n\n` +
   `Context to read first: prior decisions (cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database get-decisions database schema-design 5), ` +
@@ -132,28 +140,29 @@ phase('Review')
 const review = await agent(
   `You are the Database reviewer. You did not write this migration; review it with fresh eyes.\n\n` +
   `Project: ${projectPath}\nTask: "${taskText}"\n` +
+  projectMapBrief +
   `Migration file: find ${tableDesign.migrationFile} in the project's migrations folder and read it.\n\n` +
   `Requirements spec:\n${spec}\n\n` +
   CHECKLIST + `\n` +
   `1. Check the migration against every checklist item and the spec's Decisions.\n` +
   `2. Fix violations directly in the migration file (missing FKs or indexes, naming, types). Fix only what the checklist or spec requires.\n` +
   `3. Flag N+1 risks the schema invites.\n\n` +
-  `A checklist item that one of the spec's Decisions overrides is not a violation: leave it out (the author records it in specConflicts).
-
-` +
+  `A checklist item that one of the spec's Decisions overrides is not a violation: leave it out (the author records it in specConflicts).\n\n` +
   `Return { violations: [{ table, column, issue, severity: "error"|"warning", fixed }], migrationSQL: "<the final file content>", ` +
-  `schemaGraph: { nodes: [{ table }], edges: [{ from, to, fkColumn }] }, n1Risks: [string] }.`,
+  `mapNotes: only if this session added, moved or removed a folder or module, changed a project-wide convention, or changed how to install, run or test the project, one line each for the project map: [{ section: "Layout"|"Modules"|"Conventions"|"Run", note }] (e.g. "src/features/orders/: order routes, controller, service"). Routes and tables are recorded automatically. Otherwise [].\n` +
+  `schemaGraph: { nodes: [{ table }], edges: [{ from, to, fkColumn }] }, n1Risks: [string], mapNotes }.`,
   {
     label: 'reviewer',
     phase: 'Review',
     schema: {
       type: 'object',
-      required: ['violations', 'migrationSQL', 'schemaGraph', 'n1Risks'],
+      required: ['violations', 'migrationSQL', 'schemaGraph', 'n1Risks', 'mapNotes'],
       properties: {
         violations:   { type: 'array', items: { type: 'object' } },
         migrationSQL: { type: 'string' },
         schemaGraph:  { type: 'object' },
         n1Risks:      { type: 'array', items: { type: 'string' } },
+        mapNotes: { type: 'array', items: { type: 'object', required: ['section', 'note'], properties: { section: { type: 'string', enum: ['Layout', 'Modules', 'Conventions', 'Run'] }, note: { type: 'string' } } } },
       },
     },
   }
@@ -192,6 +201,7 @@ return {
   schemaGraph:   review.schemaGraph,
   n1Risks:       review.n1Risks,
   specConflicts: tableDesign.specConflicts,
+  mapNotes:      review.mapNotes || [],
   violations:    review.violations.map(v => `${v.table}.${v.column}: ${v.issue}${v.fixed ? ' (fixed)' : ''}`),
   errors:        blockingViolations.map(v => `${v.table}.${v.column}: ${v.issue}`),
 }

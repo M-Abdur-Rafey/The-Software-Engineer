@@ -19,7 +19,11 @@ export const meta = {
 
 // args: { task, projectPath, agentsDir?, clarifications?: { designPreferences, archPreferences, dbPreferences, callPreferences },
 //         systemDocs?: false to skip System Docs even if docs/system exists, modules?: [target module names],
-//         sessionId?, startedAt?, onboarded?, techStack?, classification?, deferBookkeeping? }
+//         sessionId?, startedAt?, onboarded?, techStack?, classification?, deferBookkeeping?, projectMap? }
+//
+// projectMap: the project's map (shared/lib/projectmap.js), read by the skill. Every domain gets it so no
+// agent re-explores the repo; without it they get the map file's path. Onboarding builds it, and a
+// committed session merges its new routes, tables and the reviewers' notes back in (persistOps).
 //
 // Bookkeeping (design/agent-consolidation.md): the skill creates the session, checks onboarding and
 // classifies the task in the main session and passes the results in; a direct Workflow call falls back to
@@ -68,8 +72,15 @@ if (!sessionId) {
 }
 log(`Session ${sessionId} started`)
 
+// Every domain workflow returns its bookkeeping as persistOps (deferPersist: true); finish() adds the
+// session status and note, then either returns them to the skill or runs them with one agent.
+const persistOps = []
+const collect = (out) => { if (out && Array.isArray(out.persistOps)) persistOps.push(...out.persistOps); return out }
+
 // ─── Auto-onboard: first time this project is used, scan entire codebase ─────
 const isOnboardTask = taskText.trim().toUpperCase().startsWith('ONBOARD')
+
+let projectMap = (args && args.projectMap) || null
 
 if (!isOnboardTask && projectPath) {
   let onboarded = args && typeof args.onboarded === 'boolean' ? args.onboarded : null
@@ -89,15 +100,20 @@ if (!isOnboardTask && projectPath) {
     phase('Onboard')
     log('First use on this project — running deep codebase scan before starting work...')
     log('This happens once per project. All future sessions skip this step.')
-    await workflow(
+    const onboardOutput = collect(await workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/onboard.js` },
-      { sessionId, projectPath, agentsDir: AGENTS_DIR }
-    )
-    log('Onboarding complete — all agents now have full context for this project')
+      { sessionId, projectPath, agentsDir: AGENTS_DIR, deferPersist: true }
+    ))
+    if (onboardOutput && onboardOutput.projectMap) projectMap = onboardOutput.projectMap
+    log('Onboarding complete: project map built')
   } else {
     log(`Project already onboarded (${techStack || 'stack unknown'}) — skipping scan`)
   }
 }
+
+// Handed to every domain workflow: the map itself, or where to read it.
+const projectName = projectPath.replace(/[\\/]+$/, '').split(/[/\\]/).pop() || 'project'
+const MAP = { projectMap, projectMapFile: `${AGENTS_DIR}/agents/orchestrator/vault/projects/${projectName}/map.md` }
 
 const classification = (args && args.classification) || await agent(
   `Classify this software development task:\n"${taskText}"\n\n` +
@@ -218,10 +234,6 @@ if (args && args.systemDocs !== false && projectPath) {
   }
 }
 
-// Every domain workflow returns its bookkeeping as persistOps (deferPersist: true); finish() adds the
-// session status and note, then either returns them to the skill or runs them with one agent.
-const persistOps = []
-const collect = (out) => { if (out && Array.isArray(out.persistOps)) persistOps.push(...out.persistOps); return out }
 async function finish(result, status, note) {
   const ops = [...persistOps, { db: ['update-session-status', sessionId, status] }]
   if (note) ops.push({ write: `agents/orchestrator/vault/sessions/${sessionId}.md`, content: note })
@@ -255,7 +267,7 @@ let sreOutput      = null
 phase('Requirements')
 requirementsOutput = collect(await workflow(
   { scriptPath: `${AGENTS_DIR}/.claude/workflows/requirements.js` },
-  { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, clarifications }
+  { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, clarifications, ...MAP }
 ))
 log(`requirements → ${requirementsOutput && requirementsOutput.status} (${requirementsOutput && requirementsOutput.userStories && requirementsOutput.userStories.length} stories, ${requirementsOutput && requirementsOutput.spec && requirementsOutput.spec.openQuestions && requirementsOutput.spec.openQuestions.length} open questions)`)
 
@@ -264,7 +276,7 @@ if (classification.requiresDatabase) {
   phase('Database')
   databaseOutput = collect(await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/database.js` },
-    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null }
+    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null, ...MAP }
   ))
   log(`database → ${databaseOutput && databaseOutput.status}`)
 }
@@ -274,7 +286,7 @@ if (classification.requiresBackend) {
   phase('Backend')
   backendOutput = collect(await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/backend.js` },
-    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null }
+    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null, ...MAP }
   ))
   log(`backend → ${backendOutput && backendOutput.status}`)
 }
@@ -288,7 +300,7 @@ phase('Frontend + Testing + Calls')
   if (classification.requiresFrontend) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/frontend.js` },
-      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null }
+      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null, ...MAP }
     ))
   }
 
@@ -296,14 +308,14 @@ phase('Frontend + Testing + Calls')
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/testing.js` },
       { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput,
-        flowDirs: docs ? docs.targets.map(t => `${DOCS}/modules/${t}/flows`) : [] }
+        flowDirs: docs ? docs.targets.map(t => `${DOCS}/modules/${t}/flows`) : [], ...MAP }
     ))
   }
 
   if (classification.requiresCalls) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/calls.js` },
-      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null }
+      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null, ...MAP }
     ))
   }
 
@@ -337,6 +349,7 @@ if (backendOutput || frontendOutput || callsOutput || (databaseOutput && databas
       frontendOutput,
       callsOutput,
       databaseOutput,
+      ...MAP,
     }
   ))
   log(`ponytail → ${ponytailOutput && ponytailOutput.status} (${ponytailOutput && ponytailOutput.metrics && ponytailOutput.metrics.simplificationsApplied} applied, ~${ponytailOutput && ponytailOutput.metrics && ponytailOutput.metrics.estimatedLinesRemoved} lines removed)`)
@@ -395,6 +408,7 @@ gitOutput = collect(await workflow(
     databaseOutput,
     testingOutput,
     bridgeOutput,
+    ...MAP,
     extraFiles: docs ? ['docs/system'] : [],
     commitNotes: otherOwners.length
       ? `Affects other owners:\n${otherOwners.map(o => `- ${o.owner} (${o.module}): ${o.how}`).join('\n')}`
@@ -439,11 +453,28 @@ sreOutput = collect(await workflow(
     ponytailOutput,
     bridgeOutput,
     gitOutput,
+    ...MAP,
   }
 ))
 log(`sre → ${sreOutput && sreOutput.status} (${sreOutput && sreOutput.diagnostics && sreOutput.diagnostics.length} diagnostics, ${sreOutput && sreOutput.feedback && sreOutput.feedback.length} feedback items)`)
 
 const finalStatus = gitOutput && gitOutput.status === 'completed' ? 'completed' : 'failed'
+
+// Keep the project map current (design/agent-consolidation.md, change 4): once the code is committed, merge
+// in the routes and tables this session added or changed, and the reviewers' notes on layout, modules,
+// conventions and commands. Deterministic: persist.js runs it through shared/lib/projectmap.js.
+if (finalStatus === 'completed' && projectPath) {
+  const changedRoutes = ((backendOutput && backendOutput.routes) || []).filter(r => r && r.change)
+  const mapUpdate = {
+    routes: [
+      ...changedRoutes.map(r => ({ method: r.method, path: r.path, note: `${r.description || ''}${r.authRequired ? ' (auth)' : ''}`.trim() })),
+      ...((callsOutput && callsOutput.webhookRoutes) || []).map(r => ({ method: r.method, path: r.path, note: `telephony webhook${r.description ? `: ${r.description}` : ''}` })),
+    ],
+    tables: ((databaseOutput && databaseOutput.tables) || []).map(t => ({ name: t.name, columns: t.columns || [] })),
+    notes: [backendOutput, databaseOutput, frontendOutput, callsOutput].flatMap(o => (o && o.mapNotes) || []),
+  }
+  if (mapUpdate.routes.length || mapUpdate.tables.length || mapUpdate.notes.length) persistOps.push({ map: projectPath, update: mapUpdate })
+}
 // This run's summary goes into the orchestrator's own vault (git-ignored).
 const sessionNote = [
   `# Session ${sessionId}`, '',
