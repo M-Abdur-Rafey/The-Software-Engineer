@@ -24,10 +24,17 @@ const ROOT = path.join(__dirname, '..', '..');
 const DB_CLI = path.join(__dirname, 'db-cli.js');
 const VAULT_PATH = /^agents\/[a-z0-9-]+\/vault\//;
 
+// Accepts an ops array, an object with persistOps, or a Workflow output file
+// ({ result: { persistOps } }, result possibly a JSON string): the skill passes the run's
+// output file straight through, so nothing has to be re-typed by a model.
 function readOps(arg) {
   const text = arg === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(arg, 'utf8');
-  const ops = JSON.parse(text);
-  if (!Array.isArray(ops)) throw new Error('ops must be a JSON array');
+  let data = JSON.parse(text);
+  if (data && !Array.isArray(data) && data.result !== undefined) {
+    data = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+  }
+  const ops = Array.isArray(data) ? data : data && data.persistOps;
+  if (!Array.isArray(ops)) throw new Error('no ops found: expected an array, { persistOps }, or a workflow output with result.persistOps');
   return ops;
 }
 
@@ -72,4 +79,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { run };
+module.exports = { run, readOps };

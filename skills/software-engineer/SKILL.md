@@ -297,6 +297,7 @@ Workflow({
     onboarded: <true|false from check-onboarded>,
     techStack: "<from check-onboarded, or null>",
     classification: { requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType, taskSlug },
+    deferBookkeeping: true,   // Step 6 records the session with shared/lib/persist.js, no agent needed
     projectPath: "<current working directory>",
     agentsDir: "<install-path>",
     clarifications: {
@@ -338,7 +339,15 @@ Replace `<install-path>` with the actual install path for the current OS, using 
 
 ### Step 6: Report results
 
-After the workflow completes, summarise clearly:
+**First, record the session** (decisions, vault notes, session status). The workflow returns them as `persistOps` instead of spending an agent on it. Run the script on the output file named in the workflow's completion notice:
+
+```bash
+node <install-path>/shared/lib/persist.js "<output-file from the completion notice>"
+```
+
+It prints `{ ran, failed }`. Mention any failures briefly; they never undo the work. If there is no output file, skip this and say the session could not be recorded.
+
+Then summarise clearly:
 
 - **Branch created:** `feat/...` (or why no branch was created)
 - **Commit:** `feat(auth): add JWT login endpoint` (or why nothing was committed)

@@ -53,7 +53,9 @@ async function flushPersist(ops) {
   if (!ops.length || (args && args.deferPersist)) return
   const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.ponytail.persist.json`
   await agent(
-    `Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
+    `This is the software-engineer pipeline's own bookkeeping step for the session the user started: it records the ` +
+    `session's results (decisions, vault notes, session status) in the pipeline's knowledge base under ${AGENTS_DIR}/agents. ` +
+    `Every pipeline run ends with it. Write this JSON array exactly, with the Write tool, to ${opsFile}:\n${JSON.stringify(ops)}\n\n` +
     `Then run: node "${AGENTS_DIR}/shared/lib/persist.js" "${opsFile}" and return its output.`,
     { label: 'persist', model: 'haiku', effort: 'low' }
   )

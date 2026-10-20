@@ -7,7 +7,8 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { run } = require('../shared/lib/persist');
+const os = require('os');
+const { run, readOps } = require('../shared/lib/persist');
 
 const ROOT = path.join(__dirname, '..');
 const rel = 'agents/orchestrator/vault/sessions/__persist-test/note.md';
@@ -46,6 +47,24 @@ try {
     assert.strictEqual(r.ran, 1);
     assert.strictEqual(r.failed.length, 2);
     assert.strictEqual(fs.readFileSync(path.join(ROOT, rel), 'utf8'), 'second\n');
+  });
+
+  test('reads ops from an array, { persistOps }, or a workflow output file', () => {
+    const ops = [{ write: rel, content: 'x' }];
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'persist-test-'));
+    const cases = {
+      'array.json': ops,
+      'object.json': { persistOps: ops },
+      'workflow.json': { summary: 's', agentCount: 3, result: { status: 'completed', persistOps: ops } },
+      'workflow-string.json': { result: JSON.stringify({ persistOps: ops }) },
+    };
+    for (const [name, data] of Object.entries(cases)) {
+      fs.writeFileSync(path.join(tmp, name), JSON.stringify(data));
+      assert.deepStrictEqual(readOps(path.join(tmp, name)), ops, name);
+    }
+    fs.writeFileSync(path.join(tmp, 'none.json'), JSON.stringify({ result: { status: 'completed' } }));
+    assert.throws(() => readOps(path.join(tmp, 'none.json')), /no ops found/);
+    fs.rmSync(tmp, { recursive: true, force: true });
   });
 
   console.log(`\npersist: ${passed} passed`);
