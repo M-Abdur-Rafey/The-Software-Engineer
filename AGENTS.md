@@ -1,13 +1,13 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to Codex and other AI coding agents working with code in this repository. It mirrors `CLAUDE.md`: keep the two in sync. Names such as Claude Code, `.claude-plugin/` and `.claude/workflows/` are the real product and paths, not placeholders.
 
 ## What this repo is
 
 This directory **is** multi-agent software-engineering orchestration infrastructure — not an app to ship. Installed it lives at `~/.agents`; in development it is this repo (`MARafey/The-Software-Engineer`, default branch **master**). It ships two ways:
 
-- **Codex plugin** — `.Codex-plugin/{plugin,marketplace}.json` + `skills/software-engineer/SKILL.md` provide the `/software-engineer` slash command. The skill clones the repo to `~/.agents` on first run, then drives the Workflow scripts.
-- **Cross-IDE MCP server** — `mcp/server.mjs` exposes the orchestrator to any MCP editor (Cursor/Windsurf/VS Code). See `mcp/README.md`. Outside Codex the model layer needs `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in the editor's mcp.json env; `SE_MAIN_MODEL`/`SE_SUB_MODEL` override model choice.
+- **Claude Code plugin** — `.claude-plugin/{plugin,marketplace}.json` + `skills/software-engineer/SKILL.md` provide the `/software-engineer` slash command. The skill clones the repo to `~/.agents` on first run, then drives the Workflow scripts.
+- **Cross-IDE MCP server** — `mcp/server.mjs` exposes the orchestrator to any MCP editor (Cursor/Windsurf/VS Code). See `mcp/README.md`. Outside Claude Code the model layer needs `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in the editor's mcp.json env; `SE_MAIN_MODEL`/`SE_SUB_MODEL` override model choice.
 
 The skill file (`skills/software-engineer/SKILL.md`) is also the plugin's shell layer: it owns install-path resolution, first-run auto-install, and the command routing table — adding a new `/software-engineer <command>` means editing that routing table, not just adding a workflow.
 
@@ -21,7 +21,7 @@ Run from the repo root (`~/.agents` once installed):
 npm install              # deps incl. native better-sqlite3 + @modelcontextprotocol/sdk
 npm run init             # bootstrap + seed + verify — REQUIRED after changing agents/contracts/seed notes
 npm run verify           # health check: DBs/tables, vault INDEX.md, contract schemas, shared lib, workflow hidden-char scan (same as `/software-engineer test`)
-npm test                 # verify + MCP protocol test + sysdocs test
+npm test                 # verify + MCP protocol test + sysdocs, uitest and persist tests
 npm run test:mcp         # MCP stdio protocol test only (tests/mcp-protocol.mjs)
 npm run test:sysdocs     # System Docs CLI end-to-end test only (tests/sysdocs.test.js, throwaway git repo)
 npm run mcp              # run the MCP server on stdio
@@ -34,7 +34,7 @@ There is no build step and no linter. `node shared/lib/db-cli.js <cmd> ...` is t
 Invoke the orchestrator directly via the Workflow tool (always pass `agentsDir`):
 
 ```
-Workflow({ scriptPath: '~/.agents/.Codex/workflows/orchestrate.js',
+Workflow({ scriptPath: '~/.agents/.claude/workflows/orchestrate.js',
   args: { task: "...", projectPath: "C:/abs/path", agentsDir: "~/.agents" } })
 ```
 
@@ -77,22 +77,23 @@ Knowledge access is scoped by `shared/lib/acl.js`: agents call `db-cli --as <age
 
 Agents: an **orchestrator** (coordinator — decomposes, sequences, validates; never writes code) plus domain agents requirements/database/backend/frontend/testing/calls/ponytail/mcpbridge/gitdevops/sre. Each domain runs internal sub-agents — e.g. backend `flow-planner → data-architect → route-creator → prompt-engineer → code-standards → folder-structure`; frontend includes `layout-architect / positioning-specialist / contrast-specialist` for complex CSS. The backend **data-architect** enforces a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), and caching.
 
-**`agents/<name>/AGENTS.md` is the source of truth for each domain's behavior** — sub-agent pipeline, output contract shape, and standards live there, and agents read their own file at run time. Change domain logic there, not in the workflow scripts. The gitdevops file plus `agents/gitdevops/vault/security-scans/checklist.md` define the 10-point pre-commit scan: 7 checks are BLOCKING (committed `.env` files, hardcoded secrets/bearer tokens, `localhost` outside tests, auth tokens from `localStorage`, DB credentials in source, missing CSP on frontend changes) and there is deliberately no force-override.
+**`agents/<name>/CLAUDE.md` is the source of truth for each domain's behavior** — sub-agent pipeline, output contract shape, and standards live there, and agents read their own file at run time. Change domain logic there, not in the workflow scripts. The gitdevops file plus `agents/gitdevops/vault/security-scans/checklist.md` define the 10-point pre-commit scan: 7 checks are BLOCKING (committed `.env` files, hardcoded secrets/bearer tokens, `localhost` outside tests, auth tokens from `localStorage`, DB credentials in source, missing CSP on frontend changes) and there is deliberately no force-override.
 
 ACL read scope (`shared/lib/acl.js`): orchestrator/onboard/mcpbridge/gitdevops/sre read all; requirements reads +sre (feedback loop); database/backend/frontend/testing/calls all read +requirements (the spec), plus backend reads +database, frontend and testing read +backend, calls reads +backend+database; ponytail reads +backend+frontend+calls. Everyone writes only their own knowledge.
 
 SQLite schemas live in `init/bootstrap.js` — check columns there before writing queries. Every `agents/<name>/knowledge.db` gets `decisions`, `patterns`, `session_log`, `contracts` (plus `migrations` for database, `call_logs`/`campaigns` for calls); `shared/orchestrator.db` holds `sessions`, `agent_runs`, `contracts_registry`, `onboarded_projects`. Workflow args follow one pattern: `{ sessionId?, projectPath, agentsDir, clarifications? }`, where `clarifications` carries pre-answered user preferences (`designPreferences` / `archPreferences` / `dbPreferences` / `callPreferences` — see `skills/software-engineer/SKILL.md` for the shape) so the MCP path can run without interactive prompts.
 
-## Editing Workflow scripts (`.Codex/workflows/*.js`) — read first
+## Editing Workflow scripts (`.claude/workflows/*.js`) — read first
 
-These run in the Codex **Workflow tool sandbox**, not plain Node:
+These run in the Claude Code **Workflow tool sandbox**, not plain Node:
 
 - Structure is `export const meta = {...}` followed by a body executed inside an async wrapper, so top-level `await` and top-level `return` are valid. `node --check file.js` will wrongly flag the `return`/`export`; to syntax-check, strip `export ` and wrap the body in `(async()=>{ … })()`.
 - The sandbox has **no fs/Node APIs**, and `Date.now()` / `Math.random()` / argless `new Date()` throw. Do file/DB side effects by having an `agent()` run a shell command (db-cli) or use the Write tool inside the agent prompt.
 - **No emoji or invisible characters** (variation selectors like U+FE0F, zero-width, bidi marks, BOM). The Workflow approval dialog rejects them and the script becomes un-launchable; `verify` scans every workflow for this — write plain text like `WARNING`.
-- **LF line endings only.** Carriage returns count as hidden characters too, so CRLF scripts won't launch. `.gitattributes` forces `eol=lf` for `.Codex/workflows/*.js` (needed on Windows with `core.autocrlf=true`) and `verify` fails on any CR.
+- **LF line endings only.** Carriage returns count as hidden characters too, so CRLF scripts won't launch. `.gitattributes` forces `eol=lf` for `.claude/workflows/*.js` (needed on Windows with `core.autocrlf=true`) and `verify` fails on any CR.
 - **Never hardcode the install path.** Each workflow uses `const AGENTS_DIR = (args && args.agentsDir) || '<dev fallback>'`, and `orchestrate.js` threads `agentsDir` into every sub-workflow's args.
 - Model tiers via `agent(prompt, { model })`: mechanical command-runners use `'haiku'`, the 3D phase uses opus, everything else inherits the host model.
+- **Don't spend an agent on bookkeeping** (`design/agent-consolidation.md`). Agents that write code read their vault notes themselves; there are no load-context agents. Domain workflows return `db-cli` calls and vault-note writes as `persistOps` data. With `deferPersist` (set by `orchestrate.js`) the orchestrator collects them and runs them all with one agent through `shared/lib/persist.js`, which only writes under `agents/<name>/vault/`. Run on their own, workflows flush with one agent. The skill passes `sessionId`, `onboarded` and `classification` into `orchestrate.js`; agent fallbacks cover direct calls.
 
 ## Editing the init pipeline — keep it in sync
 
