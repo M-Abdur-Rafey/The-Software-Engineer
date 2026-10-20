@@ -11,7 +11,9 @@
 - **Validated by:** [[mcpbridge]]
 
 ## Internal pipeline (sub-agents)
-[[signal-analyst]] → [[story-writer]] → [[spec-author]]
+[[spec-author]]
+
+**Checklists:** [[signal-analyst]] · [[story-writer]]
 
 ## Knowledge
 Accumulated decisions and patterns live in this vault (see `INDEX.md`) and in `knowledge.db`.

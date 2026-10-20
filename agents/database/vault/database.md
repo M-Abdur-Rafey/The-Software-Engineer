@@ -11,7 +11,9 @@
 - **Validated by:** [[mcpbridge]]
 
 ## Internal pipeline (sub-agents)
-[[table-creator]] → [[schema-validator]] → [[query-optimizer]]
+[[database-author]] → [[database-reviewer]]
+
+**Checklists:** [[table-creator]] · [[schema-validator]] · [[query-optimizer]]
 
 ## Knowledge
 Accumulated decisions and patterns live in this vault (see `INDEX.md`) and in `knowledge.db`.

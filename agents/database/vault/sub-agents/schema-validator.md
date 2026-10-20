@@ -1,6 +1,5 @@
 # schema-validator
 
-Sub-agent of [[database]].
+Checklist of [[database]]: applied by [[database-author]], verified by [[database-reviewer]].
 
-**Does:** Checks foreign keys, constraints, and naming.
-**Hands off to:** [[query-optimizer]]
+**Covers:** No nullable primary keys, snake_case names, consistent timestamp and UUID types, referential integrity.

@@ -1,6 +1,5 @@
 # story-writer
 
-Sub-agent of [[requirements]].
+Checklist of [[requirements]]: applied by [[spec-author]].
 
-**Does:** Turns synthesized intent into small, testable user stories with Given/When/Then acceptance criteria.
-**Hands off to:** [[spec-author]]
+**Covers:** Small, testable user stories with Given/When/Then acceptance criteria.

@@ -32,9 +32,9 @@ Every column that references another table's primary key MUST have an explicit F
 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ```
 
-The schema-validator sub-agent rejects any table that references another table without declaring this constraint.
+The reviewer (schema-validator checklist) fixes or rejects any table that references another table without declaring this constraint.
 
-## Index rule (enforced by query-optimizer)
+## Index rule (query-optimizer checklist)
 
 Any column that appears in:
 - A `WHERE` clause
@@ -44,7 +44,7 @@ Any column that appears in:
 
 requires a `CREATE INDEX` statement in the same migration.
 
-## N+1 detection (enforced by query-optimizer)
+## N+1 detection (query-optimizer checklist)
 
 If a service pattern is detected that queries inside a loop, flag it as a violation and propose a batch query or JOIN.
 
@@ -73,9 +73,16 @@ named volumes, credentials via `.env` (never hardcoded), `restart: unless-stoppe
 
 ## Sub-agents
 
-1. **table-creator** — writes the CREATE TABLE + index SQL for the feature's entities
-2. **schema-validator** — checks all foreign keys, nullable columns, type consistency, and referential integrity
-3. **query-optimizer** — reviews expected query patterns, adds missing indexes, flags N+1 risks
+Two agents, split by independence rather than role (`design/agent-consolidation.md`):
+
+1. **author**: designs the tables and indexes, writes the complete migration file (indexes included), and checks it against the checklists below. It receives the requirements spec, whose Decisions are binding.
+2. **reviewer**: a fresh agent that reads only the migration file, the spec and the checklists, never the author's reasoning. It fixes violations directly in the file, flags N+1 risks, and returns the final SQL and the schema graph.
+
+Checklists (formerly separate sub-agents):
+
+- **table-creator**: `CREATE TABLE IF NOT EXISTS`, explicit foreign keys with `ON DELETE` behaviour, the user's preferences, the migration filename format.
+- **schema-validator**: no nullable primary keys, snake_case names, consistent timestamp and UUID types, referential integrity.
+- **query-optimizer**: the index and N+1 rules above; indexes live in the migration file itself.
 
 ## Output contract
 

@@ -2615,9 +2615,11 @@ const GRAPH = {
     role: 'Spec-driven front of the lifecycle — synthesizes signals (task text, logs, bug reports, user feedback, SRE diagnostics) into user stories and a specification every domain agent follows.',
     upstream: ['sre'], downstream: ['database', 'backend', 'frontend', 'testing', 'calls'], validators: ['mcpbridge'],
     subAgents: [
-      ['signal-analyst', 'Gathers and synthesizes unstructured signals: prior SRE feedback, logs, bug reports, user feedback, onboarding context.', 'story-writer'],
-      ['story-writer', 'Turns synthesized intent into small, testable user stories with Given/When/Then acceptance criteria.', 'spec-author'],
-      ['spec-author', 'Writes the specification: scope, out-of-scope, explicit decisions, open questions, and a per-domain task breakdown.', null],
+      ['spec-author', 'Gathers the signals, then writes the user stories, the specification and the per-domain tasks in one pass.', null],
+    ],
+    checklists: [
+      ['signal-analyst', 'Read only signals that exist: prior SRE feedback, logs, bug reports, user feedback, onboarding context; trace symptoms to root causes.'],
+      ['story-writer', 'Small, testable user stories with Given/When/Then acceptance criteria.'],
     ],
   },
   database: {
@@ -2625,9 +2627,13 @@ const GRAPH = {
     role: 'Designs tables and migrations, validates schema, optimizes queries.',
     upstream: [], downstream: ['backend', 'calls'], validators: ['mcpbridge'],
     subAgents: [
-      ['table-creator', 'Writes migration SQL for new/changed tables.', 'schema-validator'],
-      ['schema-validator', 'Checks foreign keys, constraints, and naming.', 'query-optimizer'],
-      ['query-optimizer', 'Adds indexes and flags N+1 / slow patterns.', null],
+      ['database-author', 'Designs tables and indexes and writes the complete migration file to the spec.', 'database-reviewer'],
+      ['database-reviewer', "Validates the migration against the spec and the checklists without the author's reasoning; fixes the file.", null],
+    ],
+    checklists: [
+      ['table-creator', 'CREATE TABLE IF NOT EXISTS, explicit foreign keys with ON DELETE behaviour, user preferences, migration filename format.'],
+      ['schema-validator', 'No nullable primary keys, snake_case names, consistent timestamp and UUID types, referential integrity.'],
+      ['query-optimizer', 'Indexes for WHERE/JOIN/ORDER BY columns on growing tables, inside the migration file; N+1 risks flagged.'],
     ],
   },
   backend: {
@@ -2753,7 +2759,7 @@ for (const [name, g] of Object.entries(GRAPH)) {
     writeNote(name, `sub-agents/${sub}.md`, [
       `# ${sub}`,
       '',
-      `Checklist of ${link(name)}: applied by ${link(g.subAgents[0][0])}, verified by ${link(g.subAgents[g.subAgents.length - 1][0])}.`,
+      `Checklist of ${link(name)}: applied by ${link(g.subAgents[0][0])}${g.subAgents.length > 1 ? `, verified by ${link(g.subAgents[g.subAgents.length - 1][0])}` : ''}.`,
       '',
       `**Covers:** ${role}`,
       '',

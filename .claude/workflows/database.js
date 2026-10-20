@@ -1,18 +1,21 @@
 export const meta = {
   name: 'database',
-  description: 'Database domain agent — table creation, schema validation, query optimization',
+  description: 'Database domain agent — one author writes the migration (tables + indexes) to the spec; one fresh reviewer validates and fixes it',
   phases: [
-    { title: 'Design Tables', detail: 'table-creator writes migration SQL' },
-    { title: 'Validate Schema', detail: 'schema-validator checks FKs and constraints' },
-    { title: 'Optimize Queries', detail: 'query-optimizer adds indexes, flags N+1' },
+    { title: 'Author', detail: 'Design tables and indexes, write the migration file, self-check' },
+    { title: 'Review', detail: 'Fresh reviewer: spec + migration + checklists only; fixes the file' },
   ],
 }
 
+// Split by independence, not by role (design/agent-consolidation.md, phase 2): table-creator,
+// schema-validator and query-optimizer become one author's checklist and one independent reviewer.
+// The old chain also left the optimizer's indexes out of the migration file it never rewrote.
 const AGENTS_DIR     = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
 const sessionId      = (args && args.sessionId)     || 'no-session'
 const taskText       = (args && args.taskText)      || ''
 const projectPath    = (args && args.projectPath)   || ''
 const dbPreferences  = (args && args.dbPreferences) || null
+const requirementsOutput = (args && args.requirementsOutput) || null
 
 // Build a plain-language schema brief from user's clarification answers
 const dbBrief = dbPreferences ? [
@@ -21,6 +24,27 @@ const dbBrief = dbPreferences ? [
   dbPreferences.dataSize              ? `Expected data size: ${dbPreferences.dataSize} — choose indexes accordingly` : null,
   dbPreferences.idType                ? `Primary key type: ${dbPreferences.idType === 'uuid' ? 'UUID (TEXT)' : 'auto-increment INTEGER'}` : null,
 ].filter(Boolean).join('. ') : 'Follow existing project conventions. Add created_at/updated_at timestamps and use UUIDs by default.'
+
+// The requirements spec, capped: its Decisions are binding for every domain agent.
+function specBrief(domain, max = 3000) {
+  const s = requirementsOutput && requirementsOutput.spec
+  if (!s) return '(no requirements spec for this session)'
+  const tasks = (requirementsOutput.tasks || []).filter(t => t.domain === domain)
+  const storyIds = new Set(tasks.map(t => t.storyId).filter(Boolean))
+  const stories = (requirementsOutput.userStories || []).filter(u => storyIds.has(u.id))
+  const list = (title, items) => (items && items.length ? `${title}:\n${items.map(x => `- ${x}`).join('\n')}` : '')
+  const text = [
+    s.summary ? `Summary: ${s.summary}` : '',
+    list('Decisions (binding)', (s.decisions || []).map(d => `${d.topic}: ${d.decision}`)),
+    list('In scope', s.inScope),
+    list('Out of scope', s.outOfScope),
+    list(`Tasks for ${domain}`, tasks.map(t => `${t.title}${t.description ? `: ${t.description}` : ''}`)),
+    list('Acceptance criteria', stories.flatMap(u => (u.acceptanceCriteria || []).map(c => `${u.id}: ${c}`))),
+  ].filter(Boolean).join('\n\n')
+  if (text.length <= max) return text
+  log(`spec brief for ${domain} capped at ${max} of ${text.length} chars; full spec: ${s.specFile || 'n/a'}`)
+  return `${text.slice(0, max)}\n[... ${text.length - max} more chars: read ${s.specFile || 'the full spec'}]`
+}
 
 // Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
 // (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
@@ -36,32 +60,41 @@ async function flushPersist(ops) {
   )
 }
 
+const VAULT = `${AGENTS_DIR}/agents/database/vault`
+const spec = specBrief('database')
 
-// ─── Phase: Design Tables ─────────────────────────────────────────────────────
-phase('Design Tables')
+// The rules every migration must meet: the author applies them, the reviewer verifies them.
+const CHECKLIST =
+  `Checklist (from agents/database/CLAUDE.md and the vault):\n` +
+  `- Tables (table-creator): CREATE TABLE IF NOT EXISTS; explicit FOREIGN KEY constraints for every reference, with ON DELETE ` +
+  `CASCADE or SET NULL as appropriate; the user's preferences (timestamps, soft deletes, ID type); migration filename ` +
+  `YYYYMMDD_NNN_description.sql in ${projectPath}/migrations/ (or the project's existing migrations folder).\n` +
+  `- Schema rules (schema-validator): no nullable primary keys; snake_case table and column names; created_at/updated_at stored ` +
+  `consistently with the project (INTEGER epoch ms by default, not TEXT); UUID primary keys as TEXT.\n` +
+  `- Indexes (query-optimizer, ${VAULT}/optimizations/index-guidelines.md): an index for every column used in WHERE/JOIN/ORDER BY ` +
+  `on tables that will grow, covering indexes where they clearly help; no N+1-prone shapes. Indexes go IN the migration file.\n` +
+  `- Precedence: the spec's Decisions are binding; if one conflicts with a rule above, follow the spec and report it in specConflicts.\n`
+
+// ─── Phase: Author ───────────────────────────────────────────────────────────
+phase('Author')
 
 const tableDesign = await agent(
-  `You are the table-creator sub-agent of the Database Agent.\n\n` +
-  `Task: "${taskText}"\n` +
-  `Project path: ${projectPath}\n` +
-  `Prior decisions: run cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database get-decisions database schema-design 5, and read ${AGENTS_DIR}/agents/database/vault/INDEX.md plus the notes it lists that are relevant to this task.\n\n` +
-  `DATABASE DESIGN PREFERENCES (from user clarification — follow these exactly):\n${dbBrief}\n\n` +
-  `Examine the project at ${projectPath} to understand existing tables and migrations.\n\n` +
-  `Design and write the SQL migration for the tables needed by this task.\n\n` +
-  `Requirements:\n` +
-  `- Use CREATE TABLE IF NOT EXISTS\n` +
-  `- All foreign keys must be explicit FOREIGN KEY constraints\n` +
-  `- Include ON DELETE CASCADE or ON DELETE SET NULL as appropriate\n` +
-  `- Migration filename format: YYYYMMDD_NNN_description.sql\n` +
-  `- Write the migration file to: ${projectPath}/migrations/<filename>\n` +
-  `- Apply all preferences above (timestamps, soft deletes, ID type)\n\n` +
-  `Return JSON: { migrationSQL: "<full SQL>", migrationFile: "<filename>", tables: [{ name, columns: [{name,type,nullable,primaryKey,foreignKey}], estimatedRows }] }`,
+  `You are the Database author. Design the tables and indexes this task needs, write the complete migration file, then check ` +
+  `your own work against the checklist before returning. A separate reviewer will check it after you.\n\n` +
+  `Task: "${taskText}"\nProject: ${projectPath}\n` +
+  `Database preferences (from the user, follow exactly): ${dbBrief}\n\n` +
+  `Requirements spec:\n${spec}\n\n` +
+  `Context to read first: prior decisions (cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database get-decisions database schema-design 5), ` +
+  `${VAULT}/INDEX.md and the notes it lists that apply, and the project's existing schema and migrations.\n\n` +
+  CHECKLIST + `\n` +
+  `Return { migrationSQL: "<the full SQL as written to the file>", migrationFile: "<filename>", tables: [{ name, columns: [{name,type,nullable,primaryKey,foreignKey}], estimatedRows }], ` +
+  `indexes: [{ table, columns, reason }], specConflicts: [string] }.`,
   {
-    label: 'table-creator',
-    phase: 'Design Tables',
+    label: 'author',
+    phase: 'Author',
     schema: {
       type: 'object',
-      required: ['migrationSQL', 'migrationFile', 'tables'],
+      required: ['migrationSQL', 'migrationFile', 'tables', 'indexes', 'specConflicts'],
       properties: {
         migrationSQL:  { type: 'string' },
         migrationFile: { type: 'string' },
@@ -71,80 +104,53 @@ const tableDesign = await agent(
             type: 'object',
             required: ['name', 'columns'],
             properties: {
-              name:           { type: 'string' },
-              columns:        { type: 'array' },
-              estimatedRows:  { type: ['number', 'null'] },
+              name:          { type: 'string' },
+              columns:       { type: 'array' },
+              estimatedRows: { type: ['number', 'null'] },
             },
           },
         },
+        indexes:       { type: 'array' },
+        specConflicts: { type: 'array', items: { type: 'string' } },
       },
     },
   }
 )
+log(`Author: ${tableDesign.tables.length} table(s), ${tableDesign.indexes.length} index(es), migration ${tableDesign.migrationFile}`)
 
-log(`Designed ${tableDesign.tables.length} table(s), migration: ${tableDesign.migrationFile}`)
+// ─── Phase: Review ───────────────────────────────────────────────────────────
+// Independent on purpose: the reviewer gets the spec, the migration file and the checklist,
+// never the author's reasoning.
+phase('Review')
 
-// ─── Phase: Validate Schema ───────────────────────────────────────────────────
-phase('Validate Schema')
-
-const schemaValidation = await agent(
-  `You are the schema-validator sub-agent of the Database Agent.\n\n` +
-  `Validate this schema:\n${tableDesign.migrationSQL}\n\n` +
-  `Tables designed: ${JSON.stringify(tableDesign.tables)}\n\n` +
-  `Check for:\n` +
-  `1. Every column referencing another table has an explicit FOREIGN KEY constraint\n` +
-  `2. No nullable primary keys\n` +
-  `3. Consistent naming convention (snake_case table and column names)\n` +
-  `4. Created_at / updated_at columns use INTEGER (epoch ms) not TEXT\n` +
-  `5. UUID primary keys use TEXT type\n\n` +
-  `Return JSON: { violations: [{ table, column, issue, severity: "error"|"warning" }], schemaGraph: { nodes: [{table}], edges: [{from,to,fkColumn}] } }`,
+const review = await agent(
+  `You are the Database reviewer. You did not write this migration; review it with fresh eyes.\n\n` +
+  `Project: ${projectPath}\nTask: "${taskText}"\n` +
+  `Migration file: find ${tableDesign.migrationFile} in the project's migrations folder and read it.\n\n` +
+  `Requirements spec:\n${spec}\n\n` +
+  CHECKLIST + `\n` +
+  `1. Check the migration against every checklist item and the spec's Decisions.\n` +
+  `2. Fix violations directly in the migration file (missing FKs or indexes, naming, types). Fix only what the checklist or spec requires.\n` +
+  `3. Flag N+1 risks the schema invites.\n\n` +
+  `Return { violations: [{ table, column, issue, severity: "error"|"warning", fixed }], migrationSQL: "<the final file content>", ` +
+  `schemaGraph: { nodes: [{ table }], edges: [{ from, to, fkColumn }] }, n1Risks: [string] }.`,
   {
-    label: 'schema-validator',
-    phase: 'Validate Schema',
+    label: 'reviewer',
+    phase: 'Review',
     schema: {
       type: 'object',
-      required: ['violations', 'schemaGraph'],
+      required: ['violations', 'migrationSQL', 'schemaGraph', 'n1Risks'],
       properties: {
-        violations:  { type: 'array' },
-        schemaGraph: { type: 'object' },
+        violations:   { type: 'array', items: { type: 'object' } },
+        migrationSQL: { type: 'string' },
+        schemaGraph:  { type: 'object' },
+        n1Risks:      { type: 'array', items: { type: 'string' } },
       },
     },
   }
 )
-
-const blockingViolations = schemaValidation.violations.filter(v => v.severity === 'error')
-log(`Schema: ${schemaValidation.violations.length} violations (${blockingViolations.length} blocking)`)
-
-// ─── Phase: Optimize Queries ──────────────────────────────────────────────────
-phase('Optimize Queries')
-
-const optimization = await agent(
-  `You are the query-optimizer sub-agent of the Database Agent.\n\n` +
-  `Tables: ${JSON.stringify(tableDesign.tables)}\n` +
-  `Migration SQL so far:\n${tableDesign.migrationSQL}\n` +
-  `Index guidelines: read ${AGENTS_DIR}/agents/database/vault/optimizations/index-guidelines.md (if missing: add indexes for all WHERE/JOIN/ORDER BY columns on tables > 1000 rows)\n\n` +
-  `Analyze the expected query patterns for a typical CRUD application using these tables.\n\n` +
-  `1. Add CREATE INDEX statements for columns that need them\n` +
-  `2. Flag any N+1 risks you can identify from the schema\n` +
-  `3. Suggest covering indexes where beneficial\n\n` +
-  `Return JSON: { indexSQL: "<additional CREATE INDEX statements>", indexes: [{table,columns,reason}], n1Risks: [string], optimizedMigrationSQL: "<full SQL including original + new indexes>" }`,
-  {
-    label: 'query-optimizer',
-    phase: 'Optimize Queries',
-    schema: {
-      type: 'object',
-      required: ['indexSQL', 'indexes', 'n1Risks', 'optimizedMigrationSQL'],
-      properties: {
-        indexSQL:             { type: 'string' },
-        indexes:              { type: 'array' },
-        n1Risks:              { type: 'array', items: { type: 'string' } },
-        optimizedMigrationSQL: { type: 'string' },
-      },
-    },
-  }
-)
-
-log(`Added ${optimization.indexes.length} index(es), ${optimization.n1Risks.length} N+1 risk(s) flagged`)
+const blockingViolations = review.violations.filter(v => v.severity === 'error' && !v.fixed)
+log(`Review: ${review.violations.length} violation(s), ${review.violations.filter(v => v.fixed).length} fixed, ${blockingViolations.length} blocking left, ${review.n1Risks.length} N+1 risk(s)`)
 
 const schemaNote = [
   `# Schema: ${tableDesign.tables.map(t => t.name).join(', ')}`,
@@ -170,11 +176,13 @@ return {
   agentName:     'database',
   persistOps,
   status:        blockingViolations.length > 0 ? 'failed' : 'completed',
-  migrationSQL:  optimization.optimizedMigrationSQL,
+  migrationSQL:  review.migrationSQL || tableDesign.migrationSQL,
   migrationFile: tableDesign.migrationFile,
   tables:        tableDesign.tables,
-  indexes:       optimization.indexes,
-  schemaGraph:   schemaValidation.schemaGraph,
-  violations:    schemaValidation.violations.map(v => `${v.table}.${v.column}: ${v.issue}`),
+  indexes:       tableDesign.indexes,
+  schemaGraph:   review.schemaGraph,
+  n1Risks:       review.n1Risks,
+  specConflicts: tableDesign.specConflicts,
+  violations:    review.violations.map(v => `${v.table}.${v.column}: ${v.issue}${v.fixed ? ' (fixed)' : ''}`),
   errors:        blockingViolations.map(v => `${v.table}.${v.column}: ${v.issue}`),
 }

@@ -1,6 +1,5 @@
 # table-creator
 
-Sub-agent of [[database]].
+Checklist of [[database]]: applied by [[database-author]], verified by [[database-reviewer]].
 
-**Does:** Writes migration SQL for new/changed tables.
-**Hands off to:** [[schema-validator]]
+**Covers:** CREATE TABLE IF NOT EXISTS, explicit foreign keys with ON DELETE behaviour, user preferences, migration filename format.

@@ -2,8 +2,7 @@ export const meta = {
   name: 'ponytail',
   description: 'Lazy-senior-dev refinement gate — reviews this session\'s generated code against the minimal-code decision ladder and applies safe simplifications before the bridge. The best code is the code you never wrote.',
   phases: [
-    { title: 'Review', detail: 'Score each changed file for over-engineering against the ladder' },
-    { title: 'Simplify', detail: 'Apply behavior-preserving simplifications (mode-gated)' },
+    { title: 'Review', detail: 'Judge each changed file against the ladder and apply safe simplifications in one pass (none in lite mode)' },
   ],
 }
 
@@ -79,29 +78,35 @@ async function flushPersist(ops) {
 // ─── Phase: Review ────────────────────────────────────────────────────────────
 phase('Review')
 
-const review = await agent(
+// One pass: judge each changed file against the ladder and, unless mode is lite, apply the
+// safe simplifications right away (design/agent-consolidation.md, phase 2).
+const result = await agent(
   `You are the Ponytail Agent — the laziest senior dev in the room. The best code is the code never written.\n\n` +
   `Mode: ${mode.toUpperCase()} ` +
-  `(lite = suggest only; full = enforce the ladder; ultra = YAGNI extremist, challenge the requirement itself).\n\n` +
+  `(lite = suggest only, edit nothing; full = enforce the ladder; ultra = YAGNI extremist, challenge the requirement itself).\n\n` +
   `Task that produced this code: "${taskText}"\n` +
   `Project: ${projectPath}\n` +
   `Files generated/changed this session (review ONLY these):\n${JSON.stringify(filesChanged, null, 2)}\n\n` +
   `Decision ladder to judge against: read ${AGENTS_DIR}/agents/ponytail/vault/philosophy/decision-ladder.md and modes.md (if missing: reuse > stdlib > native > installed dep > one-liner > minimal code)\n\n` +
-  `NEVER flag what ${AGENTS_DIR}/agents/ponytail/vault/philosophy/never-simplify.md protects (if missing: input validation, error handling, security, accessibility, or explicitly requested features)\n\n` +
-  `Read each changed file in ${projectPath} and judge it against the ladder. Look for:\n` +
-  `- Speculative code / abstractions nobody asked for (YAGNI)\n` +
-  `- Hand-rolled code that duplicates the stdlib, a native platform feature, or an already-installed dependency\n` +
-  `- Multi-line blocks that collapse to a clean one-liner\n` +
-  `- Dead code, unused exports, needless indirection or wrapper layers\n\n` +
-  `For each opportunity decide: is the simplification BEHAVIOR-PRESERVING and high-confidence? If it touches a never-simplify area, put it in skippedSuggestions with the reason.\n\n` +
-  `Return JSON: { simplifications: [{file, location, before, after, rationale, estimatedLinesRemoved}], ` +
-  `skippedSuggestions: [{file, suggestion, reason}] }`,
+  `NEVER touch what ${AGENTS_DIR}/agents/ponytail/vault/philosophy/never-simplify.md protects (if missing: input validation, error handling, security, accessibility, or explicitly requested features)\n\n` +
+  `1. Read each changed file and look for: speculative code or abstractions nobody asked for (YAGNI); hand-rolled code duplicating ` +
+  `the stdlib, a native platform feature or an installed dependency; multi-line blocks that collapse to a clean one-liner; dead ` +
+  `code, unused exports, needless indirection or wrapper layers.\n` +
+  `2. Keep only simplifications that are BEHAVIOR-PRESERVING and high-confidence. Anything touching a never-simplify area goes to ` +
+  `skippedSuggestions with the reason.\n` +
+  (mode === 'lite'
+    ? `3. Lite mode: do NOT edit any file. Report the simplifications only; applied stays empty.\n\n`
+    : `3. Apply the kept simplifications to the real files with the Edit/Write tools. Deletion over addition; boring over clever. ` +
+      `Where a reader might question a deliberate simplification, leave a short "ponytail:" comment saying what was skipped and ` +
+      `when to add it back. Skip (and list in notApplied) anything that turns out risky or behavior-changing. Touch nothing else.\n\n`) +
+  `Return { simplifications: [{file, location, before, after, rationale, estimatedLinesRemoved}], ` +
+  `applied: [{file, rationale, linesRemoved}], notApplied: [{file, reason}], skippedSuggestions: [{file, suggestion, reason}] }`,
   {
-    label: 'review-changes',
+    label: 'ponytail',
     phase: 'Review',
     schema: {
       type: 'object',
-      required: ['simplifications', 'skippedSuggestions'],
+      required: ['simplifications', 'applied', 'skippedSuggestions'],
       properties: {
         simplifications: {
           type: 'array',
@@ -117,6 +122,22 @@ const review = await agent(
               estimatedLinesRemoved: { type: 'number' },
             },
           },
+        },
+        applied: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['file', 'rationale'],
+            properties: {
+              file:         { type: 'string' },
+              rationale:    { type: 'string' },
+              linesRemoved: { type: 'number' },
+            },
+          },
+        },
+        notApplied: {
+          type: 'array',
+          items: { type: 'object', properties: { file: { type: 'string' }, reason: { type: 'string' } } },
         },
         skippedSuggestions: {
           type: 'array',
@@ -135,72 +156,11 @@ const review = await agent(
   }
 )
 
-log(`Review: ${review.simplifications.length} simplification(s), ${review.skippedSuggestions.length} skipped (protected)`)
-
-// In 'lite' mode we suggest but never touch the files.
-let applied = []
-let estimatedLinesRemoved = 0
-
-if (mode === 'lite') {
-  log('lite mode — reporting suggestions only, no edits applied')
-  applied = []
-} else if (review.simplifications.length === 0) {
-  log('Code is already lean — nothing to simplify')
-} else {
-  // ─── Phase: Simplify ────────────────────────────────────────────────────────
-  phase('Simplify')
-
-  const apply = await agent(
-    `You are the Ponytail Agent applying simplifications in ${mode.toUpperCase()} mode.\n\n` +
-    `Project: ${projectPath}\n\n` +
-    `Apply ONLY these reviewed, behavior-preserving simplifications to the real files:\n` +
-    `${JSON.stringify(review.simplifications, null, 2)}\n\n` +
-    `Rules:\n` +
-    `1. Edit the actual files in ${projectPath} using the Edit/Write tools.\n` +
-    `2. NEVER remove input validation, error handling, security checks, accessibility, or explicitly requested features.\n` +
-    `3. Deletion over addition; boring over clever. Fix root cause, not symptoms.\n` +
-    `4. Where you make a deliberate simplification a future reader might question, leave a short \`ponytail:\` comment explaining what was skipped and when to add it back.\n` +
-    `5. If applying a simplification is risky or would change behavior, SKIP it and report why — do not force it.\n` +
-    `6. Do not reformat or touch anything outside the listed simplifications.\n\n` +
-    `After editing, return JSON: { applied: [{file, rationale, linesRemoved}], notApplied: [{file, reason}] }`,
-    {
-      label: 'apply-simplifications',
-      phase: 'Simplify',
-      schema: {
-        type: 'object',
-        required: ['applied'],
-        properties: {
-          applied: {
-            type: 'array',
-            items: {
-              type: 'object',
-              required: ['file', 'rationale'],
-              properties: {
-                file:        { type: 'string' },
-                rationale:   { type: 'string' },
-                linesRemoved: { type: 'number' },
-              },
-            },
-          },
-          notApplied: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                file:   { type: 'string' },
-                reason: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    }
-  )
-
-  applied = apply.applied || []
-  estimatedLinesRemoved = applied.reduce((sum, a) => sum + (a.linesRemoved || 0), 0)
-  log(`Applied ${applied.length} simplification(s) — ~${estimatedLinesRemoved} line(s) removed`)
-}
+const review = { simplifications: result.simplifications, skippedSuggestions: result.skippedSuggestions }
+// Lite mode never edits, whatever the agent reports.
+const applied = mode === 'lite' ? [] : (result.applied || [])
+const estimatedLinesRemoved = applied.reduce((sum, a) => sum + (a.linesRemoved || 0), 0)
+log(`Ponytail: ${review.simplifications.length} simplification(s), ${applied.length} applied (~${estimatedLinesRemoved} lines), ${review.skippedSuggestions.length} skipped (protected)`)
 
 const reportLines = [
   `# Ponytail Review — Session ${sessionId}`,

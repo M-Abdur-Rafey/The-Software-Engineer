@@ -1,6 +1,5 @@
 # query-optimizer
 
-Sub-agent of [[database]].
+Checklist of [[database]]: applied by [[database-author]], verified by [[database-reviewer]].
 
-**Does:** Adds indexes and flags N+1 / slow patterns.
-**Hands off to:** returns results to [[database]]
+**Covers:** Indexes for WHERE/JOIN/ORDER BY columns on growing tables, inside the migration file; N+1 risks flagged.
