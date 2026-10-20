@@ -36,7 +36,7 @@ At the start of every session:
 
 4. Announce what you found: "Detected stack: <node|python>. Loaded N decisions. Relevant vault notes: [list]."
 
-## Feature folder layout (always enforced)
+## Feature folder layout (default; the spec can decide otherwise)
 
 ```
 src/features/<name>/
@@ -47,7 +47,7 @@ src/features/<name>/
   README.md      — endpoints, dependencies, notes
 ```
 
-The folder-structure sub-agent verifies this layout and creates missing files.
+The author follows this layout; the reviewer verifies it and creates missing files. If the requirements spec explicitly decides placement differently (e.g. an inline route in an existing single-file app), the spec wins and the author reports the conflict in `specConflicts`.
 
 ## Route contract (critical)
 
@@ -76,7 +76,7 @@ module.exports = [
 
 Never leak stack traces. Never return raw database errors to the client.
 
-## JSDoc requirement (enforced by code-standards sub-agent)
+## JSDoc requirement (applied by the author, verified by the reviewer)
 
 Every exported function must have `@param` and `@returns` JSDoc comments.
 
@@ -101,10 +101,10 @@ Python project, enforce instead:
 - **DB access** via SQLAlchemy (async engine for FastAPI) with Alembic migrations
   (`patterns/db-integration-sqlalchemy-alembic.md`); coordinate schema with the database agent.
 
-## AI agent scaffolding (prompt-engineer sub-agent)
+## AI agent scaffolding (prompt-engineer checklist)
 
 When a feature involves an AI/LLM component (chatbot, classifier, RAG, tool-using agent),
-the **prompt-engineer** sub-agent designs the AI agents — it does not free-style prompts.
+the author designs the AI agents to the **prompt-engineer** checklist below — it does not free-style prompts.
 It builds **micro-agents** (one responsibility, narrow scope) and, for each, defines strict
 rules and success criteria up front so downstream workflows never break on free-form output.
 
@@ -132,14 +132,19 @@ retirement are the SRE agent's side of the handoff — declare what to watch in 
 
 ## Sub-agents
 
-Spawn these in order (or as appropriate to the task):
+Two agents, split by independence rather than role (`design/agent-consolidation.md`):
 
-1. **flow-planner** — maps out the business logic flow before any code is written; identifies any AI/LLM agents the feature needs
-2. **data-architect** — works out the data-access strategy before code: a single shared DB connection/pool (no per-request connections, no pool exhaustion), read-only AI queries (always `LIMIT` + time filters, never `SELECT *`, no over-selection), and a caching / lookup-table layer. References `architecture/data-access-and-pooling.md`, `architecture/ai-query-discipline.md`, `architecture/caching-and-lookup-tables.md`
-3. **route-creator** — generates the actual route + controller + service files (using the single shared pool and the data-architect's query rules)
-4. **prompt-engineer** — *(only when the feature has an AI/LLM component)* designs each AI micro-agent's prompt, few-shot examples, strict output schema, validation loop, and success criteria; writes them to `src/ai/<agent-name>/`
-5. **code-standards** — audits JSDoc, error handling format, commenting; fixes issues
-6. **folder-structure** — verifies feature folder layout; creates README.md if missing
+1. **author**: plans the business-logic flow, designs data access, writes the code, and checks its own work against the checklists below before returning. It receives the requirements spec (decisions, scope, backend tasks and acceptance criteria), whose Decisions are binding.
+2. **reviewer**: a fresh agent that sees only the spec, the changed files and the checklists, never the author's reasoning. It fixes violations in place when the fix is behaviour-preserving or restores what the spec requires, and reports what it could not fix and any mismatch between the code and the declared route contracts.
+
+Checklists (formerly separate sub-agents; their vault notes under `sub-agents/` describe them):
+
+- **flow-planner**: thin controllers, business logic in services, validation for every input, only the middleware the task needs.
+- **data-architect**: one shared DB pool, parameterized queries, no N+1 or `SELECT *`, read-only AI queries with `LIMIT` + time filters, caching and lookup tables (`architecture/data-access-and-pooling.md`, `architecture/ai-query-discipline.md`, `architecture/caching-and-lookup-tables.md`).
+- **route-creator**: the route contract shape above, `change`/`changeSummary` on every route this session touched.
+- **prompt-engineer**: AI micro-agents per the section above, only when the feature has an LLM component.
+- **code-standards**: JSDoc, the error format, no stack traces or `console.log` in production paths, no bare catch blocks.
+- **folder-structure**: the feature folder layout and its README.
 
 ## Output contract
 

@@ -550,7 +550,7 @@ Examples:
 | Agent | What it does | Experts inside |
 |-------|-------------|----------------|
 | **Database** | Writes migration SQL, checks foreign keys, adds indexes | table-creator, schema-validator, query-optimizer |
-| **Backend** | Creates routes, controllers, services with documentation | flow-planner, route-creator, code-standards, folder-structure |
+| **Backend** | Creates routes, controllers, services with documentation | author → reviewer (checklists: flow-planner, data-architect, route-creator, code-standards, folder-structure) |
 | **Frontend** | Builds components, wires API calls, enforces security rules. For 3D tasks: designs Three.js/WebGL scene, physics, shaders, and scroll animation using Opus model | ui-designer, 3d-designer (Opus), component-creator, api-wirer, security-checker |
 | **Testing** | Generates Postman tests (success case, error case, auth case per route) | — |
 | **Calls** | Inbound IVR flows, outbound campaigns, webhook handlers, TTS scripts, TCPA/GDPR compliance | flow-designer, telephony-integrator, voice-script-writer, compliance-checker |

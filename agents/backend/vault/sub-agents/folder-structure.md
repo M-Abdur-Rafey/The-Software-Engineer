@@ -1,6 +1,5 @@
 # folder-structure
 
-Sub-agent of [[backend]].
+Checklist of [[backend]]: applied by [[backend-author]], verified by [[backend-reviewer]].
 
-**Does:** Verifies the feature-folder layout and READMEs.
-**Hands off to:** returns results to [[backend]]
+**Covers:** The feature-folder layout and its README.

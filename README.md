@@ -248,7 +248,7 @@ Frontend, Testing, and Calls run **in parallel** once the backend contract exist
 | **Impact analyst** | 🧭 | System Docs projects only. Before any code, maps the task to modules, lists every module that uses what will change and how it could break, records the chain reaction in plain language, and asks about any decision that isn't recorded. Stops for your answers if a target module's doc isn't approved |
 | **Requirements** | 📝 | Runs first (spec-driven development). Synthesizes signals — your task, project logs/bug reports, last cycle's SRE feedback — into user stories with Given/When/Then acceptance criteria and a spec whose Decisions table pins every choice the other agents would otherwise guess. Undecidable items come back to you as open questions |
 | **Database** | 🗄️ | Writes migration SQL, validates foreign keys, adds indexes |
-| **Backend** | ⚙️ | A *data-architect* first plans lean data access — a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), caching/lookup tables — then routes, controllers, services with JSDoc. AI/LLM features follow a full model lifecycle (traceable data, bias checks, fairness evaluation) |
+| **Backend** | ⚙️ | One author plans lean data access — a single shared DB pool, disciplined AI queries (read-only, `LIMIT` + filters, no `SELECT *`), caching/lookup tables — then writes routes, controllers and services with JSDoc, following the spec; a fresh reviewer checks them against the spec and the checklists. AI/LLM features follow a full model lifecycle (traceable data, bias checks, fairness evaluation) |
 | **Frontend** | 🎨 | Builds components, wires API calls, enforces token/storage rules. Dedicated *layout / positioning / contrast* specialists handle complex parent-child CSS. 3D tasks invoke Opus for scene/physics/shader design |
 | **Testing** | 🧪 | Generates a Postman collection for what the session changed only: new routes get positive, negative and auth tests; modified routes get a test for each changed behaviour plus one smoke test; System Docs flows that call a changed route get one end-to-end scenario. Test data comes from the spec's acceptance criteria. UI testing is separate and manual (`/software-engineer uitest`) |
 | **Calls** | 📞 | Inbound IVR flows, outbound dialing campaigns, Twilio/Vonage webhooks, TTS scripts, TCPA/GDPR/DNC compliance |
@@ -336,7 +336,7 @@ connected knowledge graph, **open the `~/.agents/agents/` folder itself as a sin
 
 - an **orchestrator** hub note linking to every domain agent, plus the dependency order;
 - a **home note per agent** showing what it reads from (upstream), hands off to (downstream), and is validated by;
-- **sub-agent** notes wired into each domain's internal pipeline (e.g. `flow-planner → route-creator → …`);
+- **sub-agent** notes wired into each domain's internal pipeline (e.g. `backend-author → backend-reviewer`, with the checklists they apply linked);
 - **per-task session notes** the orchestrator writes in real time as work runs.
 
 Open Obsidian's Graph View to see the agents and their contract flow as a live map.

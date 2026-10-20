@@ -1,6 +1,5 @@
 # data-architect
 
-Sub-agent of [[backend]].
+Checklist of [[backend]]: applied by [[backend-author]], verified by [[backend-reviewer]].
 
-**Does:** Designs lean data access: one shared DB pool, read-only AI queries (LIMIT + time filters, no SELECT *), caching and lookup tables.
-**Hands off to:** [[route-creator]]
+**Covers:** One shared DB pool, parameterized queries, no N+1 or SELECT *, read-only AI queries with LIMIT + time filters, caching and lookup tables.

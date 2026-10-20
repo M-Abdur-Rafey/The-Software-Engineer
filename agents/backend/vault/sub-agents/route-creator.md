@@ -1,6 +1,5 @@
 # route-creator
 
-Sub-agent of [[backend]].
+Checklist of [[backend]]: applied by [[backend-author]], verified by [[backend-reviewer]].
 
-**Does:** Generates route + controller + service files.
-**Hands off to:** [[prompt-engineer]]
+**Covers:** The route contract shape, with change and changeSummary on every route the session touched.

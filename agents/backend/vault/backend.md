@@ -11,7 +11,9 @@
 - **Validated by:** [[mcpbridge]]
 
 ## Internal pipeline (sub-agents)
-[[flow-planner]] → [[data-architect]] → [[route-creator]] → [[prompt-engineer]] → [[code-standards]] → [[folder-structure]]
+[[backend-author]] → [[backend-reviewer]]
+
+**Checklists:** [[flow-planner]] · [[data-architect]] · [[route-creator]] · [[prompt-engineer]] · [[code-standards]] · [[folder-structure]]
 
 ## Knowledge
 Accumulated decisions and patterns live in this vault (see `INDEX.md`) and in `knowledge.db`.

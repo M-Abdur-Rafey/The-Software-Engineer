@@ -1,15 +1,16 @@
 export const meta = {
   name: 'backend',
-  description: 'Backend domain agent — routes, controllers, services, code standards, folder structure',
+  description: 'Backend domain agent — one author writes routes, controllers and services to the spec and checklists; one fresh reviewer checks them',
   phases: [
-    { title: 'Plan', detail: 'flow-planner designs business logic flow' },
-    { title: 'Data Architecture', detail: 'data-architect: single shared pool, AI-query discipline, caching' },
-    { title: 'Build', detail: 'route-creator generates code files' },
-    { title: 'Standards', detail: 'code-standards audits JSDoc, errors, comments' },
-    { title: 'Structure', detail: 'folder-structure verifies layout and READMEs' },
+    { title: 'Author', detail: 'Plan the flow and data access, write the code, self-check against the checklists' },
+    { title: 'Review', detail: 'Fresh reviewer: spec + changed files + checklists only; fixes violations' },
   ],
 }
 
+// Split by independence, not by role (design/agent-consolidation.md, phase 2): the work that
+// flow-planner, data-architect, route-creator, prompt-engineer, code-standards and
+// folder-structure used to do in sequence is one author's checklist; one reviewer who never sees
+// the author's reasoning checks it.
 const AGENTS_DIR      = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
 const sessionId       = (args && args.sessionId)       || 'no-session'
 const taskText        = (args && args.taskText)        || ''
@@ -28,8 +29,9 @@ function uniquePaths(list) {
   }
   return [...seen.values()]
 }
-const databaseOutput  = (args && args.databaseOutput)  || null
-const archPreferences = (args && args.archPreferences) || null
+const databaseOutput     = (args && args.databaseOutput)     || null
+const archPreferences    = (args && args.archPreferences)    || null
+const requirementsOutput = (args && args.requirementsOutput) || null
 
 // Build arch brief from user's clarification answers
 const archBrief = archPreferences ? [
@@ -37,6 +39,27 @@ const archBrief = archPreferences ? [
   archPreferences.useRateLimiting != null ? `Rate limiting: ${archPreferences.useRateLimiting ? 'yes, 100 req/min per IP' : 'no'}` : null,
   archPreferences.apiVersioning   ? `API path prefix: /api/${archPreferences.apiVersioning}/` : null,
 ].filter(Boolean).join('. ') : 'Follow the existing project conventions.'
+
+// The requirements spec, capped: its Decisions are binding for every domain agent.
+function specBrief(domain, max = 3000) {
+  const s = requirementsOutput && requirementsOutput.spec
+  if (!s) return '(no requirements spec for this session)'
+  const tasks = (requirementsOutput.tasks || []).filter(t => t.domain === domain)
+  const storyIds = new Set(tasks.map(t => t.storyId).filter(Boolean))
+  const stories = (requirementsOutput.userStories || []).filter(u => storyIds.has(u.id))
+  const list = (title, items) => (items && items.length ? `${title}:\n${items.map(x => `- ${x}`).join('\n')}` : '')
+  const text = [
+    s.summary ? `Summary: ${s.summary}` : '',
+    list('Decisions (binding)', (s.decisions || []).map(d => `${d.topic}: ${d.decision}`)),
+    list('In scope', s.inScope),
+    list('Out of scope', s.outOfScope),
+    list(`Tasks for ${domain}`, tasks.map(t => `${t.title}${t.description ? `: ${t.description}` : ''}`)),
+    list('Acceptance criteria', stories.flatMap(u => (u.acceptanceCriteria || []).map(c => `${u.id}: ${c}`))),
+  ].filter(Boolean).join('\n\n')
+  if (text.length <= max) return text
+  log(`spec brief for ${domain} capped at ${max} of ${text.length} chars; full spec: ${s.specFile || 'n/a'}`)
+  return `${text.slice(0, max)}\n[... ${text.length - max} more chars: read ${s.specFile || 'the full spec'}]`
+}
 
 // Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
 // (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
@@ -52,186 +75,115 @@ async function flushPersist(ops) {
   )
 }
 
-
 const tableContext = databaseOutput ? JSON.stringify(databaseOutput.tables || []) : '[]'
+const VAULT = `${AGENTS_DIR}/agents/backend/vault`
+const spec = specBrief('backend')
 
-// ─── Phase: Plan ─────────────────────────────────────────────────────────────
-phase('Plan')
+// The rules every backend change must meet: the author applies them, the reviewer verifies them.
+const CHECKLIST =
+  `Checklist (from agents/backend/CLAUDE.md and the vault):\n` +
+  `- Flow: thin controllers (request/response only); all business logic in services; validation schemas for every input; ` +
+  `middleware the task needs (rate limiting only if requested).\n` +
+  `- Data access (${VAULT}/architecture/data-access-and-pooling.md, ai-query-discipline.md, caching-and-lookup-tables.md): ONE shared ` +
+  `DB pool, reused, never per request; parameterized queries; no N+1, no SELECT *; AI/LLM query tools read-only with LIMIT + time filters; ` +
+  `cache and lookup tables where they cut repeated work.\n` +
+  `- AI features (only if the task has an LLM component): micro-agents per ${VAULT}/patterns/ai-agent-prompt-template.md, written to ` +
+  `src/ai/<agent-name>/ (prompt.md + schema.json).\n` +
+  `- Code standards: @param/@returns JSDoc on every exported function; errors as { success: false, code: 'ERR_CODE', message, details }; ` +
+  `no stack traces or raw DB errors in responses; no console.log in production paths; no bare catch blocks.\n` +
+  `- Structure (Node/Express): feature folder src/features/<name>/ with routes.js (exports the route contract array: ` +
+  `{method,path,handler,middleware[],description,requestBodySchema,responseSchema,authRequired}), controller.js, service.js, schema.js, ` +
+  `and README.md (description, endpoints table, dependencies). Python projects follow the Python rules in agents/backend/CLAUDE.md instead.\n` +
+  `- Precedence: the spec's Decisions are binding. If one conflicts with a rule above (e.g. it places the route inline instead of in a ` +
+  `feature folder), follow the spec and report the conflict in specConflicts.\n`
 
-const plan = await agent(
-  `You are the flow-planner sub-agent of the Backend Agent.\n\n` +
-  `Task: "${taskText}"\n` +
-  `Project: ${projectPath}\n` +
-  `Available database tables: ${tableContext}\n` +
-  `Prior backend decisions: run cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as backend get-decisions backend express-patterns 5, and read ${AGENTS_DIR}/agents/backend/vault/INDEX.md plus the notes it lists that are relevant to this task.\n\n` +
-  `ARCHITECTURE PREFERENCES (from user clarification — follow these exactly):\n${archBrief}\n\n` +
-  `Read the project at ${projectPath} to understand existing structure and conventions.\n\n` +
-  `Design the business logic flow:\n` +
-  `1. What routes are needed? (method, path, description, auth required?) Apply the auth method preference above.\n` +
-  `2. What does each controller function do? (thin — no business logic)\n` +
-  `3. What does each service function do? (all business logic here)\n` +
-  `4. What validation schemas are needed?\n` +
-  `5. What middleware is needed? Include rate limiting middleware if the user requested it.\n\n` +
-  `Return JSON: { featureName: string, routes: [{method,path,description,authRequired,controllerFn,serviceFn}], validationSchemas: [{name,fields:[{name,type,required}]}], middleware: [string] }`,
-  {
-    label: 'flow-planner',
-    phase: 'Plan',
-    schema: {
-      type: 'object',
-      required: ['featureName', 'routes', 'validationSchemas', 'middleware'],
-      properties: {
-        featureName:       { type: 'string' },
-        routes:            { type: 'array' },
-        validationSchemas: { type: 'array' },
-        middleware:        { type: 'array', items: { type: 'string' } },
-      },
-    },
-  }
-)
+// ─── Phase: Author ───────────────────────────────────────────────────────────
+phase('Author')
 
-log(`Planned ${plan.routes.length} route(s) for feature: ${plan.featureName}`)
-
-// ─── Phase: Data Architecture ────────────────────────────────────────────────
-// Works out the data-access strategy BEFORE any code is written so the feature
-// stays lean on the database — one shared pool, disciplined AI queries, caching.
-phase('Data Architecture')
-
-const dataAccess = await agent(
-  `You are the data-architect sub-agent of the Backend Agent.\n\n` +
-  `Task: "${taskText}"\n` +
-  `Project: ${projectPath}\n` +
-  `Planned routes: ${JSON.stringify(plan.routes)}\n` +
-  `Available tables: ${tableContext}\n\n` +
-  `Read these vault notes and apply their rules:\n` +
-  `- ${AGENTS_DIR}/agents/backend/vault/architecture/data-access-and-pooling.md\n` +
-  `- ${AGENTS_DIR}/agents/backend/vault/architecture/ai-query-discipline.md\n` +
-  `- ${AGENTS_DIR}/agents/backend/vault/architecture/caching-and-lookup-tables.md\n\n` +
-  `Inspect ${projectPath} for an existing DB connection/pool and reuse it.\n\n` +
-  `Design the data-access layer so the feature does not overload the database:\n` +
-  `1. ONE shared DB connection/pool, initialized once and reused — never a new connection per request, never pool exhaustion. Reuse the project's existing pool; only create one if none exists.\n` +
-  `2. AI/LLM query discipline: read-only query tools, always LIMIT + time filters, never SELECT *, parameterized queries, no N+1, no over-selection.\n` +
-  `3. Caching + lookup tables: what to cache and where (in-memory/Redis), invalidation strategy, and which reference/lookup tables avoid repeated joins.\n\n` +
-  `Return JSON: { dbAccess: {singlePool: boolean, init: string, notes: string}, aiQueryRules: [string], caching: {strategy: string, lookupTables: [string], invalidation: string}, summary: string }`,
-  {
-    label: 'data-architect',
-    phase: 'Data Architecture',
-    schema: {
-      type: 'object',
-      required: ['dbAccess', 'aiQueryRules', 'caching', 'summary'],
-      properties: {
-        dbAccess:     { type: 'object' },
-        aiQueryRules: { type: 'array', items: { type: 'string' } },
-        caching:      { type: 'object' },
-        summary:      { type: 'string' },
-      },
-    },
-  }
-)
-
-log(`Data access: singlePool=${dataAccess.dbAccess && dataAccess.dbAccess.singlePool}, ${dataAccess.aiQueryRules.length} AI-query rule(s)`)
-
-// ─── Phase: Build ─────────────────────────────────────────────────────────────
-phase('Build')
-
+const ROUTE_CONTRACT = {
+  type: 'object',
+  required: ['method', 'path', 'description', 'authRequired'],
+  properties: {
+    method: { type: 'string' }, path: { type: 'string' }, handler: { type: 'string' },
+    middleware: { type: 'array' }, description: { type: 'string' },
+    requestBodySchema: { type: 'object' }, responseSchema: { type: 'object' },
+    authRequired: { type: 'boolean' }, change: { type: 'string', enum: ['new', 'modified'] }, changeSummary: { type: 'string' },
+  },
+}
 const build = await agent(
-  `You are the route-creator sub-agent of the Backend Agent.\n\n` +
-  `Task: "${taskText}"\n` +
-  `Project: ${projectPath}\n` +
-  `Feature name: ${plan.featureName}\n` +
-  `Routes to implement: ${JSON.stringify(plan.routes)}\n` +
-  `Validation schemas: ${JSON.stringify(plan.validationSchemas)}\n\n` +
-  `Read the existing code at ${projectPath} to follow its conventions.\n\n` +
-  `DATA-ACCESS DESIGN — follow this exactly: ${JSON.stringify(dataAccess)}\n` +
-  `All DB access MUST use the single shared pool (never open a connection per request). ` +
-  `Any AI/LLM query MUST be read-only with LIMIT + time filters and never SELECT *.\n\n` +
-  `Create these files in src/features/${plan.featureName}/:\n` +
-  `  routes.js   — MUST export array of: {method,path,handler,middleware[],description,requestBodySchema,responseSchema,authRequired}\n` +
-  `  controller.js — thin layer, imports from service.js\n` +
-  `  service.js  — all business logic\n` +
-  `  schema.js   — validation schemas\n\n` +
-  `Error format everywhere: { success: false, code: 'ERR_CODE', message: '...', details: {} }\n\n` +
-  `routeContracts lists ONLY routes this session created or whose behaviour it changed (untouched routes are left out; ` +
-  `testing tests only what is listed). For each set change: "new" | "modified", and for modified routes a one-line ` +
-  `changeSummary of exactly what behaves differently now (e.g. "returns 409 when the project is archived").\n\n` +
-  `Return JSON: { filesCreated: [string], filesUpdated: [string], routeContracts: [{method,path,handler,middleware,description,requestBodySchema,responseSchema,authRequired,change,changeSummary}] }`,
+  `You are the Backend author. You plan, design the data access, and write the code for this task, then check your own work ` +
+  `against the checklist before returning. A separate reviewer will check it after you.\n\n` +
+  `Task: "${taskText}"\nProject: ${projectPath}\n` +
+  `Database tables available: ${tableContext}\n` +
+  `Architecture preferences (from the user, follow exactly): ${archBrief}\n\n` +
+  `Requirements spec:\n${spec}\n\n` +
+  `Context to read first: prior decisions (cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as backend get-decisions backend express-patterns 5), ` +
+  `${VAULT}/INDEX.md and the notes it lists that apply (detect the stack: Node/Express vs Python), and the existing code in ${projectPath}: ` +
+  `reuse its DB connection, conventions and helpers.\n\n` +
+  CHECKLIST + `\n` +
+  `Return:\n- featureName\n- dataAccess: { dbAccess: { singlePool, init, notes }, aiQueryRules: [string], caching: { strategy, lookupTables, invalidation }, summary }\n` +
+  `- filesCreated, filesUpdated\n` +
+  `- routeContracts: ONLY routes this session created or whose behaviour it changed, each with change "new" | "modified" and, for ` +
+  `modified routes, a one-line changeSummary of what behaves differently now\n` +
+  `- specConflicts: [ "<decision> vs <rule>: what you did" ] (empty if none)`,
   {
-    label: 'route-creator',
-    phase: 'Build',
+    label: 'author',
+    phase: 'Author',
     schema: {
       type: 'object',
-      required: ['filesCreated', 'filesUpdated', 'routeContracts'],
+      required: ['featureName', 'dataAccess', 'filesCreated', 'filesUpdated', 'routeContracts', 'specConflicts'],
       properties: {
+        featureName:    { type: 'string' },
+        dataAccess:     { type: 'object' },
         filesCreated:   { type: 'array', items: { type: 'string' } },
         filesUpdated:   { type: 'array', items: { type: 'string' } },
-        routeContracts: { type: 'array' },
+        routeContracts: { type: 'array', items: ROUTE_CONTRACT },
+        specConflicts:  { type: 'array', items: { type: 'string' } },
       },
     },
   }
 )
+const dataAccess = build.dataAccess
+const authored = uniquePaths([...build.filesCreated, ...build.filesUpdated])
+log(`Author: ${build.routeContracts.length} route(s) for ${build.featureName}, ${authored.length} file(s)${build.specConflicts.length ? `, ${build.specConflicts.length} spec conflict(s)` : ''}`)
 
-log(`Created ${build.filesCreated.length} files, updated ${build.filesUpdated.length}`)
+// ─── Phase: Review ───────────────────────────────────────────────────────────
+// Independent on purpose: the reviewer gets the spec, the changed files and the checklist,
+// never the author's plan or reasoning.
+phase('Review')
 
-// ─── Phase: Standards ─────────────────────────────────────────────────────────
-phase('Standards')
-
-const standards = await agent(
-  `You are the code-standards sub-agent of the Backend Agent.\n\n` +
-  `Audit and fix these files at ${projectPath}:\n${JSON.stringify([...build.filesCreated, ...build.filesUpdated])}\n\n` +
-  `Enforce:\n` +
-  `1. Every exported function has @param and @returns JSDoc\n` +
-  `2. Error responses use: { success: false, code: 'ERR_X', message: '...', details: {} }\n` +
-  `3. No stack traces in error responses\n` +
-  `4. No console.log in production paths\n` +
-  `5. No bare catch blocks — errors must be handled\n\n` +
-  `Fix all violations in-place by editing the files.\n\n` +
-  `Return JSON: { violations: [{file,issue,fixed:boolean}], filesFixed: [string] }`,
+const review = await agent(
+  `You are the Backend reviewer. You did not write this code; review it with fresh eyes.\n\n` +
+  `Project: ${projectPath}\nTask: "${taskText}"\n` +
+  `Files changed this session: ${JSON.stringify(authored)}\n` +
+  `Read them (and git -C "${projectPath}" diff for files that existed before).\n\n` +
+  `Requirements spec:\n${spec}\n\n` +
+  CHECKLIST + `\n` +
+  `1. Check every changed file against each checklist item and against the spec's Decisions and acceptance criteria for this task.\n` +
+  `2. Fix violations in place when the fix is behaviour-preserving or restores what the spec requires (e.g. missing validation, ` +
+  `wrong error shape, missing JSDoc or README). Do not add features the spec doesn't ask for.\n` +
+  `3. Check that routes.js (or the route registration) matches these declared contracts: ${JSON.stringify(build.routeContracts.map(r => `${r.method} ${r.path}`))}.\n\n` +
+  `Return { violations: [{ file, rule, issue, fixed }], filesFixed: [string], filesCreated: [string], contractMismatches: [string] }.`,
   {
-    label: 'code-standards',
-    phase: 'Standards',
+    label: 'reviewer',
+    phase: 'Review',
     schema: {
       type: 'object',
-      required: ['violations', 'filesFixed'],
+      required: ['violations', 'filesFixed', 'filesCreated', 'contractMismatches'],
       properties: {
-        violations: { type: 'array' },
-        filesFixed: { type: 'array', items: { type: 'string' } },
+        violations:         { type: 'array', items: { type: 'object' } },
+        filesFixed:         { type: 'array', items: { type: 'string' } },
+        filesCreated:       { type: 'array', items: { type: 'string' } },
+        contractMismatches: { type: 'array', items: { type: 'string' } },
       },
     },
   }
 )
-
-log(`Standards: ${standards.violations.length} violation(s), ${standards.filesFixed.length} fixed`)
-
-// ─── Phase: Structure ─────────────────────────────────────────────────────────
-phase('Structure')
-
-const structure = await agent(
-  `You are the folder-structure sub-agent of the Backend Agent.\n\n` +
-  `Verify and fix the feature folder for "${plan.featureName}" at ${projectPath}/src/features/${plan.featureName}/.\n\n` +
-  `Check:\n` +
-  `1. routes.js, controller.js, service.js, schema.js all exist\n` +
-  `2. README.md exists with: description, endpoints table (method/path/auth/description), dependencies section\n` +
-  `3. Files are in the correct folder — not scattered elsewhere\n\n` +
-  `Create any missing README.md with proper content.\n\n` +
-  `Return JSON: { missingFiles: [string], createdFiles: [string], folderIssues: [string] }`,
-  {
-    label: 'folder-structure',
-    phase: 'Structure',
-    schema: {
-      type: 'object',
-      required: ['missingFiles', 'createdFiles', 'folderIssues'],
-      properties: {
-        missingFiles: { type: 'array', items: { type: 'string' } },
-        createdFiles: { type: 'array', items: { type: 'string' } },
-        folderIssues: { type: 'array', items: { type: 'string' } },
-      },
-    },
-  }
-)
-
-log(`Structure: created ${structure.createdFiles.length} missing file(s)`)
+const unfixed = review.violations.filter(v => !v.fixed)
+log(`Review: ${review.violations.length} violation(s), ${review.filesFixed.length} file(s) fixed, ${unfixed.length} left, ${review.contractMismatches.length} contract mismatch(es)`)
 
 const persistOps = [
-  { db: ['--as', 'backend', 'save-decision', 'backend', sessionId, 'express-patterns', `Created ${build.routeContracts.length} routes for: ${taskText.slice(0, 60)}`, `Feature: ${plan.featureName}`] },
+  { db: ['--as', 'backend', 'save-decision', 'backend', sessionId, 'express-patterns', `Created ${build.routeContracts.length} routes for: ${taskText.slice(0, 60)}`, `Feature: ${build.featureName}`] },
 ]
 await flushPersist(persistOps)
 
@@ -243,12 +195,7 @@ const contractExports = build.routeContracts.map(r => ({
   authScheme:    r.authRequired ? 'bearer' : 'none',
 }))
 
-const allFiles = uniquePaths([
-  ...build.filesCreated,
-  ...build.filesUpdated,
-  ...standards.filesFixed,
-  ...structure.createdFiles,
-])
+const allFiles = uniquePaths([...authored, ...review.filesFixed, ...review.filesCreated])
 
 return {
   sessionId,
@@ -257,8 +204,12 @@ return {
   status:         'completed',
   dataAccess,
   routes:         build.routeContracts,
-  handlers:       build.filesCreated.map(f => ({ filePath: f, functions: [], feature: plan.featureName })),
+  handlers:       build.filesCreated.map(f => ({ filePath: f, functions: [], feature: build.featureName })),
   filesChanged:   allFiles,
   contractExports,
-  errors:         standards.violations.filter(v => !v.fixed).map(v => `${v.file}: ${v.issue}`),
+  specConflicts:  build.specConflicts,
+  errors:         [
+    ...unfixed.map(v => `${v.file}: ${v.issue}`),
+    ...review.contractMismatches.map(m => `contract: ${m}`),
+  ],
 }

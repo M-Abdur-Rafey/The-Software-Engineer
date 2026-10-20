@@ -1,6 +1,5 @@
 # code-standards
 
-Sub-agent of [[backend]].
+Checklist of [[backend]]: applied by [[backend-author]], verified by [[backend-reviewer]].
 
-**Does:** Audits JSDoc, error format, and comments.
-**Hands off to:** [[folder-structure]]
+**Covers:** JSDoc, the error format, no stack traces or console.log in production paths, no bare catch blocks.

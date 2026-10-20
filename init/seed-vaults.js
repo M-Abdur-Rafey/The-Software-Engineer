@@ -1528,7 +1528,7 @@ WIP                    ← not descriptive
 
 writeNote('gitdevops', 'security-scans/checklist.md', `# Security Scan Checklist
 
-Runs against \`git diff --staged\` before every commit.
+Runs before every commit, on the lines the session adds. Implemented exactly by \`shared/lib/scan.js\` (deterministic, no model, no override): change the script and its tests in \`tests/scan.test.js\` together with this table. Example env files (\`.env.example\` etc.), placeholder values and environment-variable reads are not treated as secrets; test and documentation files are exempt from the localhost check.
 
 | Severity | Check | Pattern |
 |----------|-------|---------|
@@ -2634,13 +2634,18 @@ const GRAPH = {
     title: 'Backend Agent',
     role: 'Builds routes, controllers, and services; declares the API contract.',
     upstream: ['database'], downstream: ['frontend', 'testing', 'calls'], validators: ['mcpbridge'],
+    // Split by independence (design/agent-consolidation.md): one author, one fresh reviewer; the old roles are checklists.
     subAgents: [
-      ['flow-planner', 'Maps the business-logic flow before any code.', 'data-architect'],
-      ['data-architect', 'Designs lean data access: one shared DB pool, read-only AI queries (LIMIT + time filters, no SELECT *), caching and lookup tables.', 'route-creator'],
-      ['route-creator', 'Generates route + controller + service files.', 'prompt-engineer'],
-      ['prompt-engineer', 'Designs AI micro-agents when the feature needs an LLM.', 'code-standards'],
-      ['code-standards', 'Audits JSDoc, error format, and comments.', 'folder-structure'],
-      ['folder-structure', 'Verifies the feature-folder layout and READMEs.', null],
+      ['backend-author', 'Plans the flow and data access, writes the code to the spec, and self-checks against the checklists.', 'backend-reviewer'],
+      ['backend-reviewer', "Reviews the changed files against the spec and the checklists without the author's reasoning; fixes violations.", null],
+    ],
+    checklists: [
+      ['flow-planner', 'Thin controllers, business logic in services, validation for every input, only the middleware the task needs.'],
+      ['data-architect', 'One shared DB pool, parameterized queries, no N+1 or SELECT *, read-only AI queries with LIMIT + time filters, caching and lookup tables.'],
+      ['route-creator', 'The route contract shape, with change and changeSummary on every route the session touched.'],
+      ['prompt-engineer', 'AI micro-agents (role, guardrail, rules, examples, strict schema, validation loop) when the feature has an LLM component.'],
+      ['code-standards', 'JSDoc, the error format, no stack traces or console.log in production paths, no bare catch blocks.'],
+      ['folder-structure', 'The feature-folder layout and its README.'],
     ],
   },
   frontend: {
@@ -2724,6 +2729,7 @@ for (const [name, g] of Object.entries(GRAPH)) {
     '',
     '## Internal pipeline (sub-agents)',
     pipeline,
+    ...(g.checklists && g.checklists.length ? ['', `**Checklists:** ${g.checklists.map((c) => link(c[0])).join(' · ')}`] : []),
     '',
     '## Knowledge',
     'Accumulated decisions and patterns live in this vault (see `INDEX.md`) and in `knowledge.db`.',
@@ -2738,6 +2744,18 @@ for (const [name, g] of Object.entries(GRAPH)) {
       '',
       `**Does:** ${role}`,
       `**Hands off to:** ${next ? link(next) : `returns results to ${link(name)}`}`,
+      '',
+    ].join('\n'));
+  }
+
+  // Old sub-agent roles that became checklists: applied by the first sub-agent, verified by the last.
+  for (const [sub, role] of g.checklists || []) {
+    writeNote(name, `sub-agents/${sub}.md`, [
+      `# ${sub}`,
+      '',
+      `Checklist of ${link(name)}: applied by ${link(g.subAgents[0][0])}, verified by ${link(g.subAgents[g.subAgents.length - 1][0])}.`,
+      '',
+      `**Covers:** ${role}`,
       '',
     ].join('\n'));
   }

@@ -1,6 +1,5 @@
 # flow-planner
 
-Sub-agent of [[backend]].
+Checklist of [[backend]]: applied by [[backend-author]], verified by [[backend-reviewer]].
 
-**Does:** Maps the business-logic flow before any code.
-**Hands off to:** [[data-architect]]
+**Covers:** Thin controllers, business logic in services, validation for every input, only the middleware the task needs.

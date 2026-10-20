@@ -1,6 +1,5 @@
 # prompt-engineer
 
-Sub-agent of [[backend]].
+Checklist of [[backend]]: applied by [[backend-author]], verified by [[backend-reviewer]].
 
-**Does:** Designs AI micro-agents when the feature needs an LLM.
-**Hands off to:** [[code-standards]]
+**Covers:** AI micro-agents (role, guardrail, rules, examples, strict schema, validation loop) when the feature has an LLM component.
