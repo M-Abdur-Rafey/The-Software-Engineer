@@ -38,6 +38,7 @@ const out = await agent(
   `2. This project's lessons. You may only rewrite or merge the lessons listed; you can never add one.\n` +
   `   - cue: the SHAPE of situation the lesson applies to, so it fires on a different task. Not one task's facts.\n` +
   `   - lesson: the operation the author should perform, stated so it can be applied and checked, naming the checklist item.\n` +
+  `   Keep cue and lesson to at most 300 characters each; longer text is cut.\n` +
   `   Too generic is useless ("be careful with the database"); too specific never fires again ("orders/service.js line 12"). Aim ` +
   `between: "when a new feature needs the database, import the shared pool from src/db.js; never construct a pool in a request path".\n` +
   `   - Rewrite only where the examples support it; otherwise leave the lesson out of your output (the template stays).\n` +

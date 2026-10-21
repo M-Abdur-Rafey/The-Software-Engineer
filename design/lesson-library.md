@@ -176,7 +176,15 @@ This is a small loop in our own repo, not the Python framework.
   - SRE-feedback labelling
   - the `repeatMisses` metric
   - docs, seed graph (a `lessons/` folder per domain) and `.gitignore`
-- **B. Curator (change 4): built, smoke test pending** (branch `feat/lessons-phase-b`). The `/software-engineer lessons` command (routing table in `SKILL.md`), the end-of-session offer (`lessons.js` tracks observations since the last curation), the curator workflow with the adapted extraction prompt, the proposals folder, and attribution.
+- **B. Curator (change 4): built and smoke-tested** (branch `feat/lessons-phase-b`). Smoke test: three throwaway projects were given made-up lesson history. `data-architect` had the same concrete miss (a database pool built per request) in all three, `code-standards` only vague notes, and project A also had an overlapping `flow-planner` lesson. One curator agent (71k tokens) did the following:
+  - rewrote `data-architect` as a checkable rule
+  - merged `flow-planner` into it
+  - left `code-standards` unchanged
+  - proposed a concrete `data-architect` checklist change with "supports" for all three projects
+  - marked `code-standards` "confounded" in every project, with `NO_ENTRY`
+
+  `persist.js` applied the output with nothing rejected and reset the pending count; nothing tracked in the repo changed. The run found one bug, fixed before merging: over-long curated text was cut mid-word in the brief. It is now cut at a word boundary, and the prompt asks for at most 300 characters. The made-up data was deleted afterwards.
+  - Also in phase B: the `/software-engineer lessons` command (routing table in `SKILL.md`), the end-of-session offer (`lessons.js` tracks observations since the last curation), the curator workflow with the adapted extraction prompt, the proposals folder, and attribution.
 - **C. Offline tuning (change 7, optional).** The proposer and compose loop in `tests/ab`, with the answer-key guard and a budget flag.
 
 Smoke-test each phase like agent consolidation:

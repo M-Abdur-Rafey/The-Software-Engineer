@@ -271,7 +271,14 @@ function exportFor(db, projectPath, root = ROOT) {
   return { project: projectmap.projectName(projectPath), lessons, candidates: candidates(db, root) };
 }
 
-const clip = (v) => (typeof v === 'string' && v.trim() ? v.replace(/\s+/g, ' ').trim().slice(0, TEXT_CHARS) : null);
+// Over-long text is cut at a word boundary and marked, never mid-word (the brief quotes it to authors).
+const clip = (v) => {
+  if (typeof v !== 'string' || !v.trim()) return null;
+  const s = v.replace(/\s+/g, ' ').trim();
+  if (s.length <= TEXT_CHARS) return s;
+  const cut = s.slice(0, TEXT_CHARS - 3);
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 0 ? cut.lastIndexOf(' ') : cut.length).replace(/[,;:]$/, '')}...`;
+};
 
 function proposalNote(p, c, now) {
   const rows = (p.rows || []).map((r) => `| ${clip(r.project) || '?'} | ${clip(r.observed) || ''} | ${['supports', 'confounded', 'unrelated'].includes(r.verdict) ? r.verdict : 'confounded'} |`);

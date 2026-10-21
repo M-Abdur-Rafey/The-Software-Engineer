@@ -169,6 +169,18 @@ try {
     assert.match(note, /\| a \| pool per request \| confounded \|/, 'unknown verdicts become confounded');
   });
 
+  test('over-long curated text is cut at a word boundary, never mid-word', () => {
+    const long = 'import the shared pool from the db module and never construct a pool or a connection inside a handler, ' +
+      'controller or service function; the reviewer checks the changed files for any pool constructor outside that module, ' +
+      'and the author confirms it before returning the work to the pipeline for review, so the same miss never reaches ' +
+      'the reviewer again on this project';
+    assert.ok(long.length > 300);
+    L.applyCuration(db, { curate: PROJECT, lessons: [{ domain: 'backend', rule: 'data-architect', lesson: long }] }, { root: tmp, now: t++ });
+    const text = L.exportFor(db, PROJECT, tmp).lessons.find(l => l.rule === 'data-architect').lesson;
+    assert.ok(text.length <= 300 && text.endsWith('...'), text);
+    assert.ok(long.startsWith(text.slice(0, -3)) && long[text.length - 3] === ' ', 'cut on a space');
+  });
+
   test('a proposal without a change is recorded as NO_ENTRY', () => {
     const r = L.applyCuration(db, { curate: PROJECT, proposals: [{ domain: 'backend', rule: 'data-architect', proposal: '' }] }, { root: tmp, now: t++ });
     assert.match(fs.readFileSync(path.join(tmp, r.proposals[0]), 'utf8'), /status: NO_ENTRY/);
