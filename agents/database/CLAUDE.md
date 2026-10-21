@@ -80,9 +80,9 @@ Two agents, split by independence rather than role (`design/agent-consolidation.
 
 Checklists (formerly separate sub-agents):
 
-- **table-creator**: `CREATE TABLE IF NOT EXISTS`, explicit foreign keys with `ON DELETE` behaviour, the user's preferences, the migration filename format.
+- **table-creator**: `CREATE TABLE IF NOT EXISTS`, explicit foreign keys with `ON DELETE` behaviour, the user's preferences, the migration filename format. When a spec Decision lists a table's columns, create exactly those: add `updated_at` only to tables whose rows the spec edits (tuning round 1).
 - **schema-validator**: no nullable primary keys, snake_case names, consistent timestamp and UUID types, referential integrity.
-- **query-optimizer**: the index and N+1 rules above; indexes live in the migration file itself.
+- **query-optimizer**: the index and N+1 rules above, with an index on **every** foreign key column (a parent delete or `ON DELETE SET NULL` otherwise scans the child table); indexes live in the migration file itself.
 
 ## Output contract
 

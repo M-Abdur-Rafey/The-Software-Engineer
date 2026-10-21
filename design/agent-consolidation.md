@@ -104,6 +104,20 @@ Rerun the A/B harness (`tests/ab/`) after each phase: same `TASK.md` and `CHANGE
 - **Targets:** at least 40% fewer agents and 30% fewer billable tokens per run.
 - **Report:** agents, billable tokens, cache reads and wall time per phase, using `tokreport.mjs`. A phase that misses the quality bar is reverted, not tuned around.
 
+### Result (2026-10-21, build only)
+
+Measured as the reference arm of tuning round 1 (`tests/ab/TUNING.md`): the same `TASK.md`, the same clarification defaults, no System Docs, skill at `e95da04` (all four phases plus the lesson library).
+
+| Build of the task tracker | Agents | Tokens (workflow total) | Wall time | Hidden suite |
+|---|---|---|---|---|
+| Before consolidation (A/B test) | 57 | 4.45M | 78 min | 41/41 |
+| After (tuning round 1, three runs) | 13 | 1.30M / 1.32M / 1.35M | 30-35 min | 41/41 in all three |
+
+That is 77% fewer agents and about 70% fewer tokens at the same quality. Both targets (40% and 30%) are met.
+
+- **Not measured yet:** the change suite (`CHANGE.md`, 54 checks), and a second run of the unmodified skill. The two probe runs carried small checklist edits, so they show variance only loosely.
+- **Bug found:** all three runs were blocked from committing by a false positive in the security scan (JSDoc types and `'new-password'` read as hardcoded secrets). It was fixed in `0e0b5e3`. The hidden suite tests the working tree, so the scores are unaffected.
+
 ## Phases
 
 1. **Plumbing: built, not yet measured** (`dc5937a`, `17ee173`). Load-context agents removed; every domain returns its bookkeeping as `persistOps`, run once at the end by one agent through `shared/lib/persist.js`; the skill passes session, onboarding and classification data in; the docs gate is part of the impact analyst; the security scan is `shared/lib/scan.js` and gitdevops is one agent. Agents per full run (skill-started, no System Docs, no 3D): about 49 to about 28. Bookkeeping notes are still written by one agent rather than the skill, because the main session would have to re-type their contents (no cheaper path inside the Workflow sandbox).

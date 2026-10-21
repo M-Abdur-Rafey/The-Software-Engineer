@@ -134,7 +134,7 @@ retirement are the SRE agent's side of the handoff — declare what to watch in 
 
 Two agents, split by independence rather than role (`design/agent-consolidation.md`):
 
-1. **author**: plans the business-logic flow, designs data access, writes the code, and checks its own work against the checklists below before returning. It receives the requirements spec (decisions, scope, backend tasks and acceptance criteria), whose Decisions are binding.
+1. **author**: plans the business-logic flow, designs data access, writes the code, and checks its own work against the checklists below before returning. It receives the requirements spec (decisions, scope, backend tasks and acceptance criteria), whose Decisions are binding. Its self-check is one bounded pass, just before returning: reopen only the files it wrote, walk each down the checklist, treat methods of an object returned by an exported factory as exported (JSDoc), and remove exports nothing imports (tuning round 1).
 2. **reviewer**: a fresh agent that sees only the spec, the changed files and the checklists, never the author's reasoning. It fixes violations in place when the fix is behaviour-preserving or restores what the spec requires, and reports what it could not fix and any mismatch between the code and the declared route contracts. Every violation it reports carries the `rule` (checklist id, or `spec`) it breaks; these feed the lesson library (`design/lesson-library.md`). It never sees the lessons.
 
 Checklists (formerly separate sub-agents; their vault notes under `sub-agents/` describe them):

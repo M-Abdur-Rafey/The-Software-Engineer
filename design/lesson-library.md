@@ -185,7 +185,15 @@ This is a small loop in our own repo, not the Python framework.
 
   `persist.js` applied the output with nothing rejected and reset the pending count; nothing tracked in the repo changed. The run found one bug, fixed before merging: over-long curated text was cut mid-word in the brief. It is now cut at a word boundary, and the prompt asks for at most 300 characters. The made-up data was deleted afterwards.
   - Also in phase B: the `/software-engineer lessons` command (routing table in `SKILL.md`), the end-of-session offer (`lessons.js` tracks observations since the last curation), the curator workflow with the adapted extraction prompt, the proposals folder, and attribution.
-- **C. Offline tuning (change 7, optional): built, no tuning round run yet** (branch `feat/lessons-phase-c`). `tests/ab/tune.mjs` (prepare, evidence, load-edits, score, status, select, adopt, clean), `tests/ab/tune-propose.js` and the runbook `tests/ab/TUNING.md`. A dry cycle without model calls was checked: worktrees, per-arm databases, no hidden suite in any arm, an unsafe edit rejected, selection, adopt and clean. The proposer and compose loop in `tests/ab`, with the answer-key guard and a budget flag.
+- **C. Offline tuning (change 7, optional): built; round 1 run 2026-10-21.**
+  - **Round 1:** 4.05M tokens of the 7M budget (three full builds plus one proposer).
+    - **ref:** 41/41, 13 agents, 1.30M.
+    - **inv**, a bounded self-check for the backend author: 41/41, 1.32M (+1.5%). Backend JSDoc catches fell 2 → 0, dead-export trims 4 → 1.
+    - **dom**, a database checklist (exact spec columns, an index on every foreign key): 41/41, 1.35M (+3.7%). Database catches fell 5 → 0.
+  - Both edits were kept and adopted on branch `tune/round1-edits`, with the same rules mirrored in `agents/backend/CLAUDE.md` and `agents/database/CLAUDE.md`.
+  - **Caveats:** one run per arm, and the token cost did not drop. The gain is fewer reviewer catches at the same score. A confirm run of the composed skill was not done.
+  - **Runbook issue found:** the run folder has to be granted to the session first; fixed on `fix/tune-runbook`.
+  - **Originally built as:** (branch `feat/lessons-phase-c`). `tests/ab/tune.mjs` (prepare, evidence, load-edits, score, status, select, adopt, clean), `tests/ab/tune-propose.js` and the runbook `tests/ab/TUNING.md`. A dry cycle without model calls was checked: worktrees, per-arm databases, no hidden suite in any arm, an unsafe edit rejected, selection, adopt and clean. The proposer and compose loop in `tests/ab`, with the answer-key guard and a budget flag.
 
 Smoke-test each phase like agent consolidation:
 - **A:** run three backend sessions on one project. Seed a miss the reviewer must fix twice, check that the lesson appears in the third session's author prompt, and check that `repeatMisses` reports it.

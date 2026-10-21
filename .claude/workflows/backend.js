@@ -149,6 +149,9 @@ const build = await agent(
   `${VAULT}/INDEX.md and the notes it lists that apply (detect the stack: Node/Express vs Python), and the existing code in ${projectPath}: ` +
   `reuse its DB connection, conventions and helpers.\n\n` +
   CHECKLIST + `\n` +
+  `Self-check (one pass, just before returning): reopen only the files you wrote this session, without exploring further, and walk ` +
+  `each one down the checklist line by line. Methods of an object returned by an exported factory count as exported functions ` +
+  `(they need @param/@returns JSDoc too). Remove any export that nothing imports. Do not return until every file passes.\n\n` +
   `Return:\n- featureName\n- dataAccess: { dbAccess: { singlePool, init, notes }, aiQueryRules: [string], caching: { strategy, lookupTables, invalidation }, summary }\n` +
   `- filesCreated, filesUpdated\n` +
   `- routeContracts: ONLY routes this session created or whose behaviour it changed, each with change "new" | "modified" and, for ` +

@@ -98,7 +98,11 @@ const CHECKLIST =
   `YYYYMMDD_NNN_description.sql in ${projectPath}/migrations/ (or the project's existing migrations folder).\n` +
   `- Schema rules (schema-validator): no nullable primary keys; snake_case table and column names; created_at/updated_at stored ` +
   `consistently with the project (INTEGER epoch ms by default, not TEXT); UUID primary keys as TEXT.\n` +
-  `- Indexes (query-optimizer, ${VAULT}/optimizations/index-guidelines.md): an index for every column used in WHERE/JOIN/ORDER BY ` +
+  `- Columns (spec): when a spec Decision lists a table's columns, create exactly those columns and no more. That list overrides the ` +
+  `default created_at/updated_at convention: add updated_at only to a table the spec actually updates (a PATCH/PUT or other edit ` +
+  `operation on its rows), never to tables whose rows are only inserted or deleted.\n` +
+  `- Indexes (query-optimizer, ${VAULT}/optimizations/index-guidelines.md): an index on EVERY foreign key column (without one, the FK ` +
+  `check on a parent delete or ON DELETE SET NULL scans the whole child table), plus an index for every column used in WHERE/JOIN/ORDER BY ` +
   `on tables that will grow, covering indexes where they clearly help; no N+1-prone shapes. Indexes go IN the migration file.\n` +
   `- Precedence: the spec's Decisions are binding; if one conflicts with a rule above, follow the spec and report it in specConflicts.\n`
 
