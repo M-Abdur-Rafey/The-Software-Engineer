@@ -12,6 +12,7 @@
  *   { "write": "agents/<agent>/vault/<path>.md", "content": "..." }
  *   { "map": "<projectPath>", "sections": {...} | "update": {...} }   the project map (shared/lib/projectmap.js)
  *   { "observe": "<projectPath>", "session": "<id>", "domains": [...], "items": [...] }   lessons (shared/lib/lessons.js)
+ *   { "curate": "<projectPath>", "lessons": [...], "proposals": [...] }   the curator's output (shared/lib/lessons.js)
  *
  * Writes are confined to agents/<name>/vault/ under the install dir. Each op runs
  * independently: a failed op is reported, never fatal, because bookkeeping must not undo a
@@ -66,20 +67,27 @@ function runOp(op) {
     try { lessons.record(db, op, { root: ROOT }); } finally { db.close(); }
     return;
   }
-  throw new Error('unknown op (expected "db", "write", "map" or "observe")');
+  if (op && typeof op.curate === 'string') {
+    const db = lessons.openDb();
+    try { return { curation: lessons.applyCuration(db, op, { root: ROOT }) }; } finally { db.close(); }
+  }
+  throw new Error('unknown op (expected "db", "write", "map", "observe" or "curate")');
 }
 
 function run(ops) {
   const failed = [];
+  let curation = null;
   for (const op of ops) {
     try {
-      runOp(op);
+      const out = runOp(op);
+      if (out && out.curation) curation = out.curation;
     } catch (err) {
       const detail = err.stderr ? err.stderr.toString().trim() : err.message;
-      failed.push({ op: op && (op.db ? `db ${op.db.slice(0, 4).join(' ')}` : op.map ? `map ${op.map}` : op.observe ? `observe ${op.observe}` : `write ${op.write}`), error: detail.slice(0, 300) });
+      failed.push({ op: op && (op.db ? `db ${op.db.slice(0, 4).join(' ')}` : op.map ? `map ${op.map}` : op.observe ? `observe ${op.observe}` : op.curate ? `curate ${op.curate}` : `write ${op.write}`), error: detail.slice(0, 300) });
     }
   }
-  return { ran: ops.length - failed.length, failed };
+  // The curator's result (what was applied, which proposals were written, what was rejected) for the skill to report.
+  return curation ? { ran: ops.length - failed.length, failed, curation } : { ran: ops.length - failed.length, failed };
 }
 
 if (require.main === module) {

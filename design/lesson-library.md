@@ -165,7 +165,7 @@ This is a small loop in our own repo, not the Python framework.
 
 ## Phases
 
-- **A. Observations, guard and lessons (zero agents): built, smoke test pending** (branch `feat/lessons-phase-a`). Covers changes 1, 2, 3, 5 and 6:
+- **A. Observations, guard and lessons (zero agents): built and smoke-tested** (`732066b`). Smoke test: two earlier sessions with the same `code-standards` miss were added to the database, then one real short-pipeline fix ran on the smoke API (5 agents, 342k tokens). Only the author's prompt carried the lesson; the reviewer's did not. The author wrote a full JSDoc comment on the new handler, the reviewer found nothing to catch, and the lesson counted one clean run toward retirement. The added sessions were then deleted. Covers changes 1, 2, 3, 5 and 6:
   - the `observations` table (bootstrap)
   - `rule` enums on the reviewer schemas
   - the observation ops in `orchestrate.js`
@@ -176,7 +176,7 @@ This is a small loop in our own repo, not the Python framework.
   - SRE-feedback labelling
   - the `repeatMisses` metric
   - docs, seed graph (a `lessons/` folder per domain) and `.gitignore`
-- **B. Curator (change 4).** The `/software-engineer lessons` command (routing table in `SKILL.md`), the end-of-session offer (`lessons.js` tracks observations since the last curation), the curator workflow with the adapted extraction prompt, the proposals folder, and attribution.
+- **B. Curator (change 4): built, smoke test pending** (branch `feat/lessons-phase-b`). The `/software-engineer lessons` command (routing table in `SKILL.md`), the end-of-session offer (`lessons.js` tracks observations since the last curation), the curator workflow with the adapted extraction prompt, the proposals folder, and attribution.
 - **C. Offline tuning (change 7, optional).** The proposer and compose loop in `tests/ab`, with the answer-key guard and a budget flag.
 
 Smoke-test each phase like agent consolidation:

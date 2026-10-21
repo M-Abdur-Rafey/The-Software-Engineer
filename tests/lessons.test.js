@@ -104,6 +104,76 @@ try {
     assert.throws(() => L.record(db, { observe: PROJECT, items: [] }, { root: tmp }), /session id/);
   });
 
+  // ── Curation (phase B) ──────────────────────────────────────────────────────
+  test('pending counts observations since the last curation and offers at the threshold', () => {
+    const p = L.pending(db, PROJECT);
+    assert.ok(p.pending >= L.PENDING_OFFER && p.offer === true && p.lastCuratedAt === null);
+  });
+
+  test('curated wording replaces the template; a merge hides a lesson from the brief', () => {
+    session('m1', [{ domain: 'backend', rule: 'flow-planner', source: 'reviewer', issue: 'pool created in controller', fixed: true }]);
+    session('m2', [{ domain: 'backend', rule: 'flow-planner', source: 'reviewer', issue: 'pool created in controller', fixed: true }]);
+    const r = L.applyCuration(db, {
+      curate: PROJECT,
+      lessons: [
+        { domain: 'backend', rule: 'data-architect', cue: 'a new feature in this Express app needs the database', lesson: 'import the shared pool from src/db.js; never construct a pool in a request path', confidence: 'high' },
+        { domain: 'backend', rule: 'flow-planner', mergedInto: 'data-architect' },
+      ],
+    }, { root: tmp, now: t++ });
+    assert.strictEqual(r.curated, 2);
+    assert.deepStrictEqual(r.rejected, []);
+    const b = L.brief(db, PROJECT, tmp);
+    assert.deepStrictEqual(b.backend.rules, ['data-architect'], 'merged lesson is not briefed');
+    assert.match(b.backend.text, /import the shared pool from src\/db\.js/);
+    const note = fs.readFileSync(path.join(tmp, 'agents/backend/vault/lessons/shop/flow-planner.md'), 'utf8');
+    assert.match(note, /merged into \[\[data-architect\]\]/);
+    assert.strictEqual(L.pending(db, PROJECT).pending, 0, 'curating resets the pending count');
+  });
+
+  test('the curator cannot invent lessons, merge into nothing, or propose without 3 projects', () => {
+    const r = L.applyCuration(db, {
+      curate: PROJECT,
+      lessons: [
+        { domain: 'backend', rule: 'prompt-engineer', lesson: 'invented' },
+        { domain: 'backend', rule: 'data-architect', mergedInto: 'no-such-rule' },
+        { domain: 'backend', rule: 'data-architect', mergedInto: 'data-architect' },
+      ],
+      proposals: [{ domain: 'backend', rule: 'data-architect', proposal: 'add a line' }],
+    }, { root: tmp, now: t++ });
+    assert.strictEqual(r.curated, 0);
+    assert.strictEqual(r.rejected.length, 4);
+    assert.deepStrictEqual(r.proposals, []);
+    assert.match(L.brief(db, PROJECT, tmp).backend.text, /import the shared pool/, 'earlier curation untouched');
+  });
+
+  test('a rule with a lesson in 3 projects is a candidate; its proposal is written, never applied', () => {
+    for (const proj of ['C:/work/a', 'C:/work/b']) {
+      for (const s of ['1', '2']) L.record(db, { observe: proj, session: `${proj}-${s}`, domains: ['backend'], items: [poolMiss()] }, { root: tmp, now: t++ });
+    }
+    const [c, ...rest] = L.candidates(db, tmp);
+    assert.strictEqual(rest.length, 0);
+    assert.deepStrictEqual([c.domain, c.rule, c.projects.length], ['backend', 'data-architect', 3]);
+    assert.match(c.checklist, /One shared DB pool/);
+    const ex = L.exportFor(db, PROJECT, tmp);
+    assert.strictEqual(ex.project, 'shop');
+    assert.ok(ex.lessons.some(l => l.rule === 'data-architect' && l.examples.length));
+    assert.strictEqual(ex.candidates.length, 1);
+    const r = L.applyCuration(db, {
+      curate: PROJECT,
+      proposals: [{ domain: 'backend', rule: 'data-architect', target: 'agents/backend/CLAUDE.md', proposal: 'Add: "import the shared pool; never construct one per request"',
+        rows: [{ project: 'shop', observed: 'pool per request', verdict: 'supports' }, { project: 'a', observed: 'pool per request', verdict: 'made-up' }] }],
+    }, { root: tmp, now: t++ });
+    assert.deepStrictEqual(r.proposals, ['agents/orchestrator/vault/proposals/backend-data-architect.md']);
+    const note = fs.readFileSync(path.join(tmp, r.proposals[0]), 'utf8');
+    assert.match(note, /nothing is applied automatically/);
+    assert.match(note, /\| a \| pool per request \| confounded \|/, 'unknown verdicts become confounded');
+  });
+
+  test('a proposal without a change is recorded as NO_ENTRY', () => {
+    const r = L.applyCuration(db, { curate: PROJECT, proposals: [{ domain: 'backend', rule: 'data-architect', proposal: '' }] }, { root: tmp, now: t++ });
+    assert.match(fs.readFileSync(path.join(tmp, r.proposals[0]), 'utf8'), /status: NO_ENTRY/);
+  });
+
   console.log(`\nlessons: ${passed} passed`);
 } catch (err) {
   console.error(`\nFAILED after ${passed} passed:\n${err.stack}`);

@@ -53,6 +53,7 @@ That's it. Then run:
 | `/software-engineer update` | Pull the latest version |
 | `/software-engineer onboard` | Re-scan the current project (runs automatically on first use) |
 | `/software-engineer graph` | Build a filtered Obsidian knowledge graph of the project's real code |
+| `/software-engineer lessons` | Curate this project's lessons and draft checklist changes for problems seen across projects (offered automatically after 5 new catches) |
 | `/software-engineer docs [idea]` | Set up [System Docs](#system-docs): the project's source of truth in `docs/system/`. For a new project it plans modules and layers from your idea; for an existing one it documents the modules you choose |
 | `/software-engineer answer [module]` | Go through open System Docs questions in chat |
 | `/software-engineer approve <module>` | Approve a module's doc so coding on it can start (`approve layers` approves the build plan) |
@@ -247,7 +248,7 @@ Onboarding also writes a **project map**: one short note (at most 3000 character
 
 For a **small task** (a bug fix or chore touching one area) the skill offers a short pipeline: it skips the separate spec, the simplification pass and the post-run review, and asks you first every time. The contract check, the security scan and the tests for changed routes always run.
 
-The pipeline also **learns from its own catches**. When a reviewer, the contract check or the security scan has to catch the same kind of problem in two sessions on a project, it becomes a lesson that the next session's author sees up front. Lessons come only from those catches, never from opinion, stay with the project they came from, and retire once the problem stops recurring.
+The pipeline also **learns from its own catches**. When a reviewer, the contract check or the security scan has to catch the same kind of problem in two sessions on a project, it becomes a lesson that the next session's author sees up front. Lessons come only from those catches, never from opinion, stay with the project they came from, and retire once the problem stops recurring. Every so often the skill offers to curate them: one agent sharpens the wording, merges duplicates, and drafts a checklist change when the same lesson shows up in three projects. You decide whether a draft becomes a pull request; nothing changes the skill on its own.
 
 | Agent | Icon | Does |
 |-------|------|------|

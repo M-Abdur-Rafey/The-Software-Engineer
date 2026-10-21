@@ -69,6 +69,7 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 | `/software-engineer update` | Pull latest version — go to the Update section |
 | `/software-engineer onboard` | Force re-scan of current project — go to the Onboard section |
 | `/software-engineer graph` | Build a filtered code knowledge graph of the current project — go to the Graph section |
+| `/software-engineer lessons` | Curate this project's lessons and draft checklist proposals (one agent) — go to the Lessons section |
 | `/software-engineer docs [idea]` | Set up System Docs (the project's source of truth in `docs/system/`) — go to the Docs section |
 | `/software-engineer answer [module]` | Walk through open System Docs questions in chat — go to the Answer section |
 | `/software-engineer approve <module\|layers>` | Approve a module doc (or the layer plan) so coding can start — go to the Answer section |
@@ -369,6 +370,7 @@ Then summarise clearly:
 - **Contract check:** whether frontend/backend/database were consistent
 - If anything was **blocked** (contract violation, security issue): explain in plain language what failed and what the user should do to fix it
 - **System Docs** (when `systemDocs` is set): which module docs were updated and which other owners are affected
+- **Lessons:** run `node <install-path>/shared/lib/lessons.js pending "<current working directory>"`. When it prints `offer: true`, ask once: _"The reviewers, bridge and scan have caught N new problems on this project since the lessons were last curated. Curate them now? It costs one agent."_ Go to the Lessons section only if the user agrees.
 - **Short pipeline** (when `skipped` is not empty): which stages were skipped. If you asked for `small` but `size` came back `normal`, say why (more than one domain, not a fix/chore, or other modules depend on the change) and that everything ran
 
 **If the result has `status: "awaiting-answers"`**, nothing was coded: the project's System Docs need decisions first. Explain the `chainReaction` and the affected `consumers` in plain language, then follow the Answer section for every target module in `blocking`. When every target passes `gate`, re-run Step 5 with the same task.
@@ -514,6 +516,23 @@ Tell the user what was found: tech stack, number of routes, components, tables.
 
 ---
 
+## Subcommand: lessons (curate the lesson library)
+
+The pipeline keeps lessons from what its reviewers, contract bridge and security scan catch (design: `<install-path>/design/lesson-library.md`). A lesson appears when the same checklist rule is missed in 2+ sessions on this project, and only authors see it. Curation sharpens and merges this project's lessons, and drafts a checklist change for any rule that has a lesson in 3+ projects. It costs one agent.
+
+1. Show what there is: `node <install-path>/shared/lib/lessons.js list "<current working directory>"` (summarise: domain, rule, status, sessions). If it is empty, say there is nothing to curate yet and stop.
+2. Run the curator:
+   ```javascript
+   Workflow({
+     scriptPath: `<install-path>/.claude/workflows/curate.js`,
+     args: { projectPath: "<current working directory>", agentsDir: "<install-path>", deferPersist: true }
+   })
+   ```
+3. Apply its output with no agent: `node <install-path>/shared/lib/persist.js "<output-file from the completion notice>"`. The `curation` field of what it prints says how many lessons were rewritten or merged, which proposal files were written, and what was **rejected** (anything the curator invented: a lesson that does not exist, a merge into nothing, a proposal for a rule without lessons in 3+ projects).
+4. Report in plain language: the curator's `summary`, the lessons it changed, and each proposal. A proposal (`agents/orchestrator/vault/proposals/<domain>-<rule>.md`) is never applied automatically. Offer to turn one into a pull request against the skill if the user wants it; `NO_ENTRY` means the evidence did not support a change.
+
+---
+
 ## Subcommand: graph (filtered code knowledge graph)
 
 Builds a **lean Obsidian knowledge graph of the current project** — only the routes, components, tables, features and relationships that actually exist in the code. Theoretical or unused entities are excluded on purpose, so the graph stays navigable instead of overflowing.
@@ -547,6 +566,7 @@ Show:
 /software-engineer update     — Pull latest version
 /software-engineer onboard    — Re-scan current project
 /software-engineer graph      — Build a filtered code knowledge graph (Obsidian)
+/software-engineer lessons    — Curate this project's lessons; draft checklist proposals
 /software-engineer docs       — Set up System Docs: the project's per-module source of truth
 /software-engineer answer     — Answer open System Docs questions
 /software-engineer approve    — Approve a module doc (or the layer plan) so coding can start

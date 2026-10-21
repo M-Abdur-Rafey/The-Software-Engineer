@@ -56,7 +56,25 @@ CREATE TABLE IF NOT EXISTS domain_runs (
   created_at   INTEGER NOT NULL,
   PRIMARY KEY (project_path, domain, session_id)
 );
+CREATE TABLE IF NOT EXISTS curated (
+  project_path TEXT NOT NULL,
+  domain       TEXT NOT NULL,
+  rule         TEXT NOT NULL,
+  cue          TEXT,
+  lesson       TEXT,
+  confidence   TEXT,
+  merged_into  TEXT,
+  curated_at   INTEGER NOT NULL,
+  PRIMARY KEY (project_path, domain, rule)
+);
+CREATE TABLE IF NOT EXISTS curations (
+  project_path TEXT PRIMARY KEY,
+  curated_at   INTEGER NOT NULL
+);
 `;
+const MIN_PROJECTS = 3;      // projects with the same lesson before a checklist change is proposed
+const PENDING_OFFER = 5;     // new observations before the skill offers to curate
+const TEXT_CHARS = 300;      // curated cue / lesson
 
 const norm = (p) => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 const slug = (rule) => String(rule).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'rule';
@@ -118,8 +136,19 @@ function lessonsFor(db, projectPath, domain) {
       confidence: sessions.length >= 3 ? 'high' : 'medium',
     });
   }
+  // The curator may sharpen a lesson's wording or merge it into another; the evidence stays computed.
+  const curated = db.prepare('SELECT rule, cue, lesson, confidence, merged_into FROM curated WHERE project_path = ? AND domain = ?').all(project, domain);
+  for (const l of lessons) {
+    const c = curated.find((r) => r.rule === l.rule);
+    if (!c) continue;
+    l.curated = { cue: c.cue || null, lesson: c.lesson || null, mergedInto: c.merged_into || null };
+    if (c.confidence) l.confidence = c.confidence;
+  }
   return lessons.sort((a, b) => b.lastAt - a.lastAt);
 }
+
+const lessonText = (l, root) => (l.curated && l.curated.lesson) || ruleText(l.domain, l.rule, root);
+const briefable = (l) => l.status === 'active' && !(l.curated && l.curated.mergedInto);
 
 // The lesson's wording comes from the checklist note the seed graph writes for that rule.
 function ruleText(domain, rule, root = ROOT) {
@@ -143,12 +172,14 @@ function stackLine(projectPath, root) {
 function lessonNote(l, projectPath, root) {
   const name = projectmap.projectName(projectPath);
   const stack = stackLine(projectPath, root);
+  const merged = l.curated && l.curated.mergedInto;
   return [
     `# ${l.domain} · ${l.rule} · ${name}`,
     '',
-    `- status: ${l.status}${l.status === 'retired' ? ` (${l.cleanRuns} clean ${l.domain} runs since the last miss)` : ''}`,
-    `- **cue**: ${l.domain} changes in ${name}${stack ? ` (${stack})` : ''}`,
-    `- **lesson**: ${ruleText(l.domain, l.rule, root)}`,
+    `- status: ${l.status}${l.status === 'retired' ? ` (${l.cleanRuns} clean ${l.domain} runs since the last miss)` : ''}` +
+      `${merged ? `; merged into [[${slug(merged)}]] by the curator` : ''}${l.curated && !merged ? '; wording curated' : ''}`,
+    `- **cue**: ${(l.curated && l.curated.cue) || `${l.domain} changes in ${name}${stack ? ` (${stack})` : ''}`}`,
+    `- **lesson**: ${lessonText(l, root)}`,
     `- **evidence**: missed in ${l.sessions.length} sessions (${l.sessions.map((s) => s.slice(0, 8)).join(', ')}); ` +
       `caught by ${l.sources.join(', ')}; fixed in the same session ${l.fixed} time(s)`,
     `- **confidence**: ${l.confidence}`,
@@ -171,7 +202,7 @@ function writeNotes(db, projectPath, domain, root = ROOT) {
     '',
     'Evidence-backed lessons from earlier sessions on this project (design/lesson-library.md).',
     '',
-    ...lessons.map((l) => `- [${l.status}] [[${slug(l.rule)}]]: ${ruleText(domain, l.rule, root)}`),
+    ...lessons.map((l) => `- [${l.curated && l.curated.mergedInto ? 'merged' : l.status}] [[${slug(l.rule)}]]: ${lessonText(l, root)}`),
     '',
   ].join('\n'));
 }
@@ -181,7 +212,7 @@ function briefText(lessons, root) {
   let used = 0;
   for (const l of lessons) {
     const example = l.examples[0] ? ` e.g. "${l.examples[0].slice(0, 160)}"` : '';
-    const line = `- [${l.rule}] ${ruleText(l.domain, l.rule, root).replace(/\.+$/, '')}. Missed in ${l.sessions.length} earlier sessions,${example}`;
+    const line = `- [${l.rule}] ${lessonText(l, root).replace(/\.+$/, '')}. Missed in ${l.sessions.length} earlier sessions,${example}`;
     if (used + line.length > BRIEF_CHARS) break;
     lines.push(line);
     used += line.length + 1;
@@ -193,21 +224,127 @@ function briefText(lessons, root) {
 function brief(db, projectPath, root = ROOT) {
   const out = {};
   for (const d of AUTHOR_DOMAINS) {
-    const active = lessonsFor(db, projectPath, d).filter((l) => l.status === 'active');
+    const active = lessonsFor(db, projectPath, d).filter(briefable);
     if (active.length) out[d] = { rules: active.map((l) => l.rule), text: briefText(active, root) };
   }
-  const shared = SHARED_DOMAINS.flatMap((d) => lessonsFor(db, projectPath, d).filter((l) => l.status === 'active'));
+  const shared = SHARED_DOMAINS.flatMap((d) => lessonsFor(db, projectPath, d).filter(briefable));
   if (shared.length) out.shared = { rules: shared.map((l) => l.rule), text: briefText(shared, root) };
   return out;
+}
+
+// ── Curation (phase B): the curator agent reads export(), persist.js applies its output ──────
+
+/** Observations recorded since this project was last curated (the skill offers curation at PENDING_OFFER). */
+function pending(db, projectPath) {
+  db.exec(SCHEMA);
+  const project = norm(projectPath);
+  const last = db.prepare('SELECT curated_at FROM curations WHERE project_path = ?').get(project);
+  const n = db.prepare('SELECT COUNT(*) AS n FROM observations WHERE project_path = ? AND created_at > ?').get(project, last ? last.curated_at : 0).n;
+  return { pending: n, offer: n >= PENDING_OFFER, lastCuratedAt: last ? last.curated_at : null };
+}
+
+/** Rules with an active lesson in MIN_PROJECTS or more projects: candidates for a checklist change. */
+function candidates(db, root = ROOT) {
+  db.exec(SCHEMA);
+  const projects = db.prepare('SELECT DISTINCT project_path, domain FROM observations').all();
+  const byRule = new Map();
+  for (const { project_path: p, domain } of projects) {
+    for (const l of lessonsFor(db, p, domain).filter((x) => x.status === 'active')) {
+      const key = `${domain}\u0000${l.rule}`;
+      if (!byRule.has(key)) byRule.set(key, { domain, rule: l.rule, projects: [], examples: [] });
+      const c = byRule.get(key);
+      c.projects.push(projectmap.projectName(p));
+      c.examples.push(...l.examples.slice(0, 2));
+    }
+  }
+  return [...byRule.values()].filter((c) => c.projects.length >= MIN_PROJECTS)
+    .map((c) => ({ ...c, examples: c.examples.slice(0, 6), checklist: ruleText(c.domain, c.rule, root) }));
+}
+
+/** Everything the curator needs, as data: this project's lessons with their evidence, and the candidates. */
+function exportFor(db, projectPath, root = ROOT) {
+  const lessons = [...AUTHOR_DOMAINS, ...SHARED_DOMAINS].flatMap((d) => lessonsFor(db, projectPath, d)).map((l) => ({
+    domain: l.domain, rule: l.rule, status: l.status, sessions: l.sessions.length, sources: l.sources, fixed: l.fixed,
+    confidence: l.confidence, cue: (l.curated && l.curated.cue) || null, lesson: lessonText(l, root),
+    mergedInto: (l.curated && l.curated.mergedInto) || null, examples: l.examples,
+  }));
+  return { project: projectmap.projectName(projectPath), lessons, candidates: candidates(db, root) };
+}
+
+const clip = (v) => (typeof v === 'string' && v.trim() ? v.replace(/\s+/g, ' ').trim().slice(0, TEXT_CHARS) : null);
+
+function proposalNote(p, c, now) {
+  const rows = (p.rows || []).map((r) => `| ${clip(r.project) || '?'} | ${clip(r.observed) || ''} | ${['supports', 'confounded', 'unrelated'].includes(r.verdict) ? r.verdict : 'confounded'} |`);
+  return [
+    `# Proposal: ${c.domain} · ${c.rule}`,
+    '',
+    `- status: ${p.proposal ? 'proposed (a maintainer turns it into a pull request; nothing is applied automatically)' : 'NO_ENTRY'}`,
+    `- projects with this lesson: ${c.projects.join(', ')}`,
+    `- current checklist: ${c.checklist}`,
+    `- written: ${new Date(now).toISOString().slice(0, 10)}`,
+    '',
+    '## Evidence rows',
+    '',
+    '| Project | Observed | Verdict |',
+    '|---|---|---|',
+    ...(rows.length ? rows : ['| - | - | - |']),
+    '',
+    '## Proposed change',
+    '',
+    p.proposal ? String(p.proposal).trim().slice(0, 2000) : 'NO_ENTRY: the evidence does not support a change.',
+    '',
+    p.target ? `Target: \`${clip(p.target)}\`` : '',
+    '',
+  ].join('\n');
+}
+
+/**
+ * Applies the curator's output. Nothing the model invents is accepted: curated text only for lessons
+ * that exist, merges only into another lesson of the same domain, proposals only for real candidates.
+ */
+function applyCuration(db, op, { root = ROOT, now = Date.now() } = {}) {
+  db.exec(SCHEMA);
+  const project = norm(op.curate);
+  if (!project) throw new Error('curate op needs a project path');
+  const rejected = [];
+  const touched = new Set();
+  const upsert = db.prepare(
+    'INSERT OR REPLACE INTO curated (project_path, domain, rule, cue, lesson, confidence, merged_into, curated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+  let curated = 0;
+  for (const c of op.lessons || []) {
+    const existing = c && lessonsFor(db, op.curate, c.domain);
+    const rules = (existing || []).map((l) => l.rule);
+    if (!c || !rules.includes(c.rule)) { rejected.push(`lesson ${c && c.domain}/${c && c.rule}: no such lesson`); continue; }
+    if (c.mergedInto && (!rules.includes(c.mergedInto) || c.mergedInto === c.rule)) { rejected.push(`merge ${c.rule} -> ${c.mergedInto}: no such lesson`); continue; }
+    const confidence = ['high', 'medium', 'low'].includes(c.confidence) ? c.confidence : null;
+    upsert.run(project, c.domain, c.rule, clip(c.cue), clip(c.lesson), confidence, c.mergedInto || null, now);
+    touched.add(c.domain);
+    curated++;
+  }
+  const cands = candidates(db, root);
+  const written = [];
+  for (const p of op.proposals || []) {
+    const c = p && cands.find((x) => x.domain === p.domain && x.rule === p.rule);
+    if (!c) { rejected.push(`proposal ${p && p.domain}/${p && p.rule}: not a candidate (needs a lesson in ${MIN_PROJECTS}+ projects)`); continue; }
+    const file = path.join(root, 'agents', 'orchestrator', 'vault', 'proposals', `${c.domain}-${slug(c.rule)}.md`);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, proposalNote(p, c, now));
+    written.push(path.relative(root, file).replace(/\\/g, '/'));
+  }
+  db.prepare('INSERT OR REPLACE INTO curations (project_path, curated_at) VALUES (?, ?)').run(project, now);
+  for (const d of touched) writeNotes(db, op.curate, d, root);
+  return { curated, proposals: written, rejected };
 }
 
 if (require.main === module) {
   const [cmd, projectPath] = process.argv.slice(2);
   try {
-    if (!projectPath || !['brief', 'list'].includes(cmd)) throw new Error('usage: lessons.js brief|list <projectPath>');
+    if (!projectPath || !['brief', 'list', 'pending', 'export'].includes(cmd)) throw new Error('usage: lessons.js brief|list|pending|export <projectPath>');
     const db = openDb();
-    const result = cmd === 'brief'
-      ? brief(db, projectPath)
+    const result = cmd === 'brief' ? brief(db, projectPath)
+      : cmd === 'pending' ? pending(db, projectPath)
+      : cmd === 'export' ? exportFor(db, projectPath)
       : [...AUTHOR_DOMAINS, ...SHARED_DOMAINS].flatMap((d) => lessonsFor(db, projectPath, d));
     db.close();
     console.log(JSON.stringify(result, null, cmd === 'list' ? 2 : 0));
@@ -217,4 +354,7 @@ if (require.main === module) {
   }
 }
 
-module.exports = { SCHEMA, MIN_SESSIONS, RETIRE_AFTER, BRIEF_CHARS, AUTHOR_DOMAINS, SHARED_DOMAINS, openDb, record, lessonsFor, brief, ruleText };
+module.exports = {
+  SCHEMA, MIN_SESSIONS, RETIRE_AFTER, BRIEF_CHARS, MIN_PROJECTS, PENDING_OFFER, AUTHOR_DOMAINS, SHARED_DOMAINS,
+  openDb, record, lessonsFor, brief, ruleText, pending, candidates, exportFor, applyCuration,
+};
