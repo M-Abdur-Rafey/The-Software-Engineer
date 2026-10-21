@@ -19,7 +19,11 @@ export const meta = {
 
 // args: { task, projectPath, agentsDir?, clarifications?: { designPreferences, archPreferences, dbPreferences, callPreferences },
 //         systemDocs?: false to skip System Docs even if docs/system exists, modules?: [target module names],
-//         sessionId?, startedAt?, onboarded?, techStack?, classification?, deferBookkeeping?, projectMap? }
+//         sessionId?, startedAt?, onboarded?, techStack?, classification?, deferBookkeeping?, projectMap?, lessons? }
+//
+// lessons: the project's active lessons (design/lesson-library.md), from `lessons.js brief`, read by the skill:
+// { <domain>: { rules, text } } plus "shared" for contract and scan lessons. Authors get their domain's text plus the
+// shared text; reviewers never do. Every session's catches are recorded as observations through persist.js.
 //
 // classification.size (design/agent-consolidation.md, change 5): "small" is set by the skill only after the
 // user agreed to the short pipeline. It counts only for a fix or chore touching one domain and, with System
@@ -120,6 +124,21 @@ if (!isOnboardTask && projectPath) {
 const projectName = projectPath.replace(/[\\/]+$/, '').split(/[/\\]/).pop() || 'project'
 const MAP = { projectMap, projectMapFile: `${AGENTS_DIR}/agents/orchestrator/vault/projects/${projectName}/map.md` }
 
+// Lessons per author domain (design/lesson-library.md): the brief the skill passed, or the lesson index to read.
+const LESSONS = (() => {
+  const l = args && args.lessons
+  if (!l) return {}
+  if (typeof l === 'string') { try { return JSON.parse(l) } catch (e) { return {} } }
+  return l
+})()
+const lessonArgs = (domain) => {
+  const text = [LESSONS[domain] && LESSONS[domain].text, LESSONS.shared && LESSONS.shared.text].filter(Boolean).join('\n')
+  return text
+    ? { lessonsBrief: text }
+    : args && args.lessons ? {} : { lessonsFile: `${AGENTS_DIR}/agents/${domain}/vault/lessons/${projectName}/INDEX.md` }
+}
+const activeRules = (domain) => (LESSONS[['mcpbridge', 'gitdevops'].includes(domain) ? 'shared' : domain] || {}).rules || []
+
 const classification = (args && args.classification) || await agent(
   `Classify this software development task:\n"${taskText}"\n\n` +
   `Rules:\n` +
@@ -152,6 +171,18 @@ log(`db=${classification.requiresDatabase} be=${classification.requiresBackend} 
 const domainCount = ['requiresDatabase', 'requiresBackend', 'requiresFrontend', 'requiresCalls'].filter(k => classification[k]).length
 let small = classification.size === 'small' && ['fix', 'chore'].includes(classification.taskType) && domainCount === 1
 if (classification.size === 'small' && !small) log('size=small ignored: only a fix or chore touching exactly one domain qualifies')
+
+// Declared before System Docs: finish() reads them on every path, including the early returns.
+let requirementsOutput = null
+let databaseOutput = null
+let backendOutput  = null
+let frontendOutput = null
+let testingOutput  = null
+let callsOutput    = null
+let ponytailOutput = null
+let bridgeOutput   = null
+let gitOutput      = null
+let sreOutput      = null
 
 // ─── Phase: System Docs ──────────────────────────────────────────────────────
 // When the project has docs/system (see design/system-docs.md): sync docs with
@@ -248,8 +279,46 @@ if (args && args.systemDocs !== false && projectPath) {
   }
 }
 
+// What this session's reviewers, bridge, scan, compliance check and ponytail caught (design/lesson-library.md).
+// Deterministic: built from the contracts, recorded by persist.js, counted by shared/lib/lessons.js.
+function sessionObservations() {
+  const items = []
+  const add = (domain, source, list) => {
+    for (const f of list || []) {
+      if (f && f.rule && f.issue) items.push({ domain, source, rule: String(f.rule), issue: String(f.issue).slice(0, 300), fixed: !!f.fixed })
+    }
+  }
+  add('backend', 'reviewer', backendOutput && backendOutput.findings)
+  add('database', 'reviewer', databaseOutput && databaseOutput.findings)
+  add('frontend', 'reviewer', frontendOutput && frontendOutput.findings)
+  add('calls', 'compliance', callsOutput && callsOutput.findings)
+  const contract = (bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.violations) || []
+  add('mcpbridge', 'bridge', contract.filter(v => v && v.severity === 'blocking')
+    .map(v => ({ rule: 'contract', issue: `${v.type || 'violation'}: ${v.detail || v.backendRoute || v.frontendBinding || ''}` })))
+  add('gitdevops', 'scan', ((gitOutput && gitOutput.securityFlags) || []).filter(f => f && f.severity === 'blocking' && !f.passed)
+    .map(f => ({ rule: `scan:${f.check}`, issue: f.detail || f.check })))
+  // A ponytail simplification means the author over-built: credit it to the domain that wrote the file.
+  const owner = (file) => {
+    const p = uniquePaths([file])[0]
+    const owns = (o) => o && uniquePaths(o.filesChanged || []).includes(p)
+    return owns(backendOutput) ? 'backend' : owns(frontendOutput) ? 'frontend' : owns(callsOutput) ? 'calls'
+      : databaseOutput && uniquePaths([databaseOutput.migrationFile || '']).includes(p) ? 'database' : null
+  }
+  for (const sim of (ponytailOutput && ponytailOutput.simplifications) || []) {
+    const domain = sim && owner(sim.file)
+    if (domain) add(domain, 'ponytail', [{ rule: 'ponytail-ladder', issue: `${sim.file}: ${sim.rationale || ''}`, fixed: true }])
+  }
+  const domains = [['backend', backendOutput], ['database', databaseOutput], ['frontend', frontendOutput], ['calls', callsOutput],
+    ['mcpbridge', bridgeOutput], ['gitdevops', gitOutput]].filter(([, o]) => o).map(([d]) => d)
+  return { items, domains }
+}
+const repeatMisses = () => sessionObservations().items.filter(i => activeRules(i.domain).includes(i.rule)).length
+
 async function finish(result, status, note) {
-  const ops = [...persistOps, { db: ['update-session-status', sessionId, status] }]
+  const ops = [...persistOps]
+  const seen = sessionObservations()
+  if (projectPath && seen.domains.length) ops.push({ observe: projectPath, session: sessionId, domains: seen.domains, items: seen.items })
+  ops.push({ db: ['update-session-status', sessionId, status] })
   if (note) ops.push({ write: `agents/orchestrator/vault/sessions/${sessionId}.md`, content: note })
   if (deferBookkeeping) return Object.assign({}, result, { persistOps: ops })
   const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.persist.json`
@@ -265,17 +334,6 @@ async function finish(result, status, note) {
 
 const skipped = small ? ['requirements', 'ponytail', 'sre'] : []
 if (small) log('small task: skipping requirements, ponytail and SRE (the task text is the spec)')
-
-let requirementsOutput = null
-let databaseOutput = null
-let backendOutput  = null
-let frontendOutput = null
-let testingOutput  = null
-let callsOutput    = null
-let ponytailOutput = null
-let bridgeOutput   = null
-let gitOutput      = null
-let sreOutput      = null
 
 // ─── Phase: Requirements ─────────────────────────────────────────────────────
 // Spec-driven development: synthesize signals (task text, prior SRE feedback,
@@ -295,7 +353,7 @@ if (classification.requiresDatabase) {
   phase('Database')
   databaseOutput = collect(await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/database.js` },
-    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null, ...MAP }
+    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null, ...MAP, ...lessonArgs('database') }
   ))
   log(`database → ${databaseOutput && databaseOutput.status}`)
 }
@@ -305,7 +363,7 @@ if (classification.requiresBackend) {
   phase('Backend')
   backendOutput = collect(await workflow(
     { scriptPath: `${AGENTS_DIR}/.claude/workflows/backend.js` },
-    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null, ...MAP }
+    { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null, ...MAP, ...lessonArgs('backend') }
   ))
   log(`backend → ${backendOutput && backendOutput.status}`)
 }
@@ -319,7 +377,7 @@ phase('Frontend + Testing + Calls')
   if (classification.requiresFrontend) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/frontend.js` },
-      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null, ...MAP }
+      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null, ...MAP, ...lessonArgs('frontend') }
     ))
   }
 
@@ -334,7 +392,7 @@ phase('Frontend + Testing + Calls')
   if (classification.requiresCalls) {
     parallelTasks.push(() => workflow(
       { scriptPath: `${AGENTS_DIR}/.claude/workflows/calls.js` },
-      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null, ...MAP }
+      { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null, ...MAP, ...lessonArgs('calls') }
     ))
   }
 
@@ -473,6 +531,7 @@ if (!small) {
       ponytailOutput,
       bridgeOutput,
       gitOutput,
+      repeatMisses: repeatMisses(),
       ...MAP,
     }
   ))

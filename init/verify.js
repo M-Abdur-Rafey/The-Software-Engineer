@@ -55,7 +55,7 @@ check('shared/orchestrator.db has correct tables', () => {
   const db = new Database(orchPath, { readonly: true });
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);
   db.close();
-  ['sessions', 'agent_runs', 'contracts_registry'].forEach(t => {
+  ['sessions', 'agent_runs', 'contracts_registry', 'observations', 'domain_runs'].forEach(t => {
     if (!tables.includes(t)) throw new Error(`missing table: ${t}`);
   });
 });
@@ -89,7 +89,7 @@ CONTRACT_NAMES.forEach(name => {
 });
 
 // ─── Shared lib ───────────────────────────────────────────────────────────────
-['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js', 'projectmap.js'].forEach(f => {
+['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js', 'projectmap.js', 'lessons.js'].forEach(f => {
   check(`shared/lib/${f} exists`, () => {
     const p = path.join(AGENTS_DIR, 'shared', 'lib', f);
     if (!fs.existsSync(p)) throw new Error('file missing');
@@ -158,6 +158,25 @@ if (fs.existsSync(skillFile) && fs.existsSync(orchestrateFile)) {
     ];
     if (!keys.length) throw new Error('could not read the args keys from SKILL.md');
     if (missing.length) throw new Error(`SKILL.md passes ${missing.join(', ')} but orchestrate.js never reads it`);
+  });
+}
+
+// ─── Reviewer rule lists match the checklist notes ───────────────────────────
+// Lessons are counted per checklist rule (design/lesson-library.md), so each workflow's RULES must
+// name checklist notes that the seed graph writes for that domain ("spec" is the one extra).
+if (fs.existsSync(workflowsDir)) {
+  fs.readdirSync(workflowsDir).filter(f => f.endsWith('.js')).forEach(f => {
+    const m = fs.readFileSync(path.join(workflowsDir, f), 'utf8').match(/^const RULES = \[([^\]]*)\]/m);
+    if (!m) return;
+    const domain = f.replace(/\.js$/, '');
+    check(`.claude/workflows/${f} RULES match ${domain}'s checklist notes`, () => {
+      const rules = m[1].split(',').map(r => r.trim().replace(/^'|'$/g, '')).filter(Boolean);
+      const missing = rules.filter(r => r !== 'spec').filter(r => {
+        const note = path.join(AGENTS_DIR, 'agents', domain, 'vault', 'sub-agents', `${r}.md`);
+        return !fs.existsSync(note) || !fs.readFileSync(note, 'utf8').includes('Checklist of');
+      });
+      if (missing.length) throw new Error(`no checklist note for: ${missing.join(', ')}`);
+    });
   });
 }
 

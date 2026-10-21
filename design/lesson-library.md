@@ -165,7 +165,7 @@ This is a small loop in our own repo, not the Python framework.
 
 ## Phases
 
-- **A. Observations, guard and lessons (zero agents).** Covers changes 1, 2, 3, 5 and 6:
+- **A. Observations, guard and lessons (zero agents): built, smoke test pending** (branch `feat/lessons-phase-a`). Covers changes 1, 2, 3, 5 and 6:
   - the `observations` table (bootstrap)
   - `rule` enums on the reviewer schemas
   - the observation ops in `orchestrate.js`

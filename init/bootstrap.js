@@ -210,6 +210,8 @@ AGENT_NAMES.forEach(name => {
 log.info('Creating shared/orchestrator.db...');
 const orchDb = new Database(path.join(AGENTS_DIR, 'shared', 'orchestrator.db'));
 orchDb.exec(ORCHESTRATOR_SCHEMA);
+// The lesson library's tables (design/lesson-library.md) are defined next to the code that uses them.
+orchDb.exec(require('../shared/lib/lessons').SCHEMA);
 const orchTables = orchDb.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all().map(r => r.name);
 orchDb.close();
 log.ok(`shared/orchestrator.db — [${orchTables.join(', ')}]`);
@@ -758,6 +760,7 @@ const CONTRACTS = {
           filesChangedCount:   { type: 'number' },
           routesAdded:         { type: 'number' },
           routesModified:      { type: 'number' },
+          repeatMisses:        { type: 'number' },
           testCoveragePercent: { type: 'number' },
           contractViolations:  { type: 'number' },
           securityBlocks:      { type: 'number' },

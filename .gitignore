@@ -13,6 +13,7 @@ agents/mcpbridge/vault/contracts/
 agents/gitdevops/vault/security-scans/scan-results/
 agents/orchestrator/vault/sessions/
 agents/*/vault/decisions/
+agents/*/vault/lessons/
 agents/ponytail/vault/reviews/
 agents/sre/vault/diagnostics/
 # Session specs and schema notes share a folder with a seed note that does ship.

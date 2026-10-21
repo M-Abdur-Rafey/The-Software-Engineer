@@ -78,7 +78,7 @@ Split by independence rather than role (`design/agent-consolidation.md`):
 1. **designer**: art direction with the masters' eye (north star, focal point, palette, composition, signature detail, cohesion rules, motion) plus the UI design (views, layout, tokens, responsive behaviour, loading/empty/error states). It writes no code, so the vision is set independently of the build.
 2. **3d-designer** (3D tasks only, Opus): the Three.js/WebGL scene, physics, shaders and scroll animation.
 3. **author**: builds the components, API files, wiring and state to the design and the checklists below. It receives the requirements spec, whose Decisions are binding (security rules are never overridden).
-4. **reviewer**: a fresh agent that sees only the design, the spec, the changed files and the checklists. It judges the screen as one composition (atelier), checks contrast and security, fixes what it safely can, and reports what remains.
+4. **reviewer**: a fresh agent that sees only the design, the spec, the changed files and the checklists. It judges the screen as one composition (atelier), checks contrast and security, fixes what it safely can, and reports what remains. Every fix it makes is listed in `refinementsApplied` with the `rule` (checklist id, or `spec`) it concerns; these feed the lesson library (`design/lesson-library.md`). It never sees the lessons.
 
 Checklists (formerly separate sub-agents):
 

@@ -290,9 +290,10 @@ Summarise what you're going to do in one short paragraph before starting the wor
 1. `node <install-path>/shared/lib/db-cli.js init-session "<task text>" "<current working directory>"` prints `{ sessionId, startedAt }`.
 2. `node <install-path>/shared/lib/db-cli.js check-onboarded "<current working directory>"` prints `{ onboarded, techStack }`.
 3. `node <install-path>/shared/lib/projectmap.js show "<current working directory>"` prints the project map (stack, layout, conventions, routes, tables, commands), or nothing before the first onboarding.
+   `node <install-path>/shared/lib/lessons.js brief "<current working directory>"` prints this project's active lessons as JSON (`{}` when there are none): problems the reviewers, bridge or scan caught in 2+ earlier sessions.
 4. Build the classification from Step 4c: `{ requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType (feat|fix|chore|test|docs|refactor|security), taskSlug (lowercase kebab-case, max 30 chars), size ("small" only if the user agreed to the short pipeline, else "normal") }`.
 
-Pass all four into the workflow (below); leave `projectMap` out when step 3 printed nothing. If any step fails, leave those fields out; the workflow falls back to doing it itself.
+Pass all four into the workflow (below); leave `projectMap` out when step 3 printed nothing, and `lessons` out when it printed `{}`. If any step fails, leave those fields out; the workflow falls back to doing it itself.
 
 Now collect all the user's answers into a preferences object and invoke the workflow:
 
@@ -307,6 +308,7 @@ Workflow({
     techStack: "<from check-onboarded, or null>",
     classification: { requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType, taskSlug, size },
     projectMap: "<output of projectmap.js show, verbatim>",
+    lessons: <output of lessons.js brief, the JSON object verbatim>,
     deferBookkeeping: true,   // Step 6 records the session with shared/lib/persist.js, no agent needed
     projectPath: "<current working directory>",
     agentsDir: "<install-path>",

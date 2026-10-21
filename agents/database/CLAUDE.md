@@ -76,7 +76,7 @@ named volumes, credentials via `.env` (never hardcoded), `restart: unless-stoppe
 Two agents, split by independence rather than role (`design/agent-consolidation.md`):
 
 1. **author**: designs the tables and indexes, writes the complete migration file (indexes included), and checks it against the checklists below. It receives the requirements spec, whose Decisions are binding.
-2. **reviewer**: a fresh agent that reads only the migration file, the spec and the checklists, never the author's reasoning. It fixes violations directly in the file, flags N+1 risks, and returns the final SQL and the schema graph.
+2. **reviewer**: a fresh agent that reads only the migration file, the spec and the checklists, never the author's reasoning. It fixes violations directly in the file, flags N+1 risks, and returns the final SQL and the schema graph. Every violation it reports carries the `rule` (checklist id, or `spec`) it breaks; these feed the lesson library (`design/lesson-library.md`). It never sees the lessons.
 
 Checklists (formerly separate sub-agents):
 

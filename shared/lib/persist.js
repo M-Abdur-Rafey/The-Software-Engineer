@@ -11,6 +11,7 @@
  *   { "db": ["--as", "backend", "save-decision", ...] }   arguments for shared/lib/db-cli.js
  *   { "write": "agents/<agent>/vault/<path>.md", "content": "..." }
  *   { "map": "<projectPath>", "sections": {...} | "update": {...} }   the project map (shared/lib/projectmap.js)
+ *   { "observe": "<projectPath>", "session": "<id>", "domains": [...], "items": [...] }   lessons (shared/lib/lessons.js)
  *
  * Writes are confined to agents/<name>/vault/ under the install dir. Each op runs
  * independently: a failed op is reported, never fatal, because bookkeeping must not undo a
@@ -21,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const projectmap = require('./projectmap');
+const lessons = require('./lessons');
 
 const ROOT = path.join(__dirname, '..', '..');
 const DB_CLI = path.join(__dirname, 'db-cli.js');
@@ -59,7 +61,12 @@ function runOp(op) {
     projectmap.applyOp(op, ROOT);
     return;
   }
-  throw new Error('unknown op (expected "db", "write" or "map")');
+  if (op && typeof op.observe === 'string') {
+    const db = lessons.openDb();
+    try { lessons.record(db, op, { root: ROOT }); } finally { db.close(); }
+    return;
+  }
+  throw new Error('unknown op (expected "db", "write", "map" or "observe")');
 }
 
 function run(ops) {
@@ -69,7 +76,7 @@ function run(ops) {
       runOp(op);
     } catch (err) {
       const detail = err.stderr ? err.stderr.toString().trim() : err.message;
-      failed.push({ op: op && (op.db ? `db ${op.db.slice(0, 4).join(' ')}` : op.map ? `map ${op.map}` : `write ${op.write}`), error: detail.slice(0, 300) });
+      failed.push({ op: op && (op.db ? `db ${op.db.slice(0, 4).join(' ')}` : op.map ? `map ${op.map}` : op.observe ? `observe ${op.observe}` : `write ${op.write}`), error: detail.slice(0, 300) });
     }
   }
   return { ran: ops.length - failed.length, failed };

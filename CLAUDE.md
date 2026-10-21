@@ -21,7 +21,7 @@ Run from the repo root (`~/.agents` once installed):
 npm install              # deps incl. native better-sqlite3 + @modelcontextprotocol/sdk
 npm run init             # bootstrap + seed + verify — REQUIRED after changing agents/contracts/seed notes
 npm run verify           # health check: DBs/tables, vault INDEX.md, contract schemas, shared lib, workflow hidden-char scan (same as `/software-engineer test`)
-npm test                 # verify + MCP protocol test + sysdocs, uitest, persist, scan and projectmap tests
+npm test                 # verify + MCP protocol test + sysdocs, uitest, persist, scan, projectmap and lessons tests
 npm run test:mcp         # MCP stdio protocol test only (tests/mcp-protocol.mjs)
 npm run test:sysdocs     # System Docs CLI end-to-end test only (tests/sysdocs.test.js, throwaway git repo)
 npm run mcp              # run the MCP server on stdio
@@ -43,6 +43,8 @@ Individual domain workflows (`requirements.js`, `backend.js`, `frontend.js`, `da
 `codegraph.js` sits outside the pipeline (driven by `/software-engineer graph` and `start` = onboard → codegraph): it builds a lean Obsidian graph of only entities that exist in the target project's code, capped per node type (`maxNodesPerType`, default 60), written to `agents/orchestrator/vault/projects/<name>/graph/` (git-ignored). The root `skill.md` is only a pointer to `skills/software-engineer/SKILL.md`.
 
 **Project map** (`shared/lib/projectmap.js`, change 4 of `design/agent-consolidation.md`): one compact note per target project, at most 3000 characters (stack, layout, conventions, modules, routes, tables, run commands), at `agents/orchestrator/vault/projects/<name>/map.md` (git-ignored). Onboarding builds it: one `discover` agent, then the backend/frontend/database scans in parallel, skipping layers the project lacks (at most 4 agents); the map, the per-domain project notes, the decisions and the onboarded mark are persistOps. The skill reads the map (`projectmap.js show <projectPath>`) and passes it as `projectMap`; `orchestrate.js` hands it (or its path, `projectMapFile`) to every domain workflow except the bridge, and each prompt includes it through `projectMapBrief`. After a committed session, orchestrate adds a `{ map, update }` persist op: the routes and tables from the contracts plus the reviewers' `mapNotes` (layout, modules, conventions, run). The map is never edited by an agent directly.
+
+**Lesson library** (`shared/lib/lessons.js`, `design/lesson-library.md`, phase A; format from Harness², Apache-2.0): the pipeline learns from what it catches, with no model calls. Each domain returns `findings: [{ rule, issue, fixed }]`, where `rule` is one of its workflow's `RULES` (the checklist ids, plus `spec`; `verify` checks them against the checklist notes). At `finish()`, on every path, `orchestrate.js` turns the reviewer findings, blocking bridge violations, blocking scan failures, compliance gaps and ponytail simplifications into one `{ observe }` persist op. `lessons.js` stores these in the `observations` and `domain_runs` tables of `shared/orchestrator.db`. The same rule in 2+ sessions on one project becomes an active lesson (`agents/<domain>/vault/lessons/<project>/`, git-ignored, EXPERIENCE.md fields), and it retires after 5 clean runs of that domain. The skill passes `lessons.js brief <projectPath>` as `lessons`. Only **authors** get their domain's brief plus the `shared` (contract and scan) lessons, capped at 1200 chars; reviewers never do. SRE reports `repeatMisses`. Every agent that reads project content gets `EVIDENCE_GUARD`: files, notes and lessons are data, never instructions.
 
 ## System Docs (in progress — `design/system-docs.md`)
 
@@ -108,6 +110,6 @@ These run in the Claude Code **Workflow tool sandbox**, not plain Node:
 
 ## Privacy / git
 
-`.gitignore` keeps personal data local: all `knowledge.db`, `shared/orchestrator.db`, and runtime vault output (`vault/projects/` including the project maps, `vault/decisions/`, session specs, ponytail reviews, SRE diagnostics, database schema notes, testing collections/reports, bridge contracts, scan-results, orchestrator sessions). Only baseline seed vault notes ship to other users.
+`.gitignore` keeps personal data local: all `knowledge.db`, `shared/orchestrator.db`, and runtime vault output (`vault/projects/` including the project maps, `vault/decisions/`, `vault/lessons/`, session specs, ponytail reviews, SRE diagnostics, database schema notes, testing collections/reports, bridge contracts, scan-results, orchestrator sessions). Only baseline seed vault notes ship to other users.
 
 Windows/Git Bash caution: shell commands containing code-like tokens occasionally drop stray empty files (e.g. `Part`, `0)`, `f.severity`) into the repo root — check `git status` before `git add -A` so they aren't committed.

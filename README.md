@@ -247,6 +247,8 @@ Onboarding also writes a **project map**: one short note (at most 3000 character
 
 For a **small task** (a bug fix or chore touching one area) the skill offers a short pipeline: it skips the separate spec, the simplification pass and the post-run review, and asks you first every time. The contract check, the security scan and the tests for changed routes always run.
 
+The pipeline also **learns from its own catches**. When a reviewer, the contract check or the security scan has to catch the same kind of problem in two sessions on a project, it becomes a lesson that the next session's author sees up front. Lessons come only from those catches, never from opinion, stay with the project they came from, and retire once the problem stops recurring.
+
 | Agent | Icon | Does |
 |-------|------|------|
 | **Impact analyst** | 🧭 | System Docs projects only. Before any code, maps the task to modules, lists every module that uses what will change and how it could break, records the chain reaction in plain language, and asks about any decision that isn't recorded. Stops for your answers if a target module's doc isn't approved |

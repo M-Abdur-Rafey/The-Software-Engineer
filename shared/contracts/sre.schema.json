@@ -92,6 +92,9 @@
         "routesModified": {
           "type": "number"
         },
+        "repeatMisses": {
+          "type": "number"
+        },
         "testCoveragePercent": {
           "type": "number"
         },
