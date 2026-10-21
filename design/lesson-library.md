@@ -1,6 +1,6 @@
 # Lesson library: design
 
-Status: **draft for review** · 2026-10-21 · Builds on [agent-consolidation.md](agent-consolidation.md) · Source: [Harness²](https://arxiv.org/abs/2610.14224) ([code](https://github.com/google-research/harness2), Apache-2.0)
+Status: **approved design** · 2026-10-21 · Builds on [agent-consolidation.md](agent-consolidation.md) · Source: [Harness²](https://arxiv.org/abs/2610.14224) ([code](https://github.com/google-research/harness2), Apache-2.0)
 
 ## Problem
 
@@ -118,7 +118,7 @@ Cost: about 300 tokens per author prompt, and no new agents.
 
 ### 4. Curator: consolidation and global proposals, on demand
 
-`/software-engineer lessons` runs `lessons.js` and then **one curator agent**. The curator:
+`/software-engineer lessons` runs `lessons.js` and then **one curator agent**. The skill also **offers** it at the end of a session once **5 or more new observations** have built up since the last curation. It names the count and the cost (one agent), and runs the curator only if you agree. The curator:
 
 - **Merges** overlapping lessons in a project, and rewrites template text into a sharper `cue` and `lesson` where the examples support it.
 - **Proposes changes to the skill itself.** A rule that has a lesson in **3 or more projects** is a candidate. The curator applies the Harness² extraction discipline:
@@ -176,7 +176,7 @@ This is a small loop in our own repo, not the Python framework.
   - SRE-feedback labelling
   - the `repeatMisses` metric
   - docs, seed graph (a `lessons/` folder per domain) and `.gitignore`
-- **B. Curator (change 4).** The `/software-engineer lessons` command (routing table in `SKILL.md`), the curator workflow with the adapted extraction prompt, the proposals folder, and attribution.
+- **B. Curator (change 4).** The `/software-engineer lessons` command (routing table in `SKILL.md`), the end-of-session offer (`lessons.js` tracks observations since the last curation), the curator workflow with the adapted extraction prompt, the proposals folder, and attribution.
 - **C. Offline tuning (change 7, optional).** The proposer and compose loop in `tests/ab`, with the answer-key guard and a budget flag.
 
 Smoke-test each phase like agent consolidation:
@@ -205,9 +205,10 @@ Smoke-test each phase like agent consolidation:
 | Scope | Per project; global only through a human-approved PR |
 | Who sees lessons | Authors only, never reviewers |
 | Lesson text in v1 | Template, no model; a curator agent sharpens it on demand |
+| Curator trigger | `/software-engineer lessons`, plus an offer at the end of a session once 5 or more new observations have built up; it runs only if you agree |
+| Thresholds | A project lesson after 2 sessions with the same rule; a global proposal once 3 projects have that lesson; retired after 5 clean sessions in that domain |
+| Same-stack sharing | None: lessons stay per project until a PR puts the rule into the checklist for everyone |
 
 ## Open questions
 
-1. **Curator trigger:** only when you run `/software-engineer lessons`, or should the skill also offer it at the end of a session once there are, say, 5 new observations?
-2. **Thresholds:** 2 sessions for a project lesson, 3 projects for a global proposal, and retirement after 5 clean sessions. Are those right to start?
-3. **Same-stack sharing:** should a lesson from one project also apply to other projects with the same stack before it is promoted (for example all Express projects), or stay strictly per project until a PR makes it global? The draft says strictly per project.
+None.
