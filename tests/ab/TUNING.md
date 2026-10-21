@@ -29,7 +29,11 @@ It follows Harness²'s Propose → Probe → Compose loop (see [NOTICE.md](../..
 
    It creates `R/skill-{ref,inv,dom}`, `R/projects/{ref,inv,dom}` (empty git repos) and `R/args-{ref,inv,dom}.json`. Each args file already holds the arm's session, so no agent is spent creating one.
 
-2. **Reference run.** Run the orchestrator with the reference args, from the reference skill copy:
+2. **Reference run.** First make the run folder part of the session. The Workflow tool, and every `workflow()` call inside a script, only loads scripts from the session's folders.
+   - In the desktop app, request access to `R`.
+   - Use the path **exactly** as the grant spells it, including letter case, in `scriptPath` and in the args' `agentsDir` and `projectPath`.
+
+   Then run the orchestrator with the reference args, from the reference skill copy:
 
    ```
    Workflow({ scriptPath: "R/skill-ref/.claude/workflows/orchestrate.js", args: <contents of R/args-ref.json> })

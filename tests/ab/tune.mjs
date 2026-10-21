@@ -145,7 +145,7 @@ function prepare(runDir, argv) {
     state.arms[arm] = { skill, project, edit: null, passed: null, total: null, tokens: null, agents: null };
   }
   saveState(abs, state);
-  const task = fs.readFileSync(path.join(HERE, 'TASK.md'), 'utf8');
+  const task = fs.readFileSync(path.join(HERE, 'TASK.md'), 'utf8').replace(/\r\n/g, '\n');
   for (const arm of ARMS) {
     // Like the skill: the session is created here, in the arm's own skill copy, not by an agent.
     const init = sh(process.execPath, ['shared/lib/db-cli.js', 'init-session', task.slice(0, 200), state.arms[arm].project], state.arms[arm].skill);
