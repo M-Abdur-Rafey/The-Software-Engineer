@@ -123,10 +123,15 @@ function hiddenCharCode(code) {
     code === 0x2028 || code === 0x2029                         // line/paragraph separators
   );
 }
-if (fs.existsSync(workflowsDir)) {
-  fs.readdirSync(workflowsDir).filter(f => f.endsWith('.js')).forEach(f => {
-    check(`.claude/workflows/${f} has no hidden/control characters`, () => {
-      const s = fs.readFileSync(path.join(workflowsDir, f), 'utf8');
+// Every Workflow script, including the maintainer-only tuning proposer in tests/ab/.
+const workflowScripts = [
+  ...(fs.existsSync(workflowsDir) ? fs.readdirSync(workflowsDir).filter(f => f.endsWith('.js')).map(f => `.claude/workflows/${f}`) : []),
+  ...['tests/ab/tune-propose.js'].filter(f => fs.existsSync(path.join(AGENTS_DIR, f))),
+];
+if (workflowScripts.length) {
+  workflowScripts.forEach(f => {
+    check(`${f} has no hidden/control characters`, () => {
+      const s = fs.readFileSync(path.join(AGENTS_DIR, f), 'utf8');
       for (let i = 0, line = 1; i < s.length; i++) {
         if (s[i] === '\n') line++;
         if (hiddenCharCode(s.charCodeAt(i))) {

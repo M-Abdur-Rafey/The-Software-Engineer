@@ -21,7 +21,7 @@ Run from the repo root (`~/.agents` once installed):
 npm install              # deps incl. native better-sqlite3 + @modelcontextprotocol/sdk
 npm run init             # bootstrap + seed + verify — REQUIRED after changing agents/contracts/seed notes
 npm run verify           # health check: DBs/tables, vault INDEX.md, contract schemas, shared lib, workflow hidden-char scan (same as `/software-engineer test`)
-npm test                 # verify + MCP protocol test + sysdocs, uitest, persist, scan, projectmap and lessons tests
+npm test                 # verify + MCP protocol test + sysdocs, uitest, persist, scan, projectmap, lessons and tune tests
 npm run test:mcp         # MCP stdio protocol test only (tests/mcp-protocol.mjs)
 npm run test:sysdocs     # System Docs CLI end-to-end test only (tests/sysdocs.test.js, throwaway git repo)
 npm run mcp              # run the MCP server on stdio
@@ -55,7 +55,7 @@ A per-module source of truth committed in each **target project** at `docs/syste
 - A module may be coded only when `gate` passes: `status: approved` and no `open`/`conflict`/`deferred` questions in that module.
 - `orchestrate.js` runs System Docs automatically when the target project has `docs/system/` (`systemDocs: false` skips it). On a failed gate it returns `status: "awaiting-answers"` instead of coding; the skill asks, records answers, and re-runs.
 
-`tests/ab/` holds the A/B harness used for `design/ab-test-report.md`: `TASK.md`/`CHANGE.md` (the specs), `acceptance.mjs <projectDir> <base|change>` (hidden HTTP suite, run outside the project) and `tokreport.mjs <name> <workflowTranscriptDir>...` (per-agent/phase token accounting from workflow transcripts; transcripts undercount output, so the workflow's own reported total is the headline figure).
+`tests/ab/` holds the A/B harness used for `design/ab-test-report.md`: `TASK.md`/`CHANGE.md` (the specs), `acceptance.mjs <projectDir> <base|change>` (hidden HTTP suite, run outside the project) and `tokreport.mjs <name> <workflowTranscriptDir>...` (per-agent/phase token accounting from workflow transcripts; transcripts undercount output, so the workflow's own reported total is the headline figure). Offline tuning (phase C of `design/lesson-library.md`, maintainers only, runbook `tests/ab/TUNING.md`): `tune.mjs` prepares a git worktree of the skill per arm (ref, inv, dom; `tests/ab/` removed from each so no agent finds the hidden suite), builds `evidence.json` from the reference run, validates and applies the edits drafted by `tune-propose.js` (one agent, never sees scores), scores arms with the hidden suite (per-check results moved out of the run folder, counts only), keeps edits that hold the score at no extra token cost, and adopts them into a checkout for a PR. About 5–7M tokens per round; a budget is enforced.
 
 ## Architecture
 

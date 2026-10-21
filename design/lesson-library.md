@@ -185,7 +185,7 @@ This is a small loop in our own repo, not the Python framework.
 
   `persist.js` applied the output with nothing rejected and reset the pending count; nothing tracked in the repo changed. The run found one bug, fixed before merging: over-long curated text was cut mid-word in the brief. It is now cut at a word boundary, and the prompt asks for at most 300 characters. The made-up data was deleted afterwards.
   - Also in phase B: the `/software-engineer lessons` command (routing table in `SKILL.md`), the end-of-session offer (`lessons.js` tracks observations since the last curation), the curator workflow with the adapted extraction prompt, the proposals folder, and attribution.
-- **C. Offline tuning (change 7, optional).** The proposer and compose loop in `tests/ab`, with the answer-key guard and a budget flag.
+- **C. Offline tuning (change 7, optional): built, no tuning round run yet** (branch `feat/lessons-phase-c`). `tests/ab/tune.mjs` (prepare, evidence, load-edits, score, status, select, adopt, clean), `tests/ab/tune-propose.js` and the runbook `tests/ab/TUNING.md`. A dry cycle without model calls was checked: worktrees, per-arm databases, no hidden suite in any arm, an unsafe edit rejected, selection, adopt and clean. The proposer and compose loop in `tests/ab`, with the answer-key guard and a budget flag.
 
 Smoke-test each phase like agent consolidation:
 - **A:** run three backend sessions on one project. Seed a miss the reviewer must fix twice, check that the lesson appears in the third session's author prompt, and check that `repeatMisses` reports it.

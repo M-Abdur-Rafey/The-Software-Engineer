@@ -1,3 +1,4 @@
 # Workflow scripts must keep LF endings: the Workflow tool rejects scripts containing
 # carriage returns (shown as hidden control characters in the approval dialog).
 .claude/workflows/*.js text eol=lf
+tests/ab/tune-propose.js text eol=lf

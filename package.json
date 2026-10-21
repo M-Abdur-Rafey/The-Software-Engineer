@@ -14,12 +14,13 @@
     "mcp": "node mcp/server.mjs",
     "test:mcp": "node tests/mcp-protocol.mjs",
     "test:sysdocs": "node tests/sysdocs.test.js",
-    "test": "node init/verify.js && node tests/mcp-protocol.mjs && node tests/sysdocs.test.js && node tests/uitest.test.js && node tests/persist.test.js && node tests/scan.test.js && node tests/projectmap.test.js && node tests/lessons.test.js",
+    "test": "node init/verify.js && node tests/mcp-protocol.mjs && node tests/sysdocs.test.js && node tests/uitest.test.js && node tests/persist.test.js && node tests/scan.test.js && node tests/projectmap.test.js && node tests/lessons.test.js && node tests/tune.test.js",
     "test:uitest": "node tests/uitest.test.js",
     "test:persist": "node tests/persist.test.js",
     "test:scan": "node tests/scan.test.js",
     "test:projectmap": "node tests/projectmap.test.js",
-    "test:lessons": "node tests/lessons.test.js"
+    "test:lessons": "node tests/lessons.test.js",
+    "test:tune": "node tests/tune.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
