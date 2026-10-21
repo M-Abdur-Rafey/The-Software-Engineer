@@ -106,10 +106,10 @@ export function decide(state, tolerance = 0.05) {
 // ── answer-key guard ────────────────────────────────────────────────────────
 
 /** Moves the hidden suite's per-check results out of the run folder; returns { passed, total, sealedAt }. */
-export function sealResults(resultsFile, sealedDir) {
+export function sealResults(resultsFile, sealedDir, name = path.basename(resultsFile)) {
   const r = readJson(resultsFile);
   fs.mkdirSync(sealedDir, { recursive: true });
-  const sealedAt = path.join(sealedDir, path.basename(resultsFile));
+  const sealedAt = path.join(sealedDir, name);
   fs.copyFileSync(resultsFile, sealedAt);
   fs.rmSync(resultsFile, { force: true });
   return { passed: r.passed, total: r.total, sealedAt };
@@ -139,7 +139,9 @@ function prepare(runDir, argv) {
       const s = sh(process.execPath, [step], skill);
       if (s.status !== 0) throw new Error(`${step} failed in ${arm}: ${s.stderr}`);
     }
-    const project = path.join(abs, 'projects', arm);
+    // Agents use the folder above a project as scratch space (round 1), so each project gets its own enclosing
+    // folder: nothing of the run (state, evidence, other arms) sits directly above it.
+    const project = path.join(abs, 'projects', arm, 'app');
     fs.mkdirSync(project, { recursive: true });
     for (const a of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'ab-test'], ['config', 'user.email', 'ab-test@example.test'], ['commit', '-q', '--allow-empty', '-m', 'Empty project']]) sh('git', a, project);
     state.arms[arm] = { skill, project, edit: null, passed: null, total: null, tokens: null, agents: null };
@@ -218,9 +220,9 @@ function score(runDir, arm, argv) {
   if (!Number.isFinite(tokens)) throw new Error('--tokens <workflow reported total> is required');
   const suite = argOf(argv, '--suite', 'base');
   const r = sh(process.execPath, [path.join(HERE, 'acceptance.mjs'), a.project, suite, ...(argv.includes('--skip-web') ? ['--skip-web'] : [])]);
-  const resultsFile = path.join(path.dirname(a.project), `results-${arm}-${suite}.json`);
+  const resultsFile = path.join(path.dirname(a.project), `results-${path.basename(a.project)}-${suite}.json`);
   if (!fs.existsSync(resultsFile)) throw new Error(`hidden suite produced no results (exit ${r.status})`);
-  const sealed = sealResults(resultsFile, path.join(os.tmpdir(), 'se-tune-sealed', path.basename(path.resolve(runDir))));
+  const sealed = sealResults(resultsFile, path.join(os.tmpdir(), 'se-tune-sealed', path.basename(path.resolve(runDir))), `results-${arm}-${suite}.json`);
   Object.assign(a, { passed: sealed.passed, total: sealed.total, tokens, agents: Number(argOf(argv, '--agents', NaN)) || null, suite });
   state.spent += tokens;
   saveState(runDir, state);
@@ -271,7 +273,8 @@ function clean(runDir) {
   for (const arm of ARMS) {
     const skill = s.arms[arm].skill;
     if (fs.existsSync(path.join(skill, 'node_modules'))) fs.unlinkSync(path.join(skill, 'node_modules')); // the junction, not the real folder
-    const r = sh('git', ['worktree', 'remove', '--force', skill], REPO);
+    // Long paths: the worktrees sit deep in temp folders, past Windows' default path limit (round 1).
+    const r = sh('git', ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', skill], REPO);
     console.log(`${arm}: ${r.status === 0 ? 'worktree removed' : `could not remove: ${r.stderr.trim()}`}`);
   }
   console.log(`The run folder (${runDir}) is kept: projects, evidence and RESULT.md. Delete it yourself when done.`);

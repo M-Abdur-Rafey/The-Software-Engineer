@@ -27,7 +27,7 @@ It follows Harness²'s Propose → Probe → Compose loop (see [NOTICE.md](../..
    node tests/ab/tune.mjs prepare R --budget 7000000
    ```
 
-   It creates `R/skill-{ref,inv,dom}`, `R/projects/{ref,inv,dom}` (empty git repos) and `R/args-{ref,inv,dom}.json`. Each args file already holds the arm's session, so no agent is spent creating one.
+   It creates `R/skill-{ref,inv,dom}`, `R/projects/{ref,inv,dom}/app` (empty git repos, each inside its own folder because pipeline agents use the folder above a project as scratch space) and `R/args-{ref,inv,dom}.json`. Each args file already holds the arm's session, so no agent is spent creating one.
 
 2. **Reference run.** First make the run folder part of the session. The Workflow tool, and every `workflow()` call inside a script, only loads scripts from the session's folders.
    - In the desktop app, request access to `R`.
