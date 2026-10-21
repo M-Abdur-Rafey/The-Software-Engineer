@@ -67,6 +67,30 @@ try {
     assert.strictEqual(check(scan(d, ['src/good.js']), 'No hardcoded secrets').passed, true);
   });
 
+  test('type annotations, JSDoc and field copies are not hardcoded secrets; quoted literals and config values are', () => {
+    const d = repo();
+    write(d, {
+      'src/app.js': [
+        '// x',
+        '/**',
+        ' * @param {{ db: object, jwtSecret: string, corsOrigin: string }} deps',
+        ' */',
+        'function login(b) { return { email: b.email, password: b.password }; }',
+        'const opts = { jwtSecret: config.jwtSecret, password: hash };',
+        'const schema = { password: string().min(8) };',
+        'const msg = `secret: ${name}`;',
+        "const input = <input autoComplete={isRegister ? 'new-password' : 'current-password'} />;",
+      ].join('\n'),
+      'src/key.js': '// x\nconst cfg = { jwtSecret: \'fake-0123456789abcdef\' };\n',
+      'src/key2.js': '// x\nconst cfg = { "apiKey": 1, "API_KEY": "fake-0123456789abcdef" };\n',
+      'config/app.yaml': 'db:\n  password: hunter2hunter2\n',
+    });
+    assert.strictEqual(check(scan(d, ['src/app.js']), 'No hardcoded secrets').passed, true, 'the false positives from tuning round 1');
+    for (const f of ['src/key.js', 'src/key2.js', 'config/app.yaml']) {
+      assert.strictEqual(check(scan(d, [f]), 'No hardcoded secrets').passed, false, f);
+    }
+  });
+
   test('raw bearer token blocks; template header does not', () => {
     const d = repo();
     write(d, {

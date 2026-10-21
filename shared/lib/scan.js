@@ -92,9 +92,16 @@ function scan(project, paths) {
     if (lines.length && git(project, ['cat-file', '-e', `HEAD:${file}`]) === null) newFiles.push({ file, lines });
 
     for (const { line, n } of lines) {
-      if (!isExampleEnv) {
-        const secret = /\b[A-Z0-9_]*(API_KEY|SECRET|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*\s*[=:]\s*['"]?([^'"\s,;)}]*)/i.exec(line);
-        if (secret && !ENV_READ.test(line) && !PLACEHOLDER.test(secret[2])) add('secrets', file, n, line);
+      // In code a hardcoded secret is a quoted string literal; an unquoted value there is a type annotation
+      // (jwtSecret: string), a variable or a field copy (password: body.password). Comment and JSDoc lines are
+      // left to the commented-credentials check. Config files (.yaml, .ini, ...) still count unquoted values.
+      const isComment = /^\s*(\/\/|\/?\*|#)/.test(line);
+      if (!isExampleEnv && !(CODE_FILE.test(file) && isComment)) {
+        const value = CODE_FILE.test(file) ? `(['"\`])([^'"\`]*)\\2` : `['"]?([^'"\\s,;)}]*)`;
+        // The key starts a name: not the tail of a string like 'new-password' or of a longer word.
+        const secret = new RegExp(`(?<![-\\w])[A-Z0-9_]*(API_KEY|SECRET|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*['"]?\\s*[=:]\\s*${value}`, 'i').exec(line);
+        const literal = secret && (CODE_FILE.test(file) ? secret[3] : secret[2]);
+        if (secret && !ENV_READ.test(line) && !PLACEHOLDER.test(literal) && !/\$\{/.test(literal)) add('secrets', file, n, line);
       }
       if (/Bearer [A-Za-z0-9._-]{20,}/.test(line) && !/\$\{/.test(line)) add('bearer', file, n, line);
       if (!isTest && !DOC_FILE.test(file) && !isExampleEnv && /localhost|127\.0\.0\.1/.test(line)) add('localhost', file, n, line);
