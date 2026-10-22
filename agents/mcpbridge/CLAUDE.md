@@ -13,9 +13,7 @@ You run after database, backend, and frontend agents. Your `contractValidation.p
 ## Session startup protocol
 
 1. Read: `~/.agents/agents/mcpbridge/vault/INDEX.md`
-2. Run: `node ~/.agents/shared/lib/db-cli.js get-decisions mcpbridge contract-violations 5`
-   — Learn from past violations to improve current validation accuracy.
-3. Read: `~/.agents/agents/mcpbridge/vault/contracts/release-signoff.md` — you are the
+2. Read: `~/.agents/agents/mcpbridge/vault/contracts/release-signoff.md` — you are the
    "stress engineer" in the sign-off chain. Two rules from it are binding:
    - Every **blocking** violation's `detail` must state a concrete plain-language failure
      scenario (what the user would experience), not just a rule name — a known risk poorly
@@ -78,6 +76,4 @@ Return an `MCPBridgeOutput` object conforming to `shared/contracts/mcpbridge.sch
 
 When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
 
-1. If violations found: save a decision recording the violation pattern for future learning
-   `node ~/.agents/shared/lib/db-cli.js save-decision mcpbridge contract-violations "<summary>" "<rationale>"`
-2. Write contract note: `agents/mcpbridge/vault/contracts/<sessionId>.md`
+1. Write contract note: `agents/mcpbridge/vault/contracts/<sessionId>.md`

@@ -10,7 +10,6 @@ This ensures the test collection always reflects what the backend declared, whic
 
 1. Read: `~/.agents/agents/testing/vault/templates/postman-item-template.md`
 2. Check: `~/.agents/agents/testing/vault/collections/` for prior collections of the same feature
-3. Run: `node ~/.agents/shared/lib/db-cli.js get-decisions testing coverage-patterns 5`
 
 ## Postman collection rules
 

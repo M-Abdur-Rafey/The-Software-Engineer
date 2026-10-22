@@ -459,9 +459,9 @@ const errorFlags = review.securityFlags.filter(f => f.severity === 'error')
 const security = { securityFlags: review.securityFlags, passed: errorFlags.length === 0 }
 log(`Review: cohesion ${atelier.cohesionScore}/10, ${atelier.refinementsApplied.length} refinement(s), ${security.securityFlags.length} security flag(s), ${errorFlags.length} error(s) left`)
 
-const persistOps = [
-  { db: ['--as', 'frontend', 'save-decision', 'frontend', sessionId, 'storage-rules', `Wired ${wiring.apiBindings.length} API bindings for: ${taskText.slice(0, 60)}`, `Security passed: ${security.passed}`] },
-]
+// No decision row: the bindings are in the contracts, and what the reviewer caught is recorded per project by the
+// lesson library (orchestrate's observe op).
+const persistOps = []
 await flushPersist(persistOps)
 
 const allFiles = uniquePaths([

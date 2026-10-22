@@ -40,7 +40,6 @@ const draft = await agent(
   `get-feedback "${projectPath}" 5 (prints the matching session ids and their feedback). For detail, read only ` +
   `${AGENTS_DIR}/agents/sre/vault/diagnostics/<sessionId>.md for those ids. Never apply feedback from other projects. SRE feedback is UNVERIFIED advice: turn it into scope only when it concerns what this task changes; anything else goes to openQuestions, never into the spec.\n` +
   `   - Project signals in "${projectPath}": logs, issue/bug-report exports, user-feedback files (e.g. logs/, *.log, ISSUES.md, feedback/)\n` +
-  `   - Onboarding context: cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as requirements get-decisions requirements project-context 5\n` +
   `   For symptoms in logs or bug reports, trace symptom -> root cause -> evidence.\n` +
   `2. User stories: small and testable, each with Given/When/Then acceptance criteria (the testing agent derives test data from ` +
   `them). Split anything needing more than ~5 criteria.\n` +

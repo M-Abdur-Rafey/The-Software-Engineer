@@ -117,8 +117,7 @@ const built = await agent(
   `Task: "${taskText}"\nProject: ${projectPath}\n${providerBrief}\nDatabase tables available: ${tableContext}\n\n` +
   EVIDENCE_GUARD + projectMapBrief + lessonsBrief +
   `Requirements spec:\n${spec}\n\n` +
-  `Context to read first: prior decisions (cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as calls get-decisions calls telephony-patterns 5), ` +
-  `${VAULT}/INDEX.md and the notes it lists that apply, ${VAULT}/providers/twilio-setup.md (if missing: the twilio npm package, ` +
+  `Context to read first: ${VAULT}/INDEX.md and the notes it lists that apply, ${VAULT}/providers/twilio-setup.md (if missing: the twilio npm package, ` +
   `auth token from TWILIO_AUTH_TOKEN), and any existing telephony code in the project.\n\n` +
   `1. CALL FLOW (flow-designer)\n` +
   ((callDirection === 'inbound' || callDirection === 'both')
@@ -247,7 +246,6 @@ const callsNote = [
   flow.outboundFlow ? `- Outbound results: ${(flow.outboundFlow.resultStates || []).join(', ')}` : null,
 ].filter(Boolean).join('\n')
 const persistOps = [
-  { db: ['--as', 'calls', 'save-decision', 'calls', sessionId, 'telephony-patterns', `Built ${flow.callDirection} call system with ${integration.webhookRoutes.length} webhooks for: ${taskText.slice(0, 60)}`, `Provider: ${provider}, compliance passed: ${compliance.passed}`] },
   { write: `agents/calls/vault/decisions/${flow.featureName}.md`, content: callsNote },
 ]
 await flushPersist(persistOps)

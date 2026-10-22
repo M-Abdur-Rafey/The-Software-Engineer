@@ -95,9 +95,7 @@ log(`Bridge: ${totalBlocking} blocking, ${contractCheck.warningCount} warning, $
 const contractsPassed = totalBlocking === 0
 
 const persistOps = [
-  ...(totalBlocking > 0
-    ? [{ db: ['--as', 'mcpbridge', 'save-decision', 'mcpbridge', sessionId, 'contract-violations', `${totalBlocking} blocking violation(s) found for: ${taskText.slice(0, 50)}`, `Types: ${[...new Set(allViolations.map(v => v.type))].join(', ')}`] }]
-    : []),
+  // Blocking violations are recorded per project by the lesson library (orchestrate's observe op), not as decisions.
   { write: `agents/mcpbridge/vault/contracts/${sessionId}.md`,
     content: `# Contract Validation — Session ${sessionId}\n\n**Task:** ${taskText}\n**Result:** ${contractsPassed ? 'PASSED' : 'FAILED'}\n**Blocking violations:** ${totalBlocking}\n**Warnings:** ${contractCheck.warningCount}\n` },
 ]

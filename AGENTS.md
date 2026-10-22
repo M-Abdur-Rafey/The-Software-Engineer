@@ -29,7 +29,7 @@ node init/bootstrap.js   # create DBs + generate shared/contracts/*.schema.json
 node init/seed-vaults.js # write baseline vault notes + the connected graph
 ```
 
-There is no build step and no linter. `node shared/lib/db-cli.js <cmd> ...` is the data CLI the workflows call (`init-session`, `check-onboarded`, `save-decision`, `get-decisions`, `update-session-status`, …).
+There is no build step and no linter. `node shared/lib/db-cli.js <cmd> ...` is the data CLI the workflows call (`init-session`, `check-onboarded`, `save-decision`, `get-feedback`, `update-session-status`, …). `decisions` rows carry no project column, so `get-decisions` would show every project's facts: no agent reads it for context (`verify` enforces this). Project facts come from the project map and the lesson library, and SRE feedback is read per project with `get-feedback`. The only decision writes left are the requirements agent's spec decisions and the SRE's feedback.
 
 Invoke the orchestrator directly via the Workflow tool (always pass `agentsDir`):
 

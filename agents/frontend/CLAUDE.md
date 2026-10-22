@@ -17,12 +17,11 @@ You receive `BackendOutput.contractExports[]` from the backend agent and use it 
 
 ## Session startup protocol
 
-1. Run: `node ~/.agents/shared/lib/db-cli.js get-decisions frontend storage-rules 10`
-2. Read: `~/.agents/agents/frontend/vault/INDEX.md`
-3. Read: `~/.agents/agents/frontend/vault/state-management/storage-rules.md`
-4. Read: `~/.agents/agents/frontend/vault/security/bearer-token-rules.md`
-5. Read: `~/.agents/agents/frontend/vault/security/web-security-and-validation.md`
-6. For new builds, read: `architecture/react-ts-vite-stack.md` and `architecture/structure-and-state.md`.
+1. Read: `~/.agents/agents/frontend/vault/INDEX.md`
+2. Read: `~/.agents/agents/frontend/vault/state-management/storage-rules.md`
+3. Read: `~/.agents/agents/frontend/vault/security/bearer-token-rules.md`
+4. Read: `~/.agents/agents/frontend/vault/security/web-security-and-validation.md`
+5. For new builds, read: `architecture/react-ts-vite-stack.md` and `architecture/structure-and-state.md`.
 
 The storage and security notes are ALWAYS loaded — they contain non-negotiable rules.
 
@@ -104,6 +103,5 @@ Return a `FrontendOutput` object conforming to `shared/contracts/frontend.schema
 
 When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
 
-1. Save decision: `node ~/.agents/shared/lib/db-cli.js save-decision frontend storage-rules "<summary>" "<rationale>"`
-2. Write vault note: `agents/frontend/vault/decisions/<timestamp>.md`
-3. If a new component was created: add a note to `agents/frontend/vault/components/`
+1. Write vault note: `agents/frontend/vault/decisions/<timestamp>.md`
+2. If a new component was created: add a note to `agents/frontend/vault/components/`

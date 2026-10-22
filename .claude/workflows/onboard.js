@@ -256,8 +256,6 @@ const projectMap = (() => {
 
 const persistOps = [{ map: projectPath, sections: mapSections }]
 const note = (agentName, content) => persistOps.push({ write: `agents/${agentName}/vault/projects/${projectName}.md`, content })
-const decide = (domain, topic, summary) =>
-  persistOps.push({ db: ['--as', 'onboard', 'save-decision', domain, `onboard-${sessionId}`, topic, summary, `Onboarded from ${projectPath}`] })
 
 if (scanBackend) {
   note('backend', [
@@ -277,8 +275,6 @@ if (scanBackend) {
     `## Features`,
     ...(backendScan.featureNames || []).map(f => `- ${f}`), '',
   ].join('\n'))
-  decide('backend', 'project-conventions',
-    `Project ${projectName}: ${stack.backendFramework || 'no backend'} + ${stack.frontendFramework || 'no frontend'} + ${stack.database || 'no db'}. Error format: ${backendScan.errorFormat}. Folder: ${backendScan.folderPattern}`)
 }
 
 if (scanFrontend) {
@@ -300,8 +296,6 @@ if (scanFrontend) {
     `## Components (${frontendScan.totalComponentCount} total)`,
     ...(frontendScan.components || []).slice(0, 30).map(c => `- ${c.name} (${c.type}) — ${c.filePath}${c.usesAPI && c.usesAPI.length ? ' — calls: ' + c.usesAPI.join(', ') : ''}`), '',
   ].join('\n'))
-  decide('frontend', 'storage-rules',
-    `Project ${projectName} uses ${tokenStorage} for tokens. API calls via ${frontendScan.apiCallPattern || 'n/a'}. State: ${stack.stateManagement || 'none'}`)
 }
 
 if (scanDatabase) {
@@ -320,8 +314,6 @@ if (scanDatabase) {
     `## Migration files`,
     ...(dbScan.migrationFiles || []).map(f => `- ${f}`), '',
   ].join('\n'))
-  decide('database', 'schema-design',
-    `Project ${projectName}: ${dbScan.totalTableCount} tables. ORM: ${stack.orm || 'none'}. Pattern: ${dbScan.queryPattern}`)
 }
 
 note('gitdevops', [

@@ -23,18 +23,17 @@ You never work on frontend components, database migrations, or git operations di
 
 At the start of every session:
 
-1. Run: `node ~/.agents/shared/lib/db-cli.js get-decisions backend express-patterns 10`
-   — Load the 10 most recent backend decisions for context.
-
-2. Read: `~/.agents/agents/backend/vault/INDEX.md`
+1. Read: `~/.agents/agents/backend/vault/INDEX.md`
    — Identify which vault notes are relevant to the current task and stack, then read those
    files. For Python projects, the `architecture/python-*`, `architecture/middlewares.md`,
    and `patterns/*` notes are the relevant set.
 
-3. If the task involves AI/LLM features, also read:
+2. If the task involves AI/LLM features, also read:
    `~/.agents/shared/standards/ai-agent-practices.md`.
 
-4. Announce what you found: "Detected stack: <node|python>. Loaded N decisions. Relevant vault notes: [list]."
+3. Announce what you found: "Detected stack: <node|python>. Relevant vault notes: [list]."
+
+Project facts come from the project map and lessons in your prompt, not from `get-decisions`: decision rows carry no project and would show other projects' facts.
 
 ## Feature folder layout (default; the spec can decide otherwise)
 
@@ -156,5 +155,4 @@ The `contractExports` field is the most critical — it drives frontend API bind
 After completing work:
 When run by the workflows, these steps are carried out by the workflow itself (its persistOps, run by `shared/lib/persist.js`). Do not run them from inside a sub-agent; only do them by hand outside the workflows.
 
-1. Save a decision: `node ~/.agents/shared/lib/db-cli.js save-decision backend <sessionId> express-patterns "<summary>" "<rationale>"`
-2. Write a vault note: append a summary to `agents/backend/vault/decisions/<timestamp>.md`
+1. Write a vault note: append a summary to `agents/backend/vault/decisions/<timestamp>.md`

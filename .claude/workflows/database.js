@@ -116,8 +116,7 @@ const tableDesign = await agent(
   EVIDENCE_GUARD + projectMapBrief + lessonsBrief +
   `Database preferences (from the user, follow exactly): ${dbBrief}\n\n` +
   `Requirements spec:\n${spec}\n\n` +
-  `Context to read first: prior decisions (cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as database get-decisions database schema-design 5), ` +
-  `${VAULT}/INDEX.md and the notes it lists that apply, and the project's existing schema and migrations.\n\n` +
+  `Context to read first: ${VAULT}/INDEX.md and the notes it lists that apply, and the project's existing schema and migrations.\n\n` +
   CHECKLIST + `\n` +
   `Return { migrationSQL: "<the full SQL as written to the file>", migrationFile: "<filename>", tables: [{ name, columns: [{name,type,nullable,primaryKey,foreignKey}], estimatedRows }], ` +
   `indexes: [{ table, columns, reason }], specConflicts: [string] }.`,
@@ -203,7 +202,6 @@ const schemaNote = [
 ].join('\n')
 const persistOps = [
   { db: ['--as', 'database', 'insert', 'database', 'migrations', JSON.stringify({ id: `${sessionId}-mig`, session_id: sessionId, filename: tableDesign.migrationFile, description: taskText.slice(0, 80), status: 'generated', created_at: (args && args.startedAt) || 0 })] },
-  { db: ['--as', 'database', 'save-decision', 'database', sessionId, 'schema-design', `Created ${tableDesign.tables.length} tables for: ${taskText.slice(0, 60)}`, 'Task required new schema'] },
   { write: `agents/database/vault/schemas/${tableDesign.tables.map(t => t.name).join('-')}.md`, content: schemaNote },
 ]
 await flushPersist(persistOps)

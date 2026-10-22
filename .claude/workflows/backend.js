@@ -145,8 +145,7 @@ const build = await agent(
   `Database tables available: ${tableContext}\n` +
   `Architecture preferences (from the user, follow exactly): ${archBrief}\n\n` +
   `Requirements spec:\n${spec}\n\n` +
-  `Context to read first: prior decisions (cd "${AGENTS_DIR}" && node shared/lib/db-cli.js --as backend get-decisions backend express-patterns 5), ` +
-  `${VAULT}/INDEX.md and the notes it lists that apply (detect the stack: Node/Express vs Python), and the existing code in ${projectPath}: ` +
+  `Context to read first: ${VAULT}/INDEX.md and the notes it lists that apply (detect the stack: Node/Express vs Python), and the existing code in ${projectPath}: ` +
   `reuse its DB connection, conventions and helpers.\n\n` +
   CHECKLIST + `\n` +
   `Self-check (one pass, just before returning): reopen only the files you wrote this session, without exploring further, and walk ` +
@@ -218,9 +217,9 @@ const review = await agent(
 const unfixed = review.violations.filter(v => !v.fixed)
 log(`Review: ${review.violations.length} violation(s), ${review.filesFixed.length} file(s) fixed, ${unfixed.length} left, ${review.contractMismatches.length} contract mismatch(es)`)
 
-const persistOps = [
-  { db: ['--as', 'backend', 'save-decision', 'backend', sessionId, 'express-patterns', `Created ${build.routeContracts.length} routes for: ${taskText.slice(0, 60)}`, `Feature: ${build.featureName}`] },
-]
+// No decision row: what the session built is in the contracts and the project map, and what the reviewer caught is
+// recorded per project by the lesson library (orchestrate's observe op).
+const persistOps = []
 await flushPersist(persistOps)
 
 const contractExports = build.routeContracts.map(r => ({

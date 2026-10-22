@@ -185,6 +185,18 @@ if (fs.existsSync(workflowsDir)) {
   });
 }
 
+// ─── No unscoped decision reads ───────────────────────────────────────────────
+// `decisions` rows carry no project, so get-decisions shows every project's facts. Agents get project
+// context from the project map and the lesson library instead; SRE feedback goes through get-feedback.
+check('no workflow or domain CLAUDE.md reads decisions across projects (get-decisions)', () => {
+  const files = [
+    ...(fs.existsSync(workflowsDir) ? fs.readdirSync(workflowsDir).filter(f => f.endsWith('.js')).map(f => path.join(workflowsDir, f)) : []),
+    ...AGENT_NAMES.map(n => path.join(AGENTS_DIR, 'agents', n, 'CLAUDE.md')).filter(f => fs.existsSync(f)),
+  ];
+  const hits = files.filter(f => /get-decisions\s+\w/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(AGENTS_DIR, f));
+  if (hits.length) throw new Error(`unscoped get-decisions in: ${hits.join(', ')}`);
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 console.log('');
 log.table([
