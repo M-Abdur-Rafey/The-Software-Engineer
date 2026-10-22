@@ -70,6 +70,7 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 | `/software-engineer onboard` | Force re-scan of current project — go to the Onboard section |
 | `/software-engineer graph` | Build a filtered code knowledge graph of the current project — go to the Graph section |
 | `/software-engineer lessons` | Curate this project's lessons and draft checklist proposals (one agent) — go to the Lessons section |
+| `/software-engineer verify` | Show, confirm or edit the project's own checks (build, type-check, lint, tests, how to start the API), or run them now — go to the Verify section |
 | `/software-engineer docs [idea]` | Set up System Docs (the project's source of truth in `docs/system/`) — go to the Docs section |
 | `/software-engineer answer [module]` | Walk through open System Docs questions in chat — go to the Answer section |
 | `/software-engineer approve <module\|layers>` | Approve a module doc (or the layer plan) so coding can start — go to the Answer section |
@@ -292,9 +293,12 @@ Summarise what you're going to do in one short paragraph before starting the wor
 2. `node <install-path>/shared/lib/db-cli.js check-onboarded "<current working directory>"` prints `{ onboarded, techStack }`.
 3. `node <install-path>/shared/lib/projectmap.js show "<current working directory>"` prints the project map (stack, layout, conventions, routes, tables, commands), or nothing before the first onboarding.
    `node <install-path>/shared/lib/lessons.js brief "<current working directory>"` prints this project's active lessons as JSON (`{}` when there are none): problems the reviewers, bridge or scan caught in 2+ earlier sessions.
-4. Build the classification from Step 4c: `{ requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType (feat|fix|chore|test|docs|refactor|security), taskSlug (lowercase kebab-case, max 30 chars), size ("small" only if the user agreed to the short pipeline, else "normal") }`.
+4. **The project's own checks** (design: `<install-path>/design/verify-phase.md`):
+   - `node <install-path>/shared/lib/verify.js show "<current working directory>"`. If `config` is missing or not confirmed and the project is onboarded, follow the Verify section's steps 1–3 now, once. If the project is not onboarded yet, onboarding proposes the commands during this run; say so, and confirm them after it (Step 6).
+   - When `config.confirmed` is true, tell the user you are running their checks first. Then run, with a Bash timeout of 600000 ms: `node <install-path>/shared/lib/verify.js run "<current working directory>" --out "<install-path>/agents/orchestrator/vault/sessions/<sessionId>.verify-baseline.json"`. This is the baseline: failures that exist before any change are never blamed on the session. Pass the file path as `verifyBaseline`.
+5. Build the classification from Step 4c: `{ requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType (feat|fix|chore|test|docs|refactor|security), taskSlug (lowercase kebab-case, max 30 chars), size ("small" only if the user agreed to the short pipeline, else "normal") }`.
 
-Pass all four into the workflow (below); leave `projectMap` out when step 3 printed nothing, and `lessons` out when it printed `{}`. If any step fails, leave those fields out; the workflow falls back to doing it itself.
+Pass all of these into the workflow (below). Leave out `projectMap` when step 3 printed nothing, `lessons` when it printed `{}`, and `verifyBaseline` when no baseline was run. If any step fails, leave those fields out; the workflow falls back to doing it itself.
 
 Now collect all the user's answers into a preferences object and invoke the workflow:
 
@@ -310,6 +314,7 @@ Workflow({
     classification: { requiresDatabase, requiresBackend, requiresFrontend, requiresCalls, taskType, taskSlug, size },
     projectMap: "<output of projectmap.js show, verbatim>",
     lessons: <output of lessons.js brief, the JSON object verbatim>,
+    verifyBaseline: "<the baseline file from step 4, when it ran>",
     deferBookkeeping: true,   // Step 6 records the session with shared/lib/persist.js, no agent needed
     projectPath: "<current working directory>",
     agentsDir: "<install-path>",
@@ -372,6 +377,21 @@ Then summarise clearly:
 - **System Docs** (when `systemDocs` is set): which module docs were updated and which other owners are affected
 - **Lessons:** run `node <install-path>/shared/lib/lessons.js pending "<current working directory>"`. When it prints `offer: true`, ask once: _"The reviewers, bridge and scan have caught N new problems on this project since the lessons were last curated. Curate them now? It costs one agent."_ Go to the Lessons section only if the user agrees.
 - **Short pipeline** (when `skipped` is not empty): which stages were skipped. If you asked for `small` but `size` came back `normal`, say why (more than one domain, not a fix/chore, or other modules depend on the change) and that everything ran
+
+**Verify:** report `verify` in plain language:
+- which checks ran and passed
+- what was already failing before the session
+- what was flaky
+- what a fix round repaired
+
+If `verify.configured` is false, say that the project's own checks did not run, and offer `/software-engineer verify` to set them up. After a first-use onboarding, confirm the proposed commands now (Verify section).
+
+**If the result has `status: "blocked"` with `reason: "verify_failed"`**, nothing was committed: the project's own checks still failed after the fix rounds. For each entry in `verify.failing`:
+- the command
+- the new failures
+- the key lines of its output
+
+Then say what each fix round changed (`verify.rounds`). If `verify.testsWeakened` is not empty, a fixer edited or deleted existing tests, which the gate never accepts: name the files. The changes are still in the working tree. Suggest the next step: fix and re-run, or ask for a narrower task.
 
 **If the result has `status: "awaiting-answers"`**, nothing was coded: the project's System Docs need decisions first. Explain the `chainReaction` and the affected `consumers` in plain language, then follow the Answer section for every target module in `blocking`. When every target passes `gate`, re-run Step 5 with the same task.
 
@@ -516,6 +536,24 @@ Tell the user what was found: tech stack, number of routes, components, tables.
 
 ---
 
+## Subcommand: verify (the project's own checks)
+
+The Verify phase runs this project's own install, build, type-check, lint and test commands, and the session's API collection with Newman against a throwaway database (design: `<install-path>/design/verify-phase.md`). Exit codes decide. Nothing runs until the user has confirmed the commands once.
+
+Let `VCLI` be `node <install-path>/shared/lib/verify.js`.
+
+1. **Show.** `VCLI show "<current working directory>"` prints `{ config, draft }`. `config` is what runs; `draft` is what onboarding proposed.
+2. **Confirm or edit.** Show the steps in plain language, one line each (for example: "Build the web app: `npm run build` in web/"), plus how the API is started for tests (its command, and which env vars get a free port, a throwaway database and a random secret). Ask once:
+   - whether they are right
+   - what is missing (a type-check, a lint, a test command, how to start the API)
+   - for the API: which env var sets the port, which the database, and which secrets it needs
+
+   Never invent a command. Leave out a step the user does not know.
+3. **Save.** Write the confirmed JSON to a temp file, then run `VCLI set "<current working directory>" @<file>`. The shape is `{ "confirmed": true, "steps": [{ "kind": "install|build|typecheck|lint|test", "cwd": ".", "run": "...", "when": "deps-changed" (install only), "report": "jest|vitest|mocha" (test only, optional) }], "serve": { "cwd": ".", "run": "npm start", "env": { "PORT": "{port}", "DB_PATH": "{tmpdb}", "JWT_SECRET": "{random}" }, "ready": "/api/health" } }`. If the user wants no checks at all, save `{ "confirmed": true, "steps": [] }` so they are not asked again.
+4. **Run now** (optional). Use a Bash timeout of 600000 ms: `VCLI run "<current working directory>"`. Report each step's result in plain language.
+
+---
+
 ## Subcommand: lessons (curate the lesson library)
 
 The pipeline keeps lessons from what its reviewers, contract bridge and security scan catch (design: `<install-path>/design/lesson-library.md`). A lesson appears when the same checklist rule is missed in 2+ sessions on this project, and only authors see it. Curation sharpens and merges this project's lessons, and drafts a checklist change for any rule that has a lesson in 3+ projects. It costs one agent.
@@ -567,6 +605,7 @@ Show:
 /software-engineer onboard    — Re-scan current project
 /software-engineer graph      — Build a filtered code knowledge graph (Obsidian)
 /software-engineer lessons    — Curate this project's lessons; draft checklist proposals
+/software-engineer verify     — Confirm or run the project's own checks (build, type-check, lint, tests, API)
 /software-engineer docs       — Set up System Docs: the project's per-module source of truth
 /software-engineer answer     — Answer open System Docs questions
 /software-engineer approve    — Approve a module doc (or the layer plan) so coding can start

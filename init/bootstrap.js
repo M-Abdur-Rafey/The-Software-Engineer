@@ -761,6 +761,8 @@ const CONTRACTS = {
           routesAdded:         { type: 'number' },
           routesModified:      { type: 'number' },
           repeatMisses:        { type: 'number' },
+          verifyPassed:        { type: ['boolean', 'null'] },
+          verifyRuns:          { type: 'number' },
           testCoveragePercent: { type: 'number' },
           contractViolations:  { type: 'number' },
           securityBlocks:      { type: 'number' },

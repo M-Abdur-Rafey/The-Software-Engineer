@@ -45,6 +45,13 @@ const discovery = await agent(
   `2. topLevelFolders [{name, purpose}], entryPoints, projectSummary (2 sentences).\n` +
   `3. modules: up to 15 main modules or features [{name, path, purpose}].\n` +
   `4. commands from package.json scripts / README: install, dev, test, build, migrate (null when absent).\n` +
+  `   verify: the commands that check this project, as the user would run them (design/verify-phase.md). steps: one entry per ` +
+  `command, { kind: install|build|typecheck|lint|test, cwd (relative, "." for the root; e.g. "web" for a sub-app), run, report ` +
+  `(jest|vitest|mocha when the test command runs that framework, else null) }. Only commands that really exist in the scripts or ` +
+  `config: never invent one. serve: how to start the API for tests, { cwd, run, portEnv (the env var it reads its port from), ` +
+  `dbEnv (the env var for its database file or URL, or null), secretEnvs (env vars it refuses to start without, e.g. JWT_SECRET), ` +
+  `ready (a GET path that answers once it is up, e.g. /api/health) }, or null when there is no API. A person confirms all of this ` +
+  `before anything runs, so say what you are unsure about in verify.notes.\n` +
   `5. conventions: commitStyle, usesConventionalCommits, importStyle (commonjs|esm|mixed), usesBarrelFiles, codingStyle ` +
   `{semicolons, quotes, indent (a number of spaces, or "tabs"), trailingCommas}, linterConfig, envVarNames, inputValidation, corsConfigured, cspConfigured.\n\n` +
   `Return JSON matching the schema.`,
@@ -61,6 +68,14 @@ const discovery = await agent(
         entryPoints:     { type: 'array', items: { type: 'string' } },
         modules:         { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, path: { type: 'string' }, purpose: { type: 'string' } } } },
         commands:        { type: 'object', properties: { install: { type: ['string', 'null'] }, dev: { type: ['string', 'null'] }, test: { type: ['string', 'null'] }, build: { type: ['string', 'null'] }, migrate: { type: ['string', 'null'] } } },
+        verify: {
+          type: 'object',
+          properties: {
+            steps: { type: 'array', items: { type: 'object', required: ['kind', 'run'], properties: { kind: { type: 'string', enum: ['install', 'build', 'typecheck', 'lint', 'test'] }, cwd: { type: 'string' }, run: { type: 'string' }, report: { type: ['string', 'null'], enum: ['jest', 'vitest', 'mocha', null] } } } },
+            serve: { type: ['object', 'null'], properties: { cwd: { type: 'string' }, run: { type: 'string' }, portEnv: { type: 'string' }, dbEnv: { type: ['string', 'null'] }, secretEnvs: { type: 'array', items: { type: 'string' } }, ready: { type: 'string' } } },
+            notes: { type: 'string' },
+          },
+        },
         conventions: {
           type: 'object',
           required: ['commitStyle', 'importStyle', 'codingStyle', 'envVarNames'],
@@ -255,6 +270,26 @@ const projectMap = (() => {
 })()
 
 const persistOps = [{ map: projectPath, sections: mapSections }]
+
+// The Verify phase's commands (design/verify-phase.md), as a DRAFT: nothing runs until the user confirms them
+// (the skill shows the draft and saves the confirmed version as verify.json with shared/lib/verify.js set).
+// A re-onboard rewrites only the draft, never commands already confirmed.
+const vd = discovery.verify || {}
+const verifyDraft = {
+  confirmed: false,
+  steps: (vd.steps || []).filter(st => st && st.kind && st.run).map(st => ({
+    kind: st.kind, cwd: st.cwd || '.', run: st.run,
+    ...(st.kind === 'install' ? { when: 'deps-changed' } : {}),
+    ...(st.report ? { report: st.report } : {}),
+  })),
+  serve: vd.serve && vd.serve.run && vd.serve.portEnv ? {
+    cwd: vd.serve.cwd || '.', run: vd.serve.run, ready: vd.serve.ready || '/',
+    env: Object.assign({ [vd.serve.portEnv]: '{port}' }, vd.serve.dbEnv ? { [vd.serve.dbEnv]: '{tmpdb}' } : {},
+      ...(vd.serve.secretEnvs || []).map(k => ({ [k]: '{random}' }))),
+  } : null,
+  notes: vd.notes || '',
+}
+persistOps.push({ write: `agents/orchestrator/vault/projects/${projectName}/verify.draft.json`, content: JSON.stringify(verifyDraft, null, 2) })
 const note = (agentName, content) => persistOps.push({ write: `agents/${agentName}/vault/projects/${projectName}.md`, content })
 
 if (scanBackend) {

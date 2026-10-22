@@ -1,6 +1,6 @@
 # Verify phase: design
 
-Status: **approved design** · 2026-10-22
+Status: **approved design; phases A–E built** · 2026-10-22
 
 ## Problem
 

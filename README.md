@@ -53,6 +53,7 @@ That's it. Then run:
 | `/software-engineer update` | Pull the latest version |
 | `/software-engineer onboard` | Re-scan the current project (runs automatically on first use) |
 | `/software-engineer graph` | Build a filtered Obsidian knowledge graph of the project's real code |
+| `/software-engineer verify` | Show, confirm or run the project's own checks: build, type-check, lint, tests, and how to start the API for the API tests |
 | `/software-engineer lessons` | Curate this project's lessons and draft checklist changes for problems seen across projects (offered automatically after 5 new catches) |
 | `/software-engineer docs [idea]` | Set up [System Docs](#system-docs): the project's source of truth in `docs/system/`. For a new project it plans modules and layers from your idea; for an existing one it documents the modules you choose |
 | `/software-engineer answer [module]` | Go through open System Docs questions in chat |
@@ -245,6 +246,8 @@ flowchart TD
 Frontend, Testing, and Calls run **in parallel** once the backend contract exists. Frontend-only tasks still run the frontend agent. The System Docs steps (purple, plus the docs update and sync after the bridge) only run when the project has `docs/system/`; without it the pipeline goes straight from onboarding to requirements.
 
 Onboarding also writes a **project map**: one short note (at most 3000 characters) with the stack, folder layout, conventions, main modules, routes, tables and run commands. Every agent gets it in its prompt instead of exploring the repo again, and it is updated after each committed session with the new routes, tables and any structural changes.
+
+Before anything is committed, the pipeline **runs your project's own checks**: the install, build, type-check, lint and test commands you confirmed once, plus the session's API tests (Newman against the app on a throwaway database). Exit codes decide, not an AI reading code. Tests that were already failing before the session are reported as such, not blamed on it. New failures go back to the agent that wrote the code, for at most two fix rounds. A fix may never edit or delete existing tests. If the checks still fail, nothing is committed and you get the failing command and its output. Set the checks up or run them any time with `/software-engineer verify`.
 
 For a **small task** (a bug fix or chore touching one area) the skill offers a short pipeline: it skips the separate spec, the simplification pass and the post-run review, and asks you first every time. The contract check, the security scan and the tests for changed routes always run.
 

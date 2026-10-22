@@ -46,6 +46,8 @@ const callsOutput    = (args && args.callsOutput)    || null
 const ponytailOutput = (args && args.ponytailOutput) || null
 const bridgeOutput   = (args && args.bridgeOutput)   || null
 const gitOutput      = (args && args.gitOutput)      || null
+// What the Verify phase saw when it ran the project's own checks (design/verify-phase.md): facts, not judgement.
+const verifyOutput   = (args && args.verifyOutput)   || null
 
 // Outcome metrics — computed deterministically from contracts, not by a model.
 // Measure outcomes, never lines of code.
@@ -61,6 +63,8 @@ const outcomeMetrics = {
   routesModified:         ((backendOutput && backendOutput.routes) || []).filter(r => r && r.change === 'modified').length,
   // Catches whose rule already had an active lesson on this project (design/lesson-library.md); orchestrate counts them.
   repeatMisses:           (args && args.repeatMisses) || 0,
+  verifyPassed:           verifyOutput ? (verifyOutput.configured ? verifyOutput.passed : null) : null,
+  verifyRuns:             (verifyOutput && verifyOutput.attempts) || 0,
   testCoveragePercent:    (testingOutput && testingOutput.coverage && testingOutput.coverage.percentCovered) || 0,
   contractViolations:     (bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.violations && bridgeOutput.contractValidation.violations.length) || 0,
   securityBlocks:         (gitOutput && gitOutput.blockedBy && gitOutput.blockedBy.length) || 0,
@@ -84,8 +88,10 @@ const diagnosis = await agent(
   `- errors reported by domain agents: ${JSON.stringify([backendOutput, frontendOutput, databaseOutput, testingOutput, callsOutput].filter(Boolean).flatMap(o => o.errors || []))}\n\n` +
   `Do the following (READ-ONLY — you never modify code):\n` +
   `1. Health checks — in "${projectPath}", check what applies: dependency lockfile present, ` +
-  `tests/collection generated, migrations present when schema changed, no obvious broken imports in changed files ` +
-  `(changed files: ${JSON.stringify(filesChanged.slice(0, 40))}).\n` +
+  `tests/collection generated, migrations present when schema changed (changed files: ${JSON.stringify(filesChanged.slice(0, 40))}). ` +
+  `Whether the code builds, type-checks, lints and passes its tests is NOT yours to judge: the Verify phase ran those commands ` +
+  `and its result is below. Report it in healthChecks as it is, and diagnose any already-failing or flaky step.\n` +
+  `Verify result: ${JSON.stringify(verifyOutput ? { configured: verifyOutput.configured, passed: verifyOutput.passed, runs: verifyOutput.attempts, steps: verifyOutput.steps } : 'not run').slice(0, 3000)}\n` +
   `2. Diagnostics — scan project logs / recent stack traces if they exist (logs/, *.log). ` +
   `For each failure signal: symptom → rootCause → evidence → suggestedFix → severity (critical|major|minor). ` +
   `Diagnose, don't describe.\n` +

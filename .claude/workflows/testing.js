@@ -103,8 +103,14 @@ const collection = await agent(
   `FAIL with a clear message, never pass or skip. Coverage counts only tests with unconditional assertions.\n` +
   `- A test that needs anything the collection cannot set up through its own requests (a server started with a different ` +
   `config or modified file, seeded data, a second service) gets needsSetup: true and a setupNote saying exactly what to prepare. ` +
-  `It stays in the collection but does not count as coverage.\n` +
-  `- Group items into folders: "${featureName} / new", "${featureName} / changed", "${featureName} / flows"\n` +
+  `It stays in the collection, inside a folder named "needs setup", and does not count as coverage.\n` +
+  `- The collection is RUN (design/verify-phase.md): Newman executes it against the app started on a throwaway, EMPTY database, ` +
+  `with baseUrl overridden. So it must be self-contained. Its FIRST folder is "setup": it registers and logs in every user the ` +
+  `tests need (for example an admin and a member, in the order that gives them those roles), creates any records the tests use, ` +
+  `and saves tokens and ids with pm.collectionVariables.set(...) in test scripts. Every later request uses those variables ` +
+  `({{bearerToken}}, {{memberToken}}, {{projectId}}, ...), never hardcoded ids and never data that must already exist. Setup ` +
+  `requests assert their own status, so a broken setup fails loudly. Requests run in collection order.\n` +
+  `- Group items into folders, in this order: "setup", "${featureName} / new", "${featureName} / changed", "${featureName} / flows", "needs setup"\n` +
   `- The collection variable block must include: baseUrl (value: http://localhost:3000) and bearerToken (value: "")\n\n` +
   `Write the collection JSON to: ${collectionPath}\n\n` +
   `Return JSON: { testCases: [{routePath,method,scenarioName,type:"positive"|"negative"|"auth"|"change"|"smoke"|"flow",expectedStatus,needsSetup,setupNote}], routeCount: ${routes.length}, written: boolean }`,

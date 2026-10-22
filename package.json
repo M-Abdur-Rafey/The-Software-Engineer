@@ -14,19 +14,21 @@
     "mcp": "node mcp/server.mjs",
     "test:mcp": "node tests/mcp-protocol.mjs",
     "test:sysdocs": "node tests/sysdocs.test.js",
-    "test": "node init/verify.js && node tests/mcp-protocol.mjs && node tests/sysdocs.test.js && node tests/uitest.test.js && node tests/persist.test.js && node tests/scan.test.js && node tests/projectmap.test.js && node tests/lessons.test.js && node tests/tune.test.js",
+    "test": "node init/verify.js && node tests/mcp-protocol.mjs && node tests/sysdocs.test.js && node tests/uitest.test.js && node tests/persist.test.js && node tests/scan.test.js && node tests/projectmap.test.js && node tests/lessons.test.js && node tests/tune.test.js && node tests/verify.test.js",
     "test:uitest": "node tests/uitest.test.js",
     "test:persist": "node tests/persist.test.js",
     "test:scan": "node tests/scan.test.js",
     "test:projectmap": "node tests/projectmap.test.js",
     "test:lessons": "node tests/lessons.test.js",
-    "test:tune": "node tests/tune.test.js"
+    "test:tune": "node tests/tune.test.js",
+    "test:verify": "node tests/verify.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "ajv": "^8.17.1",
     "better-sqlite3": "^12.11.1",
     "chalk": "^4.1.2",
+    "newman": "6.2.3",
     "uuid": "^9.0.1"
   }
 }

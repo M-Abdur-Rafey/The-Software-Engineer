@@ -159,4 +159,4 @@ if (require.main === module) {
   console.log(JSON.stringify(scan(path.resolve(project), paths)));
 }
 
-module.exports = { scan };
+module.exports = { scan, TEST_PATH };

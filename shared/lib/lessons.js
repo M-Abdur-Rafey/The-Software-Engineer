@@ -154,6 +154,7 @@ const briefable = (l) => l.status === 'active' && !(l.curated && l.curated.merge
 function ruleText(domain, rule, root = ROOT) {
   if (SPECIAL_RULES[rule]) return SPECIAL_RULES[rule];
   if (rule.startsWith('scan:')) return `pass the security scan check "${rule.slice(5)}"`;
+  if (rule.startsWith('verify:')) return `make the project's ${rule.slice(7)} pass before returning (the Verify phase runs it; run it yourself when you can)`;
   const note = path.join(root, 'agents', domain, 'vault', 'sub-agents', `${rule}.md`);
   if (fs.existsSync(note)) {
     const covers = fs.readFileSync(note, 'utf8').split(/\r?\n/).find((l) => l.startsWith('**Covers:**'));

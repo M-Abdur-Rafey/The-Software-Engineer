@@ -95,6 +95,15 @@
         "repeatMisses": {
           "type": "number"
         },
+        "verifyPassed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verifyRuns": {
+          "type": "number"
+        },
         "testCoveragePercent": {
           "type": "number"
         },

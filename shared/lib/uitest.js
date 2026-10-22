@@ -311,4 +311,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { hostAllowed, scope, env, record, STYLE_ONLY, COPY_DIR };
+module.exports = { hostAllowed, scope, env, record, portFree, portOpen, STYLE_ONLY, COPY_DIR };

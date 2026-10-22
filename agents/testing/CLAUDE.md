@@ -70,6 +70,11 @@ Never make an expectation depend on what the app returned: no `if (pm.response.c
 Return a `TestingOutput` object conforming to `shared/contracts/testing.schema.json`.
 
 `collectionPath` is the absolute path to the generated `.postman.json` file.
+
+The collection is **run**: the Verify phase executes it with Newman against the app started on a throwaway, empty database (`design/verify-phase.md`). So it is self-contained:
+- Its first folder, `setup`, registers and logs in the users the tests need and saves tokens and ids with `pm.collectionVariables.set`.
+- Later requests use only those variables.
+- Tests marked `needsSetup` go in a final `needs setup` folder, which is not run.
 `coverage.percentCovered` must be 100 unless a route had insufficient schema info to generate tests (log those in `errors[]`).
 
 ## Session close protocol
