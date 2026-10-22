@@ -1,6 +1,6 @@
 # Verify phase: design
 
-Status: **draft for review** · 2026-10-22
+Status: **approved design** · 2026-10-22
 
 ## Problem
 
@@ -194,9 +194,15 @@ A passing session adds one cheap agent plus the project's own test and build tim
 - **Phase E:** the same task must be fixed within the cap.
 - **Phase D:** the A/B task's collection must run under Newman against a throwaway database.
 
+## Decisions
+
+| Topic | Decision |
+|---|---|
+| Order | Verify runs **after ponytail** and before the bridge, so the gate checks the final code |
+| Fix rounds | At most **2**, so at most 3 Verify runs |
+| Newman | A **pinned dependency** of the skill; nothing is downloaded during a run |
+| Tests-weakened guard | **Blocking**: editing or deleting a pre-existing test fails the gate |
+
 ## Open questions
 
-1. **Order:** Verify after ponytail, as above, or before it as first proposed?
-2. **Fix rounds:** 2 (recommended) or 3?
-3. **Newman:** a pinned dependency of the skill (recommended), or `npx newman` at run time?
-4. **Tests-weakened guard:** block (recommended), or warn only?
+None.
