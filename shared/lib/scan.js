@@ -28,6 +28,9 @@ const CODE_FILE = /\.[cm]?[jt]sx?$/i;
 // A value that is clearly not a real secret: empty, a placeholder, or read from the environment.
 const PLACEHOLDER = /^(|['"]{2}|<[^>]*>|\$\{?[A-Z_]+\}?|x+|\*+|changeme|change-me|change_me|your[-_a-z]*|example[-_a-z]*|placeholder|dummy|test|null|undefined|false|true)$/i;
 const ENV_READ = /process\.env|import\.meta\.env|os\.environ|getenv\(|ENV\[/;
+// A secret hidden behind an environment read: `process.env.API_KEY || "sk_live_..."`, `os.environ.get("X", "lit")`.
+const ENV_FALLBACK = /(?:(?:process\.env|import\.meta\.env|os\.environ|getenv\(|ENV\[)[^\n]*?(?:\|\||\?\?|\bor\b)|(?:\.get|getenv)\(\s*['"`][^'"`]+['"`]\s*,)\s*(['"`])([^'"`]+)\1/;
+const SECRET_NAME = /(API_?KEY|SECRET|PASSWORD|PASSWD|PRIVATE_?KEY|TOKEN)/i;
 
 function git(project, args) {
   try {
@@ -40,7 +43,7 @@ function git(project, args) {
 const norm = (p) => p.replace(/\\/g, '/').replace(/^\.\//, '');
 
 // Files to scan: the given paths (directories expanded to their tracked + untracked files) or the staged files.
-function collectFiles(project, paths) {
+function collectFiles(project, paths, notFound = []) {
   if (!paths.length) {
     return (git(project, ['diff', '--staged', '--name-only', '--diff-filter=ACMR']) || '').split('\n').filter(Boolean).map(norm);
   }
@@ -102,6 +105,10 @@ function scan(project, paths) {
         const secret = new RegExp(`(?<![-\\w])[A-Z0-9_]*(API_KEY|SECRET|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*['"]?\\s*[=:]\\s*${value}`, 'i').exec(line);
         const literal = secret && (CODE_FILE.test(file) ? secret[3] : secret[2]);
         if (secret && !ENV_READ.test(line) && !PLACEHOLDER.test(literal) && !/\$\{/.test(literal)) add('secrets', file, n, line);
+      }
+      if (!isExampleEnv && !isComment && ENV_READ.test(line) && SECRET_NAME.test(line)) {
+        const fb = ENV_FALLBACK.exec(line);
+        if (fb && !PLACEHOLDER.test(fb[2]) && !/\$\{/.test(fb[2])) add('secrets', file, n, line);
       }
       if (/Bearer [A-Za-z0-9._-]{20,}/.test(line) && !/\$\{/.test(line)) add('bearer', file, n, line);
       if (!isTest && !DOC_FILE.test(file) && !isExampleEnv && /localhost|127\.0\.0\.1/.test(line)) add('localhost', file, n, line);

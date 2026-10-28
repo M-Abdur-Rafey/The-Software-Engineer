@@ -30,6 +30,27 @@ try {
     assert.strictEqual(fs.readFileSync(path.join(ROOT, rel), 'utf8'), '# note\n');
   });
 
+  test('db ops: only bookkeeping commands, and knowledge writes must name the caller', () => {
+    const r = run([
+      { db: ['query', 'backend', 'SELECT 1'] },
+      { db: ['insert', 'backend', 'decisions', '{}'] },
+      { db: ['save-decision', 'backend', 's', 't', 'x'] },
+    ]);
+    assert.strictEqual(r.ran, 0);
+    assert.strictEqual(r.failed.length, 3);
+  });
+
+  test('insert refuses unknown tables and columns', () => {
+    const { execFileSync } = require('child_process');
+    const cli = path.join(ROOT, 'shared', 'lib', 'db-cli.js');
+    const bad = (table, row) => {
+      try { execFileSync(process.execPath, [cli, '--as', 'backend', 'insert', 'backend', table, JSON.stringify(row)], { stdio: 'pipe' }); return false; } catch { return true; }
+    };
+    assert.ok(bad('decisions; DROP TABLE decisions', { id: 'x' }));
+    assert.ok(bad('nonexistent', { id: 'x' }));
+    assert.ok(bad('decisions', { 'id) VALUES (1); --': 'x' }));
+  });
+
   test('refuses writes outside agents/<name>/vault/', () => {
     const r = run([
       { write: 'package.json', content: 'x' },

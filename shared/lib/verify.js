@@ -34,8 +34,21 @@ const TAIL = 4000;
 const DEFAULT_TIMEOUT = 600;     // seconds per step
 const DEPS = /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock)$/i;
 
-const configPath = (project, root = ROOT) => path.join(path.dirname(projectmap.absPath(project, root)), 'verify.json');
-const draftPath = (project, root = ROOT) => path.join(path.dirname(projectmap.absPath(project, root)), 'verify.draft.json');
+// Files whose edit would weaken the checks without touching a test file: runner and lint configs.
+const CHECK_CONFIG = /(^|\/)(jest|vitest|mocha|playwright|eslint)[^/]*\.config\.[cm]?[jt]s$|(^|\/)\.(eslintrc|mocharc)[^/]*$|(^|\/)(jest|vitest|eslint)\.config\.[^/]+$/i;
+// Secrets in the caller's environment are not handed to the project's own commands or to the app.
+const SECRET_ENV = /(API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE_?KEY)|^(ANTHROPIC|OPENAI|AWS_|AZURE_|GOOGLE_APPLICATION|GITHUB_|SE_)/i;
+
+/** The environment for a project command: the caller's, minus secrets (cfg.passEnv lists names to keep). */
+function cleanEnv(cfg, extra = {}) {
+  const keep = new Set(((cfg && cfg.passEnv) || []).map(String));
+  const env = {};
+  for (const [k, v] of Object.entries(process.env)) if (keep.has(k) || !SECRET_ENV.test(k)) env[k] = v;
+  return { ...env, CI: 'true', ...extra };
+}
+
+const configPath = (project, root = ROOT, claim = false) => path.join(projectmap.projectDir(project, root, claim), 'verify.json');
+const draftPath = (project, root = ROOT) => path.join(projectmap.projectDir(project, root), 'verify.draft.json');
 const readJson = (f) => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null);
 const norm = (p) => String(p || '').replace(/\\/g, '/').replace(/^\.\//, '');
 const tail = (s) => { const t = String(s || ''); return t.length > TAIL ? `...${t.slice(-TAIL)}` : t; };
@@ -54,6 +67,7 @@ function validate(cfg) {
     if (s.report !== undefined && s.report !== null && !REPORTS.includes(s.report)) return `steps[${i}].report must be one of ${REPORTS.join(', ')}`;
     if (s.when !== undefined && !['always', 'deps-changed'].includes(s.when)) return `steps[${i}].when must be always or deps-changed`;
   }
+  if (cfg.passEnv !== undefined && (!Array.isArray(cfg.passEnv) || cfg.passEnv.some((n) => typeof n !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)))) return 'passEnv must be a list of environment variable names';
   if (cfg.serve) {
     const v = cfg.serve;
     if (typeof v.run !== 'string' || !v.run.trim()) return 'serve.run is empty';
@@ -76,7 +90,7 @@ function draft(project, root = ROOT) {
 function set(project, cfg, root = ROOT) {
   const err = validate(cfg);
   if (err) throw new Error(err);
-  const f = configPath(project, root);
+  const f = configPath(project, root, true);
   fs.mkdirSync(path.dirname(f), { recursive: true });
   fs.writeFileSync(f, JSON.stringify(cfg, null, 2));
   return f;
@@ -99,19 +113,19 @@ function withReport(run, report, file) {
     ? `${run.trim()} -- ${args}` : `${run.trim()} ${args}`;
 }
 
-function exec(command, cwd, timeoutSec) {
+function exec(command, cwd, timeoutSec, env) {
   const t0 = Date.now();
-  const r = spawnSync(command, { cwd, shell: true, encoding: 'utf8', timeout: timeoutSec * 1000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, CI: 'true' } });
+  const r = spawnSync(command, { cwd, shell: true, encoding: 'utf8', timeout: timeoutSec * 1000, maxBuffer: 64 * 1024 * 1024, env: env || cleanEnv() });
   const timedOut = r.error && r.error.code === 'ETIMEDOUT';
   return { exitCode: timedOut ? null : r.status, timedOut, durationMs: Date.now() - t0, output: `${r.stdout || ''}${r.stderr || ''}` };
 }
 
-function runStep(step, project) {
+function runStep(step, project, cfg) {
   const cwd = path.join(project, step.cwd || '.');
   const timeout = step.timeoutSec || DEFAULT_TIMEOUT;
   const reportFile = step.report ? path.join(os.tmpdir(), `verify-${process.pid}-${crypto.randomBytes(4).toString('hex')}.json`) : null;
   const command = reportFile ? withReport(step.run, step.report, reportFile) : step.run;
-  const r = exec(command, cwd, timeout);
+  const r = exec(command, cwd, timeout, cleanEnv(cfg));
   let failures = null;
   if (reportFile) {
     try { failures = REPORTERS[step.report].parse(JSON.parse(fs.readFileSync(reportFile, 'utf8'))); } catch { failures = null; }
@@ -165,6 +179,20 @@ function runnableCollection(file) {
   c.item = prune(c.item);
   return { collection: c, skipped };
 }
+// The collection is generated: every absolute URL in it (requests and variables) must be a local host.
+function assertLocalOnly(c) {
+  const bad = [];
+  const check = (u, where) => { if (/^[a-z][a-z0-9+.-]*:\/\//i.test(String(u).trim()) && !hostAllowed(String(u).trim())) bad.push(`${where}: ${String(u).slice(0, 80)}`); };
+  const walk = (items) => (items || []).forEach((it) => {
+    if (it.item) walk(it.item);
+    const u = it.request && it.request.url;
+    if (u) check(typeof u === 'string' ? u : u.raw || '', it.name || 'request');
+  });
+  walk(c.item);
+  (c.variable || []).forEach((v) => check(v.value == null ? '' : v.value, `variable ${v.key}`));
+  if (bad.length) throw new Error(`the collection reaches a non-local host: ${bad.slice(0, 3).join('; ')}`);
+}
+
 const flatNames = (items) => (items || []).flatMap((it) => (it.item ? flatNames(it.item) : [it.name]));
 
 async function runApi(cfg, project, collectionFile) {
@@ -175,8 +203,9 @@ async function runApi(cfg, project, collectionFile) {
   const base = `http://127.0.0.1:${port}`;
   if (!hostAllowed(base)) throw new Error(`refusing to test a non-local host: ${base}`);
   const tmpdb = path.join(os.tmpdir(), `verify-${port}-${crypto.randomBytes(4).toString('hex')}.db`);
-  const fill = (v) => String(v).replace(/\{port\}/g, String(port)).replace(/\{tmpdb\}/g, tmpdb).replace(/\{random\}/g, crypto.randomBytes(24).toString('hex'));
-  const env = { ...process.env, ...Object.fromEntries(Object.entries(cfg.serve.env || {}).map(([k, v]) => [k, fill(v)])) };
+  const rnd = crypto.randomBytes(24).toString('hex');   // one value per run, so variables that must match do
+  const fill = (v) => String(v).replace(/\{port\}/g, String(port)).replace(/\{tmpdb\}/g, tmpdb).replace(/\{random\}/g, rnd);
+  const env = cleanEnv(cfg, { HOST: '127.0.0.1', ...Object.fromEntries(Object.entries(cfg.serve.env || {}).map(([k, v]) => [k, fill(v)])) });
   let log = '';
   const child = spawn(cfg.serve.run, { cwd: path.join(project, cfg.serve.cwd || '.'), shell: true, env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', (d) => { log = (log + d).slice(-TAIL * 2); });
@@ -185,6 +214,7 @@ async function runApi(cfg, project, collectionFile) {
   try {
     await waitReady(`${base}${cfg.serve.ready || '/'}`, child, cfg.serve.timeoutSec || 60, () => log);
     const { collection, skipped } = runnableCollection(collectionFile);
+    assertLocalOnly(collection);
     const summary = await new Promise((resolve, reject) => newman.run({
       collection, envVar: [{ key: 'baseUrl', value: base }], reporters: [], timeoutRequest: 15000,
     }, (err, s) => (err ? reject(err) : resolve(s))));
@@ -211,15 +241,34 @@ function compare(step, base) {
     const before = new Set(base.failures);
     return { ...step, newFailures: step.failures.filter((f) => !before.has(f)), alreadyFailing: step.failures.filter((f) => before.has(f)) };
   }
+  // No per-test list (build, lint, type-check): compare the error lines, so new errors are not hidden by an old red step.
+  const now = errorLines(step.tail);
+  const before = new Set(errorLines(base.tail));
+  const added = now.filter((l) => !before.has(l));
+  if (before.size && added.length) return { ...step, newFailures: added.slice(0, 20), alreadyFailing: [`${step.kind} was already failing before this session`] };
+  if (!before.size && now.length) return { ...step, newFailures: now.slice(0, 20), alreadyFailing: [] };
   return { ...step, newFailures: [], alreadyFailing: [`${step.kind} was already failing before this session`] };
+}
+
+// Error-looking lines of a step's output tail, normalized so timings and counts do not make old errors look new.
+function errorLines(tailText) {
+  return [...new Set(String(tailText || '').split(/\r?\n/)
+    .filter((l) => /\berror\b|\bfailed\b|✖|✗|\bTS\d{3,5}\b/i.test(l))
+    .map((l) => l.replace(/\d+(\.\d+)?\s?(ms|s)\b/g, '').replace(/\s+/g, ' ').trim().slice(0, 200))
+    .filter(Boolean))];
 }
 
 function testFiles(project) {
   const r = spawnSync('git', ['-C', project, 'ls-files', '-co', '--exclude-standard'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0) return null;
   const out = {};
-  for (const f of r.stdout.split('\n').map(norm).filter((x) => x && TEST_PATH.test(x))) {
-    try { out[f] = crypto.createHash('sha1').update(fs.readFileSync(path.join(project, f))).digest('hex'); } catch { /* deleted */ }
+  const sha = (b) => crypto.createHash('sha1').update(b).digest('hex');
+  for (const f of r.stdout.split('\n').map(norm).filter((x) => x && (TEST_PATH.test(x) || CHECK_CONFIG.test(x)))) {
+    try { out[f] = sha(fs.readFileSync(path.join(project, f))); } catch { /* deleted */ }
+  }
+  // A package.json "scripts" edit (e.g. "test": "true") weakens the checks as much as editing a test.
+  for (const f of r.stdout.split('\n').map(norm).filter((x) => /(^|\/)package\.json$/.test(x))) {
+    try { out[`${f}#scripts`] = sha(JSON.stringify(JSON.parse(fs.readFileSync(path.join(project, f), 'utf8')).scripts || {})); } catch { /* unreadable */ }
   }
   return out;
 }
@@ -268,10 +317,10 @@ async function run(project, opts = {}, root = ROOT) {
       steps.push({ ...meta, ok: true, skipped: 'dependencies unchanged', newFailures: [], alreadyFailing: [] });
       continue;
     }
-    let r = runStep(step, project);
+    let r = runStep(step, project, cfg);
     // One automatic re-run of a failed test step: a pass on the re-run with no code change is flakiness.
     if (!r.ok && step.kind === 'test') {
-      const again = runStep(step, project);
+      const again = runStep(step, project, cfg);
       if (again.ok) r = { ...again, flaky: (r.failures && r.failures.length ? r.failures : ['the test command failed once, then passed']) };
       else r = again;
     }

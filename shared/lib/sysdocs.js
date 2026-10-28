@@ -162,9 +162,9 @@ function setFrontmatterKey(text, key, value) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
   if (!m) fail('no frontmatter block');
   const body = m[1];
-  const line = `${key}: ${value == null ? '' : value}`.trimEnd();
+  const line = `${key}: ${value == null ? '' : oneLine(value, key)}`.trimEnd();
   const re = new RegExp(`^${key}:.*$`, 'm');
-  const next = re.test(body) ? body.replace(re, line) : `${body}\n${line}`;
+  const next = re.test(body) ? body.replace(re, () => line) : `${body}\n${line}`;
   return `---\n${next}\n---${text.slice(m[0].length)}`;
 }
 
@@ -183,11 +183,24 @@ function setFrontmatterBlock(text, key, lines) {
   return `---\n${fm.join('\n')}\n---${text.slice(m[0].length)}`;
 }
 
+// A frontmatter value must stay on one line: a newline would let the value add keys of its own
+// (e.g. `status: approved`) and forge the approval gate.
+function oneLine(value, what) {
+  const s = String(value);
+  if (/[\r\n\u2028\u2029]/.test(s)) fail(`${what}: value must be a single line`);
+  return s;
+}
+
 function yamlList(key, items) {
   if (!items.length) return [`${key}: []`];
   return [`${key}:`, ...items.flatMap(it => (typeof it === 'string'
-    ? [`  - ${it}`]
-    : [`  - module: ${it.module}`, ...(asList(it.uses).length ? ['    uses:', ...asList(it.uses).map(u => `      - ${u}`)] : ['    uses: []'])]))];
+    ? [`  - ${oneLine(it, key)}`]
+    : [`  - module: ${oneLine(it.module, key)}`, ...(asList(it.uses).length ? ['    uses:', ...asList(it.uses).map(u => `      - ${oneLine(u, key)}`)] : ['    uses: []'])]))];
+}
+
+function assertModuleName(name) {
+  if (typeof name !== 'string' || !MODULE_RE.test(name)) fail(`module name "${name}" must be lowercase kebab-case`);
+  return name;
 }
 
 // ─── modules ─────────────────────────────────────────────────────────────────
@@ -507,6 +520,7 @@ function scaffoldModule(project, name, layer, owner) {
 
 // meta: { owner?, layer?, paths?, provides?, dependsOn? | depends_on? }
 function applyMeta(project, name, meta) {
+  assertModuleName(name);
   const file = path.join(modulesDir(project), name, 'README.md');
   let text = read(file);
   if (text == null) fail(`unknown module "${name}"`);
@@ -521,6 +535,7 @@ function applyMeta(project, name, meta) {
 
 // items: [{ question, chainReaction, technical, plain, data, touches?, options?, askedBy? }]
 function appendQuestions(project, name, items) {
+  assertModuleName(name);
   const file = path.join(modulesDir(project), name, 'questions.md');
   if (!fs.existsSync(path.join(modulesDir(project), name, 'README.md'))) fail(`unknown module "${name}"`);
   const missing = [];
@@ -625,6 +640,7 @@ const commands = {
 
   'add-flow'(project, name, flow) {
     if (!flow || !MODULE_RE.test(flow)) fail('flow name must be lowercase kebab-case');
+    assertModuleName(name);
     if (!fs.existsSync(path.join(modulesDir(project), name || '', 'README.md'))) fail(`unknown module "${name}"`);
     const p = path.join(modulesDir(project), name, 'flows', `${flow}.md`);
     if (fs.existsSync(p)) return { created: [] };

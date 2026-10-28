@@ -127,7 +127,7 @@ if (!isOnboardTask && projectPath) {
 
 // Handed to every domain workflow: the map itself, or where to read it.
 const projectName = projectPath.replace(/[\\/]+$/, '').split(/[/\\]/).pop() || 'project'
-const MAP = { projectMap, projectMapFile: `${AGENTS_DIR}/agents/orchestrator/vault/projects/${projectName}/map.md` }
+const MAP = { projectMap, projectMapFile: (args && args.projectMapFile) || `${AGENTS_DIR}/agents/orchestrator/vault/projects/${projectName}/map.md` }
 
 // Lessons per author domain (design/lesson-library.md): the brief the skill passed, or the lesson index to read.
 const LESSONS = (() => {

@@ -35,8 +35,30 @@ function relPath(projectPath) {
   return `agents/orchestrator/vault/projects/${projectName(projectPath)}/map.md`;
 }
 
-function absPath(projectPath, root = ROOT) {
-  return path.join(root, relPath(projectPath));
+const identity = (projectPath) => path.resolve(String(projectPath)).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+/**
+ * The folder holding this project's map and verify commands. Two projects with the same folder name
+ * (C:/a/app and D:/b/app) must not share them, since verify.json is executed: a `project.path`
+ * marker records which project owns a folder, and a different project gets its own, suffixed one.
+ * Pass claim=true on a write to create the marker.
+ */
+function projectDir(projectPath, root = ROOT, claim = false) {
+  const base = path.join(root, path.dirname(relPath(projectPath)));
+  const id = identity(projectPath);
+  const marker = (dir) => path.join(dir, 'project.path');
+  let dir = base;
+  const owner = fs.existsSync(marker(base)) ? fs.readFileSync(marker(base), 'utf8').trim() : null;
+  if (owner && owner !== id) dir = `${base}-${require('crypto').createHash('sha1').update(id).digest('hex').slice(0, 8)}`;
+  if (claim && !fs.existsSync(marker(dir))) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(marker(dir), id);
+  }
+  return dir;
+}
+
+function absPath(projectPath, root = ROOT, claim = false) {
+  return path.join(projectDir(projectPath, root, claim), 'map.md');
 }
 
 const bullet = (line) => {
@@ -152,7 +174,7 @@ function read(projectPath, root = ROOT) {
 }
 
 function write(projectPath, content, root = ROOT) {
-  const file = absPath(projectPath, root);
+  const file = absPath(projectPath, root, true);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
   return file;
@@ -178,4 +200,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { MAX_CHARS, SECTIONS, projectName, relPath, absPath, parse, render, update, read, write, applyOp };
+module.exports = { MAX_CHARS, SECTIONS, projectName, relPath, absPath, projectDir, parse, render, update, read, write, applyOp };

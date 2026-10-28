@@ -163,6 +163,24 @@ try {
     assert.strictEqual(staged.passed, false);
   });
 
+  test('a path that no longer exists is reported, not a crash', () => {
+    const d = repo();
+    const r = scan(d, ['src/deleted.js']);
+    assert.deepStrictEqual(r.notFound, ['src/deleted.js']);
+  });
+
+  test('a literal fallback behind an environment read is a hardcoded secret', () => {
+    const d = repo();
+    write(d, {
+      'src/a.js': '// a\nconst key = process.env.API_KEY || "sk_live_abcdef123456";\n',
+      'src/b.py': '# b\nTOKEN = os.environ.get("TOKEN", "abcdef123456")\n',
+      'src/ok.js': '// ok\nconst key = process.env.API_KEY || "";\nconst t = process.env.TOKEN ?? "changeme";\n',
+    });
+    assert.strictEqual(check(scan(d, ['src/a.js']), 'No hardcoded secrets').passed, false);
+    assert.strictEqual(check(scan(d, ['src/b.py']), 'No hardcoded secrets').passed, false);
+    assert.strictEqual(check(scan(d, ['src/ok.js']), 'No hardcoded secrets').passed, true);
+  });
+
   console.log(`\nscan: ${passed} passed`);
 } catch (err) {
   console.error(`\nFAILED after ${passed} passed:\n${err.stack}`);
