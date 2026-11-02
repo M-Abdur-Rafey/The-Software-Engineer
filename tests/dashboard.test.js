@@ -164,16 +164,52 @@ const get = (port, p, headers = {}, method = 'GET') => new Promise((resolve, rej
     } finally { server.close(); }
   });
 
+  await test('every agent carries its tool calls by kind and the size of its latest request, from a real transcript too', () => {
+    const { root } = trail([{ label: 'author', phase: '▸ backend', done: false, tools: [{ name: 'Read', input: { file_path: '/a' } }, { name: 'Bash', input: { command: 'ls' } }, { name: 'Edit', input: { file_path: '/b' } }, { name: 'Read', input: { file_path: '/c' } }] }]);
+    const a = loadFrom(root).agents[0];
+    assert.deepStrictEqual({ read: a.kinds.read, run: a.kinds.run, write: a.kinds.write }, { read: 2, run: 1, write: 1 });
+    assert.strictEqual(a.kinds.read + a.kinds.run + a.kinds.write + a.kinds.find + a.kinds.done + a.kinds.other, a.toolCount);
+    assert.strictEqual(typeof a.ctx, 'number');
+    const demo = D.demoRun(60).agents.find((x) => x.toolCount > 0);
+    assert.ok(demo.kinds && Object.values(demo.kinds).reduce((n, v) => n + v, 0) === demo.toolCount);
+  });
+
+  await test('one project is one workspace: a run with no transcript yet takes the name its project\'s other runs show', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-'));
+    tmp.push(root);
+    const slug = 'c--Users-me-Desktop-workspace-demo';
+    const make = (id, cwd) => {
+      const d = path.join(root, slug, 'sess', 'subagents', 'workflows', id);
+      fs.mkdirSync(d, { recursive: true });
+      let journal = line({ type: 'launched' });
+      if (cwd) {
+        journal += line({ type: 'started', agentId: 'a0', label: 'author', phase: '\u25b8 backend' });
+        fs.writeFileSync(path.join(d, 'agent-a0.jsonl'), line({ type: 'assistant', timestamp: iso(Date.now()), cwd, uuid: 'u', message: { id: 'm', content: [] } }));
+      }
+      fs.writeFileSync(path.join(d, 'journal.jsonl'), journal);
+    };
+    make('wf_empty01', null);                       // just launched: no transcript, so no working directory yet
+    make('wf_known01', 'C:/Users/me/Desktop/workspace-demo');
+    const names = D.listRuns(root).map((r) => r.project);
+    assert.strictEqual(names.length, 2);
+    assert.deepStrictEqual([...new Set(names)], ['workspace-demo']);
+    assert.strictEqual(D.listRuns(path.join(root, 'nothing')).length, 0);
+  });
+
   await test('the page loads nothing from elsewhere and puts untrusted text in only as text', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'shared', 'dashboard', 'index.html'), 'utf8');
     assert.ok(!/(src|href)=["']https?:/i.test(html), 'no external resources');
-    assert.ok(!/https?:\/\/(?!127\.0\.0\.1)/.test(html.replace(/<!--[\s\S]*?-->/g, '')), 'no URL to another host');
+    assert.ok(!/https?:\/\/(?!127\.0\.0\.1)/.test(html.split('http://www.w3.org/2000/svg').join('').replace(/<!--[\s\S]*?-->/g, '')), 'no URL to another host');
     const script = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
     new Function(script);   // it parses
     const writes = script.split('\n').filter((l) => /innerHTML\s*=/.test(l));
-    assert.strictEqual(writes.length, 2);
+    assert.ok(writes.length >= 1 && writes.length <= 2, 'few innerHTML writes: ' + writes.length);
     assert.ok(writes.every((l) => /ICON\[|TURN/.test(l)), 'innerHTML only ever gets the built-in icons: ' + writes.join(' | '));
     assert.ok(!/insertAdjacentHTML|document\.write|eval\(/.test(script));
+    // light and dark: dark by default, light for the system or by choice, and a switch that only touches its own buttons
+    assert.ok(/:root\[data-theme="light"\]/.test(html) && /prefers-color-scheme: light/.test(html) && html.includes('data-theme="dark"'));
+    assert.ok(!script.includes("$$('.seg button')"), 'the layout switch must not select the theme buttons');
+    assert.ok(script.includes("$$('#modeSeg button')") && script.includes("$$('.theme button')"));
   });
 
   console.log(`\ndashboard: ${passed} passed`);
