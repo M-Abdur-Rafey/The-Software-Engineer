@@ -560,11 +560,11 @@ If any check fails: show which check failed, what it means in plain language, an
 
 ## Subcommand: dashboard (watch the agents work)
 
-A local, read-only page that shows every pipeline run as it happens: the stages of the pipeline lighting up, which agent is working and on what, what finished and how long it took, what was skipped, tokens, and a timeline of agents running in parallel. It reads the files Claude Code already writes for each workflow run, so there is nothing to configure and it also shows runs started in other projects.
+A local, read-only page that shows every pipeline run as it happens, as four layers (ingestion and strategy, core execution and build, validation and security, delivery and reliability) with curved dependency lines and pulses along the active path: which agent is working and on what, what finished and how long it took, what was skipped, tool calls by kind, tokens, a timeline of parallel agents and a searchable console. It reads the files Claude Code already writes for each workflow run, so there is nothing to configure and it also shows runs started in other projects.
 
 1. Start it in the background (Bash with `run_in_background: true`; it keeps running until stopped): `node <install-path>/shared/lib/dashboard.js --open`
 2. It prints `Dashboard: http://127.0.0.1:<port>` (4777, or the next free port) and opens the browser. Tell the user that address.
-3. By default it follows the newest run; the picker at the top chooses another, and clicking a stage or an agent shows what it did. `?demo=1` on the address plays a scripted run, for a preview.
+3. By default it follows the newest run; the workspace button in the sidebar lists the projects on this machine by name and follows the chosen project's latest run (a selector below it opens an older run), and Auto/Light/Dark at the bottom sets the theme. Hovering a stage lights up what it depends on and what depends on it, clicking a stage or an agent opens the inspector, and the layout can be swimlane, stack or compact. `?demo=1` on the address plays a scripted run, for a preview.
 4. It listens on 127.0.0.1 only and shows tool names and short targets, never whole prompts. To stop it, stop the background task.
 
 ---

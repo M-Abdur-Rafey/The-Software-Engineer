@@ -69,6 +69,20 @@ const MASKS = [
 ];
 /** Masks things that look like credentials before a command or path is shown. */
 function scrub(s) { return MASKS.reduce((t, [re, to]) => t.replace(re, to), String(s)); }
+// A project's name is the folder name of its working directory. A run that has not written a transcript yet does not know it,
+// so the name seen for any run of the same Claude project folder is reused; the folder slug itself is the last resort.
+const projectNames = new Map();
+function projectName(slug, cwd) {
+  if (cwd) {
+    let dir = String(cwd).split(String.fromCharCode(92)).join('/');
+    while (dir.endsWith('/')) dir = dir.slice(0, -1);
+    const name = path.basename(dir);
+    if (name) { projectNames.set(slug, name); return name; }
+  }
+  if (projectNames.has(slug)) return projectNames.get(slug);
+  const parts = String(slug).split('--').slice(1).join('--').split('-');   // "c--Users-me-Desktop-app" -> ["Users", "me", "Desktop", "app"]
+  return parts.slice(/^(Desktop|Documents|Projects)$/.test(parts[2]) ? 3 : 2).join('-') || String(slug);
+}
 const shortPath = (p) => String(p || '').split(/[\\/]+/).filter(Boolean).slice(-3).join('/');
 const clip = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));
 
@@ -89,6 +103,17 @@ function describeTool(name, input = {}) {
   }
 }
 
+/** The kind of a tool call, for the telemetry bars: reading, running, writing, searching, returning. */
+function toolKind(name) {
+  if (name === 'Read') return 'read';
+  if (name === 'Bash' || name === 'PowerShell') return 'run';
+  if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(name)) return 'write';
+  if (/^(Grep|Glob|WebSearch|WebFetch)$/.test(name)) return 'find';
+  if (name === 'StructuredOutput') return 'done';
+  return 'other';
+}
+const emptyKinds = () => ({ read: 0, run: 0, write: 0, find: 0, done: 0, other: 0 });
+
 // ── reading the trail ────────────────────────────────────────────────────────
 const claudeDir = () => process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const fileCache = new Map();   // transcript path -> incremental parse state
@@ -98,7 +123,7 @@ function readTranscript(file) {
   let st;
   try { st = fs.statSync(file); } catch { return null; }
   let c = fileCache.get(file);
-  if (!c || st.size < c.pos) c = { pos: 0, first: null, last: null, usage: new Map(), tools: [], toolCount: 0, cwd: null };
+  if (!c || st.size < c.pos) c = { pos: 0, first: null, last: null, usage: new Map(), tools: [], toolCount: 0, cwd: null, kinds: emptyKinds(), ctx: 0 };
   if (st.size > c.pos) {
     const fd = fs.openSync(file, 'r');
     try {
@@ -115,10 +140,10 @@ function readTranscript(file) {
           if (!c.cwd && o.cwd) c.cwd = o.cwd;
           const m = o.message;
           if (o.type !== 'assistant' || !m) continue;
-          if (m.usage) c.usage.set(m.id || o.uuid, m.usage);   // one message can span several lines: count it once
+          if (m.usage) { c.usage.set(m.id || o.uuid, m.usage); c.ctx = (m.usage.input_tokens || 0) + (m.usage.cache_creation_input_tokens || 0) + (m.usage.cache_read_input_tokens || 0); }   // one message can span several lines: count it once
           for (const b of Array.isArray(m.content) ? m.content : []) {
             if (b.type !== 'tool_use') continue;
-            c.toolCount++;
+            c.toolCount++; c.kinds[toolKind(b.name)]++;
             c.tools.push({ at: o.timestamp, tool: b.name, detail: describeTool(b.name, b.input) });
             if (c.tools.length > 60) c.tools.shift();
           }
@@ -195,6 +220,7 @@ function loadRun(run, now = Date.now()) {
       state, startedAt, endedAt, durationMs: startedAt && endedAt ? endedAt - startedAt : null,
       lastActivityAt: tr && tr.last ? Date.parse(tr.last) : startedAt,
       toolCount: tr ? tr.toolCount : 0, tools: tr ? tr.tools.slice(-25) : [], tokens: { in: inTok, out: outTok },
+      kinds: tr ? { ...tr.kinds } : emptyKinds(), ctx: tr ? tr.ctx : 0,
       now: state === 'running' && tr && tr.tools.length ? tr.tools[tr.tools.length - 1].detail : (state === 'running' ? 'Starting up' : null),
       result: res ? clip(scrub(JSON.stringify(res.result === undefined ? null : res.result)), 1600) : null,
       toolsUsed: res && Array.isArray(res.toolsUsed) ? res.toolsUsed : [],
@@ -220,7 +246,7 @@ function buildRun(run, agents, now, { over: forceOver } = {}) {
 
   return {
     run: {
-      id: run.id, project: run.cwd ? path.basename(String(run.cwd).replace(/[\\/]+$/, '')) : run.project, cwd: run.cwd, session: run.session,
+      id: run.id, project: projectName(run.project, run.cwd), cwd: run.cwd, session: run.session,
       startedAt: Number.isFinite(firstMs) ? firstMs : null, lastActivityAt: lastMs, state, now,
     },
     progress: { pct: over && !endedEarly ? 100 : Math.min(99, Math.round((100 * (done + 0.5 * live)) / Math.max(1, inScope))), stagesDone: done, stagesTotal: inScope },
@@ -284,7 +310,7 @@ function buildFeed(agents) {
 
 /** The runs list for the picker (cheap: reads each journal, not the transcripts). */
 function listRuns(root, now = Date.now()) {
-  return discoverRuns(root).slice(0, 40).map((r) => {
+  const rows = discoverRuns(root).slice(0, 40).map((r) => {
     const j = readJsonLines(r.journal);
     const started = j.filter((x) => x.type === 'started').length;
     const finished = j.filter((x) => x.type === 'result').length;
@@ -294,11 +320,13 @@ function listRuns(root, now = Date.now()) {
     if (first) {
       const tf = path.join(r.dir, `agent-${first.agentId}.jsonl`);
       const tr = readTranscript(tf);
-      if (tr && tr.cwd) project = path.basename(tr.cwd.replace(/[\\/]+$/, ''));
+      if (tr && tr.cwd) project = projectName(r.project, tr.cwd);
     }
     const state = !started ? 'starting' : running > 0 ? 'running' : now - r.mtimeMs <= IDLE_MS ? 'working' : 'finished';
-    return { id: r.id, project, agents: started, running, state, lastActivityAt: r.mtimeMs, startedAt: r.birthMs };
+    return { id: r.id, project, agents: started, running, state, lastActivityAt: r.mtimeMs, startedAt: r.birthMs, slug: r.project };
   });
+  // second pass: a run seen before any transcript existed takes the name learned from its project's other runs
+  return rows.map(({ slug, ...x }) => ({ ...x, project: projectName(slug, null) }));
 }
 
 // ── a scripted run, so the page can be previewed without a real one ─────────────
@@ -341,6 +369,7 @@ function demoRun(seconds, now = Date.now()) {
       startedAt, endedAt: finished ? t0 + (start + dur) * 1000 : null, durationMs: finished ? dur * 1000 : null,
       lastActivityAt: tools.length ? Date.parse(tools[tools.length - 1].at) : startedAt, toolCount: tools.length, tools,
       tokens: { in: Math.round(elapsed * 4200), out: Math.round(elapsed * 260) },
+      kinds: tools.reduce((k, x) => { k[toolKind(x.tool)]++; return k; }, emptyKinds()), ctx: Math.round(elapsed * 4200),
       now: finished ? null : (tools.length ? tools[tools.length - 1].detail : 'Starting up'),
       result: finished ? '{"status":"completed","note":"scripted demo data"}' : null, toolsUsed: finished ? [...new Set(tools.map((x) => x.tool))] : [],
     };

@@ -107,10 +107,13 @@ Good to know:
 
 `/software-engineer dashboard` (or `software-engineer dashboard` in a terminal) opens a live page in your browser that shows what the pipeline is doing right now:
 
-- **The orchestration** as three rows (prepare, build, check and ship). Each stage lights up as it starts: orange and pulsing while an agent works, yellow between two of its agents, green with a check when done, struck through when the task did not need it. Agents that run in parallel sit side by side, and the connectors animate while work flows on.
-- **Every agent** as a card: which stage it belongs to, its model, what it is doing this second (for example *Reading src/routes.js* or *Running: node shared/lib/scan.js*), a strip of its recent tool calls, how long it has run, and its tokens.
-- **A timeline** of all agents over time, so parallel work is visible, and a **live activity feed**.
-- A progress bar and status for the whole run: running, complete, or *stopped early* when a check blocked the commit or the run is waiting for your answers. Click any stage or agent for its recent actions and what it returned.
+- **The orchestration as four layers**: ingestion and strategy, core execution and build, validation and security, delivery and reliability. Each stage is a card with its status, models, tool calls, tokens and a coloured bar of what its agents did (reading, running, writing, searching, returning). Curved lines show who depends on whom, with glowing pulses moving along the path that work is flowing through. Hover a stage to light up everything upstream (cyan) and downstream (amber) and dim the rest. Stages the task did not need are struck through. Switch between a **swimlane** (left to right), a vertical **stack** and a **compact** graph.
+- **KPI bar**: status, duration, active agents, tool calls and token volume for the run, plus a progress bar.
+- **Inspector drawer**: click a stage or an agent for its state, models, tool telemetry, how big its latest request was against a context window, its recent actions and what it returned. Prompts and file contents are never shown.
+- **Agents, Timeline and Console views** from the sidebar: every agent as a card, a timeline of parallel work, and a searchable, colour-coded log of everything the agents did, with filters.
+- **Workspaces are projects**: the sidebar shows the project being watched, by name only. Click it to list every project on this machine that has run the skill, and pick one to follow its latest run (or "All projects" to follow whichever is most active). A small selector under the run lets you open an older run of that project.
+- **Light and dark**: Auto follows your system, or pick Light or Dark at the bottom of the sidebar; the choice is remembered in your browser.
+- Status for the whole run: running, complete, or *stopped early* when a check blocked the commit or the run is waiting for your answers.
 
 It needs nothing set up. Claude Code already writes a trail for every workflow run, and the dashboard reads it: it follows the newest run, shows runs from every project, and keeps working after a run ends. `?demo=1` on the address plays a scripted run so you can see it without starting one; `--port` picks another port.
 
