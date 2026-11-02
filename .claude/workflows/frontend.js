@@ -87,6 +87,19 @@ const designBrief = designPreferences ? [
   designPreferences.displayStyle  ? `Display style: ${designPreferences.displayStyle}` : null,
 ].filter(Boolean).join('. ') : 'Match the existing design system in the project.'
 
+// A visual style the user chose (slug from the UI style catalog, vault design-system/ui-style-guide.md). The slug goes
+// into prompts, so only a plain slug is accepted.
+const styleSlug = (designPreferences && typeof designPreferences.style === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(designPreferences.style))
+  ? designPreferences.style : null
+const STYLE_FILE = `${AGENTS_DIR}/agents/frontend/vault/design-system/ui-style-prompts.md`
+const styleNote = styleSlug
+  ? `CHOSEN UI STYLE: "${styleSlug}". In ${STYLE_FILE}, find the section whose "slug:" line is ${styleSlug} and take its prompt as the style brief: ` +
+    `its look and feel, colors, effects and motion, and reference CSS (map the class names onto the project's own components). ` +
+    `The style sets the look only: the user's colour, navigation and layout answers, the spec, the checklist, WCAG AA contrast, reduced-motion ` +
+    `and every security rule still win over it. Where the style conflicts with one of those (for example glass or neon on a low-contrast ` +
+    `background), keep the rule and adapt the style, and say so in designDecisions. If the slug is not in that file, ignore the style and say so.\n\n`
+  : ''
+
 // Detect if task requires 3D design work
 const use3D = (designPreferences && designPreferences.use3D === true)
   || /\b(3d|three\.?js|threejs|webgl|glsl|shader|immersive|particle[s]?|scroll.{0,8}anim|canvas.{0,8}anim|geometry|instanc|raycaster|three.dimension|3-d\b)/i.test(taskText)
@@ -126,6 +139,7 @@ const design = await agent(
   `Task: "${taskText}"\nProject: ${projectPath}\n` +
   EVIDENCE_GUARD + projectMapBrief + lessonsBrief +
   `USER DESIGN PREFERENCES (honour these — the vision serves them, never overrides them):\n${designBrief}\n\n` +
+  styleNote +
   `Requirements spec:\n${spec}\n\n` +
   `Read first: ${VAULT}/art-direction/masters-and-principles.md, color-and-light.md, composition-and-flow.md, ` +
   `craft-detail-and-cohesion.md, and ${VAULT}/design-system/tokens.md. Examine the existing frontend in ${projectPath}: if it has ` +
@@ -176,6 +190,7 @@ const artContext =
   (artDirection.signatureDetail ? `- Signature detail: ${artDirection.signatureDetail}\n` : '') +
   `- Cohesion rules (every component obeys these): ${(artDirection.cohesionRules || []).join('; ')}\n` +
   (artDirection.motionIntent ? `- Motion intent: ${artDirection.motionIntent}\n` : '') +
+  (styleSlug ? `- Chosen UI style: ${styleSlug}. Its brief and reference CSS are in ${STYLE_FILE} (the section whose "slug:" is ${styleSlug}); it sets the look only, and contrast, accessibility, security and the user's answers still win.\n` : '') +
   `- Views: ${JSON.stringify(uiDesign.pages)}\n- Design decisions: ${uiDesign.designDecisions.join('; ')}\n`
 
 // ─── Phase: 3D Design (conditional — only when task involves 3D) ──────────────

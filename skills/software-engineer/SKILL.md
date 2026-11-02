@@ -196,11 +196,20 @@ Only ask questions relevant to the domains you detected above. Group all questio
 > - B) Table (rows and columns)
 > - C) Simple list
 >
+> **Visual style:** Do you have a look in mind (for example glassmorphism, minimalist, brutalist, retro)? If not, say "help me choose" and I'll ask a couple of questions and suggest a few.
+>
 > **3D / Immersive:** Does this feature need any 3D elements, animated scenes, particle effects, scroll-driven camera movement, or custom shaders? (yes / no)
 > - If yes: Should objects respond to physics — falling, colliding, bouncing? (yes / no)
 > - If yes: Is there scroll-driven animation — camera flying through a scene as you scroll? (yes / no)
 
-If the project was already onboarded and has an established design system, skip questions whose answers are already known and just confirm: _"I'll match the existing design: [describe what was found]."_
+If the project was already onboarded and has an established design system, skip questions whose answers are already known and just confirm: _"I'll match the existing design: [describe what was found]."_ That includes the visual style: do not ask it, and leave `style` null.
+
+**Choosing a visual style** (catalog of 67 styles from uistyleguide.com, `<install-path>/agents/frontend/vault/design-system/ui-style-guide.md`):
+- The user names a style: find it in the catalog (`ui-style-guide.md`, each entry has a `slug`) and use its slug. If it is not in the catalog, tell them and offer the closest ones.
+- "Help me choose" or "not sure": read the guide's "How to use this" and follow it. Ask at most four plain-language questions (what it is and who uses it, the feeling, hard constraints such as accessibility or old devices, how much motion), then offer 2 or 3 styles from its goal and industry tables, one line each with the trade-off. Check each against the "Be careful when" table and say so if the user's product is listed there. Let them pick one; show its palette and key characteristics if they hesitate.
+- The user has no preference or skips it: `style` is null. Never pick one for them.
+- A style sets the look only. Contrast, accessibility and security rules still apply, and the designer is told so.
+- Pass the chosen slug as `designPreferences.style`.
 
 ---
 
@@ -324,6 +333,7 @@ Workflow({
         navigation: "<'top-bar'|'side-menu'|'none'|null>",
         mobile: <true|false|null>,
         displayStyle: "<'cards'|'table'|'list'|null>",
+        style: "<slug from ui-style-guide.md, e.g. 'glassmorphism', or null>",
         use3D: <true|false|null>,
         usePhysics: <true|false|null>,
         useScrollAnimation: <true|false|null>
