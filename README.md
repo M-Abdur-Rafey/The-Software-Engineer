@@ -23,7 +23,39 @@ That's it. Then run:
 
 `start` is the one-command setup: it clones this repo to `~/.agents`, installs dependencies, seeds the knowledge bases, scans your current project, and builds its code knowledge graph — leaving you ready to build. (Running any `/software-engineer <task>` also auto-installs on first use, but `start` gets everything, including the graph, in one shot.)
 
-> Why a plugin and not a loose file? Claude Code only loads skills that live in a folder as `skills/<name>/SKILL.md`. Dropping a single `software-engineer.md` into `~/.claude/skills/` will **not** register the slash command — the plugin packaging is what makes `/software-engineer` appear.
+> Why a plugin and not a loose file? Claude Code only loads skills that live in a folder as `skills/<name>/SKILL.md`. Dropping a single `software-engineer.md` into `~/.claude/skills/` will **not** register the slash command — the plugin packaging (or the folder the CLI below creates) is what makes `/software-engineer` appear.
+
+### Or install the skill globally from the command line
+
+No plugin needed. One command puts the `/software-engineer` skill in `~/.claude/skills/software-engineer/`, which Claude Code loads in **every** project, and sets up the engine in `~/.agents` (clone, dependencies, knowledge bases, health check). It needs Node 18+ and git.
+
+```bash
+npx github:MARafey/The-Software-Engineer install
+```
+
+Prefer to keep a clone? This does the same thing without `npx`:
+
+```bash
+git clone https://github.com/MARafey/The-Software-Engineer ~/.agents
+node ~/.agents/bin/software-engineer.js install
+```
+
+Then restart Claude Code (or open a new session) and run `/software-engineer start` in any project.
+
+| Command | What it does |
+|---|---|
+| `software-engineer install` | Install the skill globally and set up the engine. Safe to run again: nothing changes if it is already current |
+| `software-engineer update` | Pull the latest engine, re-run its setup, refresh the installed skill |
+| `software-engineer status` | Show what is installed, whether the skill is current, and whether the engine passes its health check (`--json` for scripts) |
+| `software-engineer uninstall` | Remove the installed skill. The engine and your knowledge bases are kept |
+| `software-engineer uninstall --purge --yes` | Also delete the engine and every knowledge base in it (cannot be undone, so it asks for `--yes`) |
+
+Options: `--project` installs the skill into `./.claude/skills` of the current folder only, instead of globally · `--dir <path>` uses another engine folder (default `~/.agents`, where the skill looks for it) · `--repo <url>` clones from another git URL · `--link` uses an existing checkout as the engine instead of cloning (for contributors) · `--skip-engine` installs only the skill and leaves the engine to be set up on first use · `--force` replaces a skill of the same name that this tool did not install · `--dry-run` shows what would happen and changes nothing.
+
+Good to know:
+- It never overwrites a skill it did not install unless you pass `--force`, and `uninstall` only removes what it installed.
+- Use **either** the plugin **or** the CLI, not both, or the command is registered twice.
+- If you installed the command globally (`npm install -g github:MARafey/The-Software-Engineer`), the same commands work as `software-engineer <command>`; from a checkout, `npm run install-skill` runs `install`.
 
 ---
 
@@ -364,7 +396,7 @@ Open Obsidian's Graph View to see the agents and their contract flow as a live m
 
 ## How it works internally
 
-You install the plugin once (see above). Everything else is handled automatically:
+You install the plugin (or run the CLI installer) once (see above). Everything else is handled automatically:
 
 1. First `/software-engineer` invocation → skill clones this repo to `~/.agents/`
 2. `npm install` fetches `better-sqlite3`, `uuid`, `chalk`, `ajv`, `@modelcontextprotocol/sdk`
@@ -430,9 +462,10 @@ Run from the repo root (`~/.agents` once installed):
 | Command | What it does |
 |---|---|
 | `npm install` | Install dependencies |
+| `npm run install-skill` | Install the skill globally from this checkout (same as `software-engineer install`) |
 | `npm run init` | Bootstrap databases and contracts, seed vaults, verify. Run after changing agents, contracts or seed notes |
 | `npm run verify` | Health check (same as `/software-engineer test`) |
-| `npm test` | Verify, plus the MCP protocol, System Docs and UI-testing CLI tests |
+| `npm test` | Verify, plus the MCP protocol, System Docs, UI-testing, scan, commit-gate, verify, installer-CLI and other tests |
 | `npm run test:mcp` / `test:sysdocs` / `test:uitest` | Run one test suite |
 | `npm run mcp` | Start the MCP server on stdio |
 | `node shared/lib/sysdocs.js <command> <project>` | System Docs CLI: `init`, `index`, `impact`, `drift`, `gate`, `approve`, `questions`, `ask`, `answer`, `defer`, `team` (see the file header) |

@@ -88,6 +88,14 @@ check('every contract schema is registered in contracts_registry', () => {
   if (missing.length) throw new Error(`not registered: ${missing.join(', ')} (run: npm run init)`);
 });
 
+// ─── The command-line installer: every bin in package.json exists
+check('package.json bin entries exist', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(AGENTS_DIR, 'package.json'), 'utf8'));
+  for (const [name, rel] of Object.entries(pkg.bin || {})) {
+    if (!fs.existsSync(path.join(AGENTS_DIR, rel))) throw new Error(`bin "${name}" points at ${rel}, which is missing`);
+  }
+});
+
 // ─── Shared standards ─────────────────────────────────────────────────────────
 ['commit-format.md', 'security-rules.md', 'code-standards.md'].forEach(f => {
   check(`shared/standards/${f} exists`, () => {
