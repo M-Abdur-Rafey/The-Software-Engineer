@@ -103,7 +103,7 @@ const CHECKLIST =
   `operation on its rows), never to tables whose rows are only inserted or deleted.\n` +
   `- Indexes (query-optimizer, ${VAULT}/optimizations/index-guidelines.md): an index on EVERY foreign key column (without one, the FK ` +
   `check on a parent delete or ON DELETE SET NULL scans the whole child table), plus an index for every column used in WHERE/JOIN/ORDER BY ` +
-  `on tables that will grow, covering indexes where they clearly help; no N+1-prone shapes. Indexes go IN the migration file.\n` +
+  `on tables that will grow, covering indexes where they clearly help; no N+1-prone shapes. Indexes go IN the migration file. Query shapes the schema must support (batch inserts, pagination, CTEs): ${VAULT}/optimizations/query-patterns.md.\n` +
   `- Precedence: the spec's Decisions are binding; if one conflicts with a rule above, follow the spec and report it in specConflicts.\n`
 
 // ─── Phase: Author ───────────────────────────────────────────────────────────

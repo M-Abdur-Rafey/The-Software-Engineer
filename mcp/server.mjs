@@ -33,9 +33,10 @@ const TOOLS = [
   {
     name: 'software_engineer_orchestrate',
     description:
-      'Plan (and optionally apply) a full-stack development task across domain agents in dependency order: ' +
-      'database → backend → frontend/testing/calls → bridge. Safe by default: returns a plan. ' +
-      'Set apply=true to write the generated files into projectPath.',
+      'Plan (and optionally apply) a development task across the database, backend, frontend and calls domain agents, in that order. ' +
+      'Safe by default: returns a plan. Set apply=true to write the generated files into projectPath (a git repository): the files are ' +
+      'kept only if the pre-commit security scan passes, otherwise nothing is written. This path does not write a requirements spec, ' +
+      'run tests or the contract bridge, or commit; the result lists them under "notRun".',
     inputSchema: {
       type: 'object',
       required: ['task', 'projectPath'],

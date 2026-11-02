@@ -109,14 +109,14 @@ const spec = specBrief('backend')
 // The rules every backend change must meet: the author applies them, the reviewer verifies them.
 const CHECKLIST =
   `Checklist (from agents/backend/CLAUDE.md and the vault):\n` +
-  `- Flow: thin controllers (request/response only); all business logic in services; validation schemas for every input; ` +
-  `middleware the task needs (rate limiting only if requested).\n` +
+  `- Flow: thin controllers (request/response only); all business logic in services; validation schemas for every input (${VAULT}/security/input-validation.md); ` +
+  `middleware the task needs (auth per ${VAULT}/security/auth-middleware.md when a route requires it; rate limiting only if requested).\n` +
   `- Data access (${VAULT}/architecture/data-access-and-pooling.md, ai-query-discipline.md, caching-and-lookup-tables.md): ONE shared ` +
   `DB pool, reused, never per request; parameterized queries; no N+1, no SELECT *; AI/LLM query tools read-only with LIMIT + time filters; ` +
   `cache and lookup tables where they cut repeated work.\n` +
   `- AI features (only if the task has an LLM component): micro-agents per ${VAULT}/patterns/ai-agent-prompt-template.md, written to ` +
   `src/ai/<agent-name>/ (prompt.md + schema.json).\n` +
-  `- Code standards: @param/@returns JSDoc on every exported function; errors as { success: false, code: 'ERR_CODE', message, details }; ` +
+  `- Code standards: @param/@returns JSDoc on every exported function (${VAULT}/patterns/jsdoc-template.md);errors as { success: false, code: 'ERR_CODE', message, details }; ` +
   `no stack traces or raw DB errors in responses; no console.log in production paths; no bare catch blocks.\n` +
   `- Structure (Node/Express): feature folder src/features/<name>/ with routes.js (exports the route contract array: ` +
   `{method,path,handler,middleware[],description,requestBodySchema,responseSchema,authRequired}), controller.js, service.js, schema.js, ` +
