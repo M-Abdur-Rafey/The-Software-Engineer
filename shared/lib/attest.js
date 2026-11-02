@@ -72,6 +72,21 @@ function attest(project, sessionId, claims = {}, dir = SESSIONS) {
     out.rescan = { commit: claims.commit, passed: r.passed, filesScanned: r.filesScanned, blockingFailures: r.blockingFailures };
     if (!r.passed) problems.push(`an independent scan of commit ${String(claims.commit).slice(0, 10)} found: ${r.blockingFailures.join('; ')}`);
   }
+  // Whose commit is it: the user's. An AI author or an attribution trailer is a problem, whoever wrote the message.
+  if (claims.commit) {
+    try {
+      const raw = execFileSync('git', ['-C', project, 'show', '-s', '--format=%an%n%ae%n%cn%n%ce%n%B', claims.commit], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n');
+      const [an, ae, cn, ce, ...msg] = raw;
+      const AI = new RegExp('claude|anthropic|codex|copilot|openai|chatgpt|gemini|cursor|windsurf|[(]ai[)]|\\bbot\\b', 'i');
+      out.commitInfo = { author: `${an} <${ae}>`, committer: `${cn} <${ce}>` };
+      if ([an, ae, cn, ce].some((x) => AI.test(x))) problems.push(`the commit is authored or committed under a tool identity (${an} <${ae}>); it should carry the user's own git identity`);
+      const trailer = msg.find((l) => l.trim().toLowerCase().startsWith('co-authored-by:') || l.toLowerCase().includes('noreply@anthropic.com') || l.trim().toLowerCase().startsWith('generated with'));
+      if (trailer) problems.push(`the commit message carries an attribution line: "${trailer.trim().slice(0, 80)}"`);
+    } catch (e) {
+      problems.push(`the commit's author could not be read: ${e.message}`);
+    }
+  }
+
   // System Docs: the gate and the dependents come from the module docs, not from the analyst agent that reported them.
   const targets = (claims.docsTargets || []).filter((n) => MODULE.test(String(n)));
   if (targets.length) {

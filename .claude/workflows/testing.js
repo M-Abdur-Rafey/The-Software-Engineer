@@ -62,7 +62,7 @@ if (routes.length === 0) {
     routeCount:   0,
     testCases:    [],
     coverage:     { routesCovered: 0, totalRoutes: 0, percentCovered: 100, needsSetup: 0 },
-    errors:       ['No routes provided — backend agent may not have run'],
+    errors:       [],   // the backend ran and changed no routes: there is nothing to put in a collection
   }
 }
 

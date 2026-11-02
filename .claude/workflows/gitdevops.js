@@ -109,6 +109,7 @@ const result = await agent(
   (commitNotes ? ` Append this section verbatim to the commit body:\n${commitNotes}\n` : '\n') +
   `   Task: "${taskText}"\n` +
   `   Use only plain characters in the message (no double quotes, dollar signs, backticks or backslashes), because it goes on a command line.\n` +
+  `   The commit is the user's own: never add Co-Authored-By, "Generated with" or any other attribution line, and never set an author. The script uses the user's configured git identity and strips such lines anyway.\n` +
   `2. Run exactly this (the subject in --message; add --body "<body>" only if there is a body):\n` +
   `   node "${AGENTS_DIR}/shared/lib/gitcommit.js" ${shq(projectPath)} --type ${taskType} --slug ${taskSlug} --session ${shq(sessionId)} --message "<subject>" --out ${shq(scanOut)}${requireVerify ? ` --require-verify ${shq(`${AGENTS_DIR}/agents/orchestrator/vault/sessions`)}` : ''} -- ${quoted}\n` +
   `   (The script also writes the scan result to that --out file, which is checked against what you report; never create or edit that file.)\n` +

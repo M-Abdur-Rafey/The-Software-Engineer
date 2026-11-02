@@ -100,6 +100,21 @@ try {
     assert.deepStrictEqual(attest(d, 's5', { docsTargets: ['../x; rm'] }, s).docs, undefined);
   });
 
+  test('a commit under a tool identity, or with an attribution trailer, is reported', () => {
+    const d = repo('src/a.js', '// a\nmodule.exports = 1\n');
+    const g = (...a) => execFileSync('git', ['-C', d, ...a], { stdio: 'ignore' });
+    const clean = attest(d, 's6', { commit: 'HEAD' }, sessions({}));
+    assert.strictEqual(clean.ok, true, JSON.stringify(clean.problems));
+    assert.strictEqual(clean.commitInfo.author, 'T <t@example.com>');
+    fs.writeFileSync(path.join(d, 'src/b.js'), '// b\n');
+    g('add', '-A');
+    g('-c', 'user.name=Claude', '-c', 'user.email=noreply@anthropic.com', 'commit', '-q', '-m', 'feat: b', '-m', 'Co-Authored-By: Claude <noreply@anthropic.com>');
+    const bad = attest(d, 's6', { commit: 'HEAD' }, sessions({}));
+    assert.strictEqual(bad.ok, false);
+    assert.ok(bad.problems.some(p => /tool identity/.test(p)), JSON.stringify(bad.problems));
+    assert.ok(bad.problems.some(p => /attribution line/.test(p)), JSON.stringify(bad.problems));
+  });
+
   test('a session id cannot point outside the sessions folder', () => {
     const d = repo('src/a.js', '// a\n');
     assert.throws(() => attest(d, '../../etc/passwd', {}, sessions({})), /invalid session id/);
