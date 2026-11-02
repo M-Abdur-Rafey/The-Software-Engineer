@@ -97,7 +97,7 @@ check('every contract schema is registered in contracts_registry', () => {
 });
 
 // ─── Shared lib ───────────────────────────────────────────────────────────────
-['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js', 'projectmap.js', 'lessons.js', 'verify.js', 'attest.js'].forEach(f => {
+['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js', 'projectmap.js', 'lessons.js', 'verify.js', 'attest.js', 'gitcommit.js'].forEach(f => {
   check(`shared/lib/${f} exists`, () => {
     const p = path.join(AGENTS_DIR, 'shared', 'lib', f);
     if (!fs.existsSync(p)) throw new Error('file missing');

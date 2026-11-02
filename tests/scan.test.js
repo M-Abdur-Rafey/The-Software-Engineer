@@ -181,6 +181,16 @@ try {
     assert.strictEqual(check(scan(d, ['src/ok.js']), 'No hardcoded secrets').passed, true);
   });
 
+  test('with no paths the staged content is scanned, even if the working tree was cleaned afterwards', () => {
+    const d = repo();
+    write(d, { 'src/leak.js': '// leak\nconst API_KEY = "fake-0123456789abcdef";\n' });
+    execFileSync('git', ['-C', d, 'add', 'src/leak.js']);
+    fs.writeFileSync(path.join(d, 'src/leak.js'), '// cleaned after staging\n');
+    const r = scan(d, []);
+    assert.strictEqual(r.passed, false);
+    assert.ok(r.blockingFailures.some(x => /secrets/.test(x)), JSON.stringify(r.blockingFailures));
+  });
+
   test('--commit scans what a commit added, independent of the working tree; --out writes the result', () => {
     const d = repo();
     const git = (...a) => execFileSync('git', ['-C', d, '-c', 'core.autocrlf=false', '-c', 'user.email=t@example.com', '-c', 'user.name=T', ...a], { stdio: 'ignore' });
