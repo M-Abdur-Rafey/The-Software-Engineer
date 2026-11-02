@@ -9,6 +9,9 @@ export const meta = {
 
 // args: { sessionId?, projectPath, agentsDir, maxNodesPerType? }
 const AGENTS_DIR   = (args && args.agentsDir)   || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 const projectPath  = (args && args.projectPath) || ''
 const sessionId    = (args && args.sessionId)   || 'codegraph'
 const CAP          = (args && args.maxNodesPerType) || 60  // keep the graph lean; log anything dropped
@@ -48,7 +51,7 @@ const graph = await agent(
   `Node id convention (unique, kebab, used as the Obsidian note name):\n` +
   `  feature: "feat-<name>" · route: "route-<method>-<path-slug>" · component: "cmp-<name>" · table: "tbl-<name>" · integration: "int-<name>"\n\n` +
   `Return JSON:\n` +
-  `{ "project": "${projectName}", "root": "${projectPath}",\n` +
+  `{ "project": "${projectName}", "root": ${shq(projectPath)},\n` +
   `  "nodes": [{ "id": string, "label": string, "type": "feature"|"route"|"component"|"table"|"integration", "meta": object }],\n` +
   `  "edges": [{ "from": string, "to": string, "rel": "belongs-to"|"calls"|"reads-writes"|"fk" }],\n` +
   `  "dropped": { "routes": number, "components": number, "tables": number },\n` +
@@ -150,7 +153,7 @@ await agent(
 // Log the run into the session log (orchestrator vault) via the data CLI.
 await agent(
   `Record the code-graph run. Run exactly:\n\n` +
-  `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as orchestrator log-session-event orchestrator "${sessionId}" "codegraph" "completed" "${projectName}: ${graph.nodes.length} nodes, ${graph.edges.length} edges"\n\n` +
+  `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as orchestrator log-session-event orchestrator ${shq(sessionId)} "codegraph" "completed" ${shq(`${projectName}: ${graph.nodes.length} nodes, ${graph.edges.length} edges`)}\n\n` +
   `Return "done".`,
   { label: 'log-codegraph', model: 'haiku' }
 )

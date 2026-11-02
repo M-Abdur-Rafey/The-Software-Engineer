@@ -131,9 +131,21 @@ const collection = await agent(
 
 log(`Generated ${collection.testCases.length} test case(s) for ${collection.routeCount} route(s)`)
 
+if (!collection.written) {
+  log('The test collection was not written')
+  return {
+    sessionId, agentName: 'testing', status: 'failed', persistOps: [], collectionPath: '', routeCount: routes.length, testCases: [],
+    coverage: { routesCovered: 0, totalRoutes: routes.length, percentCovered: 0, needsSetup: 0 },
+    errors: ['the test collection was not written'],
+  }
+}
+
 // A route counts as covered only by a test that runs as-is; tests needing extra setup are listed apart.
 const needsSetup = collection.testCases.filter(t => t && t.needsSetup)
-const routesCovered = new Set(collection.testCases.filter(t => t && !t.needsSetup).map(t => t.routePath)).size
+// A route is a method + path: count the covered ones that are real routes of this session, not distinct path strings.
+const routeKey = (method, p) => `${String(method || '').toUpperCase()} ${p}`
+const realRoutes = new Set(routes.map(r => routeKey(r.method, r.path)))
+const routesCovered = new Set(collection.testCases.filter(t => t && !t.needsSetup).map(t => routeKey(t.method, t.routePath)).filter(k => realRoutes.has(k))).size
 const pct = routes.length > 0 ? Math.round((routesCovered / routes.length) * 100) : 100
 
 const persistOps = [

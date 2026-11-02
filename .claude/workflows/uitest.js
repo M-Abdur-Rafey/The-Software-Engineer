@@ -16,6 +16,9 @@ export const meta = {
 // The skill runs scope + env, shows the plan and asks the user; this workflow refuses to
 // start without confirmed: true. Mechanical steps run on haiku at low effort.
 const AGENTS_DIR  = (args && args.agentsDir)   || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 const projectPath = (args && args.projectPath) || ''
 const scope       = (args && args.scope)       || null
 const envInfo     = (args && args.env)         || {}
@@ -144,7 +147,7 @@ if (toGenerate.length) {
     `the same record), only where the flow touches shared data\n` +
     `- consistency: after each step that changes data, the read-only SELECT whose result must match what the UI shows (counts, totals, text)\n` +
     `Expected results come from the docs and answered questions. If an expected result is not documented, make the case "observed only" ` +
-    `and add a System Docs question: write a JSON array to a file and run ${SYSDOCS_CLI} ask "${projectPath}" <module> @<file> ` +
+    `and add a System Docs question: write a JSON array to a file and run ${SYSDOCS_CLI} ask ${shq(projectPath)} <module> @<file> ` +
     `(each item needs question, chainReaction, technical, plain, data, options, touches).\n\n` +
     `Return { flows: [{ module, flow, spec, cases, multiUser, consistency }], questionsAdded: [ids] }.`,
     { label: 'test-planner', phase: 'Plan', schema: PLAN_SCHEMA, effort: 'low' }
@@ -179,15 +182,17 @@ const RUN_SCHEMA = {
     failures: { type: 'array', items: { type: 'object', required: ['spec', 'title', 'error'], properties: { spec: { type: 'string' }, title: { type: 'string' }, error: { type: 'string' } } } },
   },
 }
-const specs = flows.map(f => f.spec)
-const runEnv = `UITEST_BASE_URL=${environment.baseUrl} UITEST_API_URL=${environment.apiUrl} UITEST_DB=${environment.db} ` +
-  `UITEST_WORKERS=${workers} UITEST_USERS_FILE=${environment.usersFile}`
-const runSpecs = (label, list) => agent(
+// Spec paths are built from folder and file names in the repository: only plain path characters reach the shell.
+const specs = flows.map(f => f.spec).filter(s => /^[A-Za-z0-9._\/-]+$/.test(s))
+if (specs.length !== flows.length) log(`skipped ${flows.length - specs.length} spec(s) whose path has unusual characters`)
+const runEnv = `UITEST_BASE_URL=${shq(environment.baseUrl)} UITEST_API_URL=${shq(environment.apiUrl)} UITEST_DB=${shq(environment.db)} ` +
+  `UITEST_WORKERS=${Number(workers) || 1} UITEST_USERS_FILE=${shq(environment.usersFile)}`
+const runSpecs = (label, list0) => { const list = list0.filter(s => /^[A-Za-z0-9._/-]+$/.test(String(s))); return agent(
   `From ${projectPath}, run Playwright with these environment variables set (use your shell's syntax for setting them):\n${runEnv}\n\n` +
   `Command: npx playwright test -c tests/ui/playwright.config.ts ${list.join(' ')}\n\n` +
   `Then read tests/ui/.results/results.json and return { total, passed, failures: [{ spec, title, error (first 400 chars) }] }.`,
   Object.assign({ label, phase: 'Run', schema: RUN_SCHEMA }, SMALL)
-)
+) }
 const firstRun = await runSpecs('playwright', specs)
 log(`${firstRun.passed}/${firstRun.total} passed`)
 
@@ -258,7 +263,7 @@ await agent(
   `Then "Flaky": ${JSON.stringify(triaged.filter(t => t && t.kind === 'flaky').map(t => t.title))}\n` +
   (firstRun.failures.length > TRIAGE_CAP ? `Then "Not triaged": ${JSON.stringify(firstRun.failures.slice(TRIAGE_CAP).map(f => f.title))}\n` : '') +
   ((plan.questionsAdded || []).length ? `Then "Open questions" listing ${JSON.stringify(plan.questionsAdded)} (System Docs questions raised where behaviour is undocumented).\n` : '') +
-  `\nAfter writing it (tests ran, so the run state may advance), run: ${UI_CLI} record "${projectPath}" '${JSON.stringify({ flows: flows.map(f => f.doc), flowsGenerated: plan.flows.length, summary: `${firstRun.passed}/${firstRun.total} passed, ${bugs.length} bug(s)` })}'\n` +
+  `\nAfter writing it (tests ran, so the run state may advance), run: ${UI_CLI} record ${shq(projectPath)} '${JSON.stringify({ flows: flows.map(f => f.doc), flowsGenerated: plan.flows.length, summary: `${firstRun.passed}/${firstRun.total} passed, ${bugs.length} bug(s)` })}'\n` +
   `Return "done".`,
   Object.assign({ label: 'report', phase: 'Report' }, SMALL)
 )

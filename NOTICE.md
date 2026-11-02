@@ -16,4 +16,18 @@ The adapted text was modified: it judges lessons recorded from this pipeline's o
 
 ## UI Style Guide
 
-The UI style catalog (`agents/frontend/vault/design-system/ui-style-guide.md` and `ui-style-prompts.md`) reproduces data and the AI prompts for 67 UI styles from [UI Style Guide](https://www.uistyleguide.com), collected on 2026-11-02 from each style's page (`https://www.uistyleguide.com/style/<slug>`). The style names, descriptions, palettes, lists and prompts belong to that site and its authors. The site does not state a license that this project has verified: check its terms before redistributing, and remove those two files if the owner objects. The goal tables and the selection guidance in the guide are this project's own.
+The UI style catalog (`agents/frontend/vault/design-system/ui-style-guide.md` and `ui-style-prompts.md`) reproduces data and the AI prompts for 67 UI styles from [UI Style Guide](https://www.uistyleguide.com) by Farad Labs, collected on 2026-11-02 from each style's page (`https://www.uistyleguide.com/style/<slug>`).
+
+The site states no license of its own (no terms page, no copyright notice, no statement about reuse); it calls itself a free reference. Its footer says: "Style definitions adapted from [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) (MIT)." The upstream project's license, copied from its repository (`LICENSE`, checked 2026-11-02), is:
+
+> MIT License
+>
+> Copyright (c) 2024 Next Level Builder
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+What that covers is only the style definitions the site took from that project. The site's own wording of the prompts, its CSS and its page content are Farad Labs' work, with no license stated, so they are reproduced here on the basis of the site presenting them as a free reference for pasting into coding agents. If the owner objects, remove the two files. The goal tables and the selection guidance in the guide are this project's own.

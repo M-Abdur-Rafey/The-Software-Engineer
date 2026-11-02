@@ -3,7 +3,9 @@
 The top-level coordinator. Routes each task through the domain agents in dependency order and passes typed JSON contracts between them.
 
 ## Dependency order
-[[requirements]] → [[database]] → [[backend]] → ( [[frontend]] · [[testing]] · [[calls]] ) → [[ponytail]] → [[mcpbridge]] → [[gitdevops]] → [[sre]] ⤳ back to [[requirements]]
+[[requirements]] → [[database]] → [[backend]] → ( [[frontend]] · [[testing]] · [[calls]] ) → [[ponytail]] → Verify → [[mcpbridge]] → [[gitdevops]] → [[sre]] ⤳ back to [[requirements]]
+
+Step by step, with what each step consumes and produces, and what stops the run: [[dependency-order]].
 
 ## Domain agents
 [[requirements]] · [[database]] · [[backend]] · [[frontend]] · [[testing]] · [[calls]] · [[ponytail]] · [[mcpbridge]] · [[gitdevops]] · [[sre]]

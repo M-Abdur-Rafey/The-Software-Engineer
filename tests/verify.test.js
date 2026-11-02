@@ -198,6 +198,19 @@ http.createServer((req, res) => {
       assert.ok(r.testsWeakened.some((x) => x.includes('package.json#scripts')), JSON.stringify(r.testsWeakened));
     });
 
+    await test('on the first run a deleted pre-existing test fails the gate, an edited one does not', async () => {
+      const dir = project({ 'tests/a.test.js': 'one', 'tests/b.test.js': 'two' });
+      configure(dir, { steps: [] });
+      const baseFile = path.join(dir, 'base.json');
+      fs.writeFileSync(baseFile, JSON.stringify(await run(dir)));
+      fs.writeFileSync(path.join(dir, 'tests/a.test.js'), 'one updated');
+      assert.deepStrictEqual((await run(dir, { guardBaseline: baseFile })).testsWeakened, []);
+      fs.rmSync(path.join(dir, 'tests/b.test.js'));
+      const r = await run(dir, { guardBaseline: baseFile });
+      assert.deepStrictEqual(r.testsWeakened, ['tests/b.test.js (deleted)']);
+      assert.strictEqual(r.passed, false);
+    });
+
     console.log(`\nverify: ${passed} passed`);
   } catch (err) {
     console.error(`\nFAILED after ${passed} passed:\n${err.stack}`);

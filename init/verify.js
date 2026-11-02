@@ -28,7 +28,7 @@ function check(label, fn) {
 
 // ─── Agent knowledge.db files ─────────────────────────────────────────────────
 const AGENT_NAMES = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls', 'ponytail', 'requirements', 'sre', 'orchestrator'];
-const COMMON_TABLES = ['decisions', 'patterns', 'session_log', 'contracts'];
+const COMMON_TABLES = ['decisions', 'session_log'];
 
 AGENT_NAMES.forEach(name => {
   const dbPath = path.join(AGENTS_DIR, 'agents', name, 'knowledge.db');
@@ -80,6 +80,14 @@ CONTRACT_NAMES.forEach(name => {
   });
 });
 
+check('every contract schema is registered in contracts_registry', () => {
+  const db = new Database(orchPath, { readonly: true });
+  const names = db.prepare('SELECT contract_name FROM contracts_registry').all().map(r => r.contract_name);
+  db.close();
+  const missing = CONTRACT_NAMES.filter(n => !names.includes(n));
+  if (missing.length) throw new Error(`not registered: ${missing.join(', ')} (run: npm run init)`);
+});
+
 // ─── Shared standards ─────────────────────────────────────────────────────────
 ['commit-format.md', 'security-rules.md', 'code-standards.md'].forEach(f => {
   check(`shared/standards/${f} exists`, () => {
@@ -89,7 +97,7 @@ CONTRACT_NAMES.forEach(name => {
 });
 
 // ─── Shared lib ───────────────────────────────────────────────────────────────
-['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js', 'projectmap.js', 'lessons.js', 'verify.js'].forEach(f => {
+['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js', 'projectmap.js', 'lessons.js', 'verify.js', 'attest.js'].forEach(f => {
   check(`shared/lib/${f} exists`, () => {
     const p = path.join(AGENTS_DIR, 'shared', 'lib', f);
     if (!fs.existsSync(p)) throw new Error('file missing');

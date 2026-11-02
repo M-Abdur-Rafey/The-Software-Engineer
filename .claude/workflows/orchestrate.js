@@ -50,6 +50,10 @@ export const meta = {
 //   - Domain sub-workflows pick their own per-phase model (e.g. frontend 3D design uses Opus).
 // Sub-agents always use whatever models the host IDE provides — no API keys, no local Ollama.
 const AGENTS_DIR      = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const SAFE_NAME = /^[a-z0-9][a-z0-9-]*$/
+const shq = (s) =>'"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 const taskText        = (args && args.task)           || ''
 const projectPath     = (args && args.projectPath)    || ''
 
@@ -62,6 +66,7 @@ function uniquePaths(list) {
     if (!raw) continue
     let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
     if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (p.split('/').includes('..') || p.startsWith('/') || /^[A-Za-z]:/.test(p)) continue   // outside the project
     if (!seen.has(p)) seen.set(p, p)
   }
   return [...seen.values()]
@@ -77,7 +82,7 @@ let startedAt = (args && args.startedAt) || 0
 if (!sessionId) {
   const sessionResult = await agent(
     `Initialize an orchestration session by running this command exactly:\n\n` +
-    `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js init-session "${taskText.replace(/"/g, '\\"')}" "${projectPath.replace(/"/g, '\\"')}"\n\n` +
+    `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js init-session ${shq(taskText)} ${shq(projectPath)}\n\n` +
     `The command prints JSON like: {"sessionId":"...","startedAt":...}\nReturn that JSON object.`,
     { label: 'init-session', model: 'haiku', schema: { type: 'object', required: ['sessionId', 'startedAt'], properties: { sessionId: { type: 'string' }, startedAt: { type: 'number' } } } }
   )
@@ -102,7 +107,7 @@ if (!isOnboardTask && projectPath) {
   if (onboarded === null) {
     const onboardCheck = await agent(
       `Check if this project has been onboarded. Run this command:\n\n` +
-      `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js check-onboarded "${projectPath.replace(/"/g, '\\"')}"\n\n` +
+      `cd "${AGENTS_DIR}"; node shared/lib/db-cli.js check-onboarded ${shq(projectPath)}\n\n` +
       `The command prints JSON. Return it as-is.`,
       { label: 'check-onboarded', model: 'haiku', schema: { type: 'object', required: ['onboarded'], properties: { onboarded: { type: 'boolean' }, onboardedAt: { type: ['number', 'null'] }, techStack: { type: ['string', 'null'] } } } }
     )
@@ -228,13 +233,13 @@ if (args && args.systemDocs !== false && projectPath) {
       `or a direct consumer: never read the whole tree.\n` +
       (fixedTargets.length ? `The target modules are fixed: ${fixedTargets.join(', ')}.\n` : '') +
       `\n1. Target modules: existing modules this task changes. If the task needs a module that does not exist, create it: ` +
-      `write {"modules":[{name, layer, owner:"", paths, provides, dependsOn}]} to a JSON file and run ${CLI} apply-plan "${projectPath}" @<file>. ` +
+      `write {"modules":[{name, layer, owner:"", paths, provides, dependsOn}]} to a JSON file and run ${CLI} apply-plan ${shq(projectPath)} @<file>. ` +
       `Touchpoints look like api:METHOD /path, fn:name, table:name.column, config:KEY, event:name, ui:Component.\n` +
-      `2. Run ${CLI} impact "${projectPath}" <every touchpoint the task adds/changes/removes and every file it will edit>. ` +
+      `2. Run ${CLI} impact ${shq(projectPath)} <every touchpoint the task adds/changes/removes and every file it will edit>. ` +
       `This lists the provider, direct consumers (with exactly what they use), indirect consumers and owners.\n` +
       `3. Read answered questions in the targets' questions.md: those are decisions. Never re-ask them.\n` +
       `4. If the task needs a decision that is not recorded (including how consumers should behave after the change), ` +
-      `add questions: write a JSON array to a file and run ${CLI} ask "${projectPath}" <module> @<file>. Each item needs ` +
+      `add questions: write a JSON array to a file and run ${CLI} ask ${shq(projectPath)} <module> @<file>. Each item needs ` +
       `question, chainReaction (plain language: which modules/features change), technical (concrete example), plain ` +
       `(everyday example for a non-developer), data (realistic record/payload as a JSON string), options (recommended first), touches. ` +
       `Ask only what changes behaviour or data. When a question touches auth, secrets, storage or hosts, read the blocking ` +
@@ -246,13 +251,16 @@ if (args && args.systemDocs !== false && projectPath) {
       `- briefing: <= 3000 chars for the coding agents: per target module its purpose, the recorded decisions to follow, ` +
       `the touchpoints it provides that others use (who uses them and how) which MUST keep working or be updated together with ` +
       `their consumers, and the exact doc paths to read for details.\n` +
-      `- gates: last, after any questions were added, run ${CLI} gate "${projectPath}" <module> for every target and new ` +
+      `- gates: last, after any questions were added, run ${CLI} gate ${shq(projectPath)} <module> for every target and new ` +
       `module and return each printed { module, pass, reason }.`,
       { label: 'impact-analyst', schema: IMPACT_SCHEMA }
     )
     log(`impact: targets=${impact.targetModules.join(',')} new=${impact.newModules.join(',') || '-'} consumers=${impact.consumers.map(c => c.module).join(',') || '-'} questions=${impact.questionsAdded.length}`)
 
-    const targets = [...new Set([...impact.targetModules, ...impact.newModules])]
+    // Module names end up in commands and a commit message: only plain kebab-case names are accepted.
+    const listed = [...new Set([...impact.targetModules, ...impact.newModules])]
+    const targets = listed.filter(n => SAFE_NAME.test(n))
+    if (targets.length !== listed.length) log(`ignored module name(s) that are not kebab-case: ${listed.filter(n => !SAFE_NAME.test(n)).join(', ').slice(0, 120)}`)
     const failing = impact.gates.filter(r => !r.pass)
     // Impact-based bug fixes: no approval round when nothing else depends on what changes.
     const lightFix = classification.taskType === 'fix' && impact.consumers.length === 0
@@ -268,7 +276,7 @@ if (args && args.systemDocs !== false && projectPath) {
         chainReaction: impact.chainReaction,
         consumers: impact.consumers,
         questionsAdded: impact.questionsAdded,
-        next: `Ask the user the open questions (${CLI} questions "${projectPath}" <module>), record answers with sysdocs answer/defer, approve each target with sysdocs approve, then re-run this task.`,
+        next: `Ask the user the open questions (${CLI} questions ${shq(projectPath)} <module>), record answers with sysdocs answer/defer, approve each target with sysdocs approve, then re-run this task.`,
       }, 'awaiting-answers')
     }
 
@@ -354,6 +362,14 @@ async function finish(result, status, note) {
   return result
 }
 
+// A domain that reports status "failed" (database blocking violations, backend data-access or spec violations the
+// reviewer could not fix, frontend security errors, calls compliance failures) stops the run before anything is committed.
+async function blockDomain(domain, out) {
+  const errors = ((out && out.errors) || []).map(String).slice(0, 10)
+  log(`BLOCKED: ${domain} failed (${errors.length} problem(s))`)
+  return await finish({ sessionId, status: 'blocked', reason: 'domain_failed', domain, errors }, 'failed')
+}
+
 const skipped = small ? ['requirements', 'ponytail', 'sre'] : []
 if (small) log('small task: skipping requirements, ponytail and SRE (the task text is the spec)')
 
@@ -380,7 +396,7 @@ if (!verifyBaseline && projectPath) {
   verifyBaseline = `${SESSION_DIR}/${sessionId}.verify-baseline.json`
   await agent(
     `Run this command exactly, with a Bash timeout of 600000 ms, and return its output unchanged:` + "\n\n" +
-    `${VERIFY_CLI} run "${projectPath}" --out "${verifyBaseline}"`,
+    `${VERIFY_CLI} run ${shq(projectPath)} --out ${shq(verifyBaseline)}`,
     { label: 'verify-baseline', model: 'haiku', effort: 'low' }
   )
 }
@@ -393,6 +409,7 @@ if (classification.requiresDatabase) {
     { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null, ...MAP, ...lessonArgs('database') }
   ))
   log(`database → ${databaseOutput && databaseOutput.status}`)
+  if (databaseOutput && databaseOutput.status === 'failed') return await blockDomain('database', databaseOutput)
 }
 
 // ─── Phase: Backend ───────────────────────────────────────────────────────────
@@ -403,6 +420,7 @@ if (classification.requiresBackend) {
     { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null, ...MAP, ...lessonArgs('backend') }
   ))
   log(`backend → ${backendOutput && backendOutput.status}`)
+  if (backendOutput && backendOutput.status === 'failed') return await blockDomain('backend', backendOutput)
 }
 
 // ─── Phase: Frontend + Testing + Calls (parallel) ────────────────────────────
@@ -440,6 +458,8 @@ phase('Frontend + Testing + Calls')
     if (backendOutput)                                    { testingOutput  = collect(results[idx++]) }
     if (classification.requiresCalls)                     { callsOutput    = collect(results[idx++]) }
     log(`frontend → ${frontendOutput && frontendOutput.status} | testing → ${testingOutput && testingOutput.status} | calls → ${callsOutput && callsOutput.status}`)
+    if (frontendOutput && frontendOutput.status === 'failed') return await blockDomain('frontend', frontendOutput)
+    if (callsOutput && callsOutput.status === 'failed') return await blockDomain('calls', callsOutput)
   }
 }
 
@@ -504,12 +524,14 @@ for (let attempt = 0; attempt <= MAX_FIX_ROUNDS; attempt++) {
     `Run the two steps below exactly and return the JSON that the command prints, unchanged.\n` +
     `1. With the Write tool, write this JSON exactly to ${ownersFile}:\n${JSON.stringify(owners())}\n` +
     `2. With a Bash timeout of 600000 ms, run:\n` +
-    `${VERIFY_CLI} run "${projectPath}"` +
-    (verifyBaseline ? ` --baseline "${verifyBaseline}"` : '') +
-    (collection ? ` --collection "${collection}"` : '') +
-    ` --changed "${changedNow().join(',')}" --owners "${ownersFile}"` +
-    (previousRun ? ` --guard "${previousRun}"` : '') +
-    ` --out "${out}"`,
+    `${VERIFY_CLI} run ${shq(projectPath)}` +
+    (verifyBaseline ? ` --baseline ${shq(verifyBaseline)}` : '') +
+    (collection ? ` --collection ${shq(collection)}` : '') +
+    ` --changed ${shq(changedNow().join(','))} --owners ${shq(ownersFile)}` +
+    // First run: tests that existed before the session must still exist (an author may update a test, never delete one).
+    // Later runs: nothing a fix round touched may weaken them.
+    (previousRun ? ` --guard ${shq(previousRun)}` : verifyBaseline ? ` --guard-baseline ${shq(verifyBaseline)}` : '') +
+    ` --out ${shq(out)}`,
     { label: attempt ? `verify-${attempt}` : 'verify', model: 'haiku', effort: 'low', schema: VERIFY_SCHEMA }
   )
   verifyRuns.push({ attempt, passed: run.passed, configured: run.configured, steps: run.steps, testsWeakened: run.testsWeakened, attribution: run.attribution, fixes: [] })
@@ -617,6 +639,7 @@ gitOutput = collect(await workflow(
     backendOutput,
     frontendOutput,
     databaseOutput,
+    callsOutput,
     testingOutput,
     bridgeOutput,
     ...MAP,
@@ -632,11 +655,13 @@ log(`git → ${gitOutput && gitOutput.status} branch=${gitOutput && gitOutput.br
 // point, in a follow-up docs-only commit so the sync point itself never drifts.
 if (docs && gitOutput && gitOutput.status === 'completed') {
   await agent(
-    docs.targets.map(t => `${CLI} synced "${projectPath}" ${t}`).join('\n') + `\n` +
-    `${CLI} index "${projectPath}"\n` +
-    `git -C "${projectPath}" add docs/system\n` +
-    `git -C "${projectPath}" commit -m "docs(system): mark ${docs.targets.join(', ').slice(0, 30)} synced"\n\n` +
-    `Run the commands above in order (the commit may report nothing to commit; that is fine). Return "done".`,
+    docs.targets.map(t => `${CLI} synced ${shq(projectPath)} ${t}`).join('\n') + `\n` +
+    `${CLI} index ${shq(projectPath)}\n` +
+    `node "${AGENTS_DIR}/shared/lib/scan.js" ${shq(projectPath)} docs/system\n` +
+    `git -C ${shq(projectPath)} add docs/system\n` +
+    `git -C ${shq(projectPath)} commit -m "docs(system): mark ${docs.targets.join(', ').slice(0, 30)} synced"\n\n` +
+    `Run the commands above in order, except: the scan prints JSON, and if its "passed" is false, do NOT add or commit; stop and return ` +
+    `"blocked: " plus its blockingFailures. (The commit may report nothing to commit; that is fine.) Otherwise return "done".`,
     { label: 'docs-synced', model: 'haiku' }
   )
 }
@@ -721,6 +746,7 @@ return await finish({
   branch:          gitOutput && gitOutput.branch,
   commitHash:      gitOutput && gitOutput.commitHash,
   ponytail:        ponytailOutput && ponytailOutput.metrics,
+  ponytailSuggestions: ponytailOutput && ponytailOutput.mode === 'lite' ? (ponytailOutput.suggestions || []).slice(0, 20) : [],
   spec:            requirementsOutput && requirementsOutput.spec,
   openQuestions:   (requirementsOutput && requirementsOutput.spec && requirementsOutput.spec.openQuestions) || [],
   outcomeMetrics:  sreOutput && sreOutput.outcomeMetrics,

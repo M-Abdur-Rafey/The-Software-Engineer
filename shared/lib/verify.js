@@ -11,7 +11,7 @@
  *   node shared/lib/verify.js show <project>                    { config, draft }: what runs, and what onboarding proposed
  *   node shared/lib/verify.js set  <project> <json|@file>
  *   node shared/lib/verify.js run  <project> [--baseline <file>] [--collection <file>] [--changed <a,b,...>]
- *                                            [--owners <file>] [--guard <previousRunFile>] [--out <file>]
+ *                                            [--owners <file>] [--guard <previousRunFile>] [--guard-baseline <baselineFile>] [--out <file>]
  *
  * run prints { configured, passed, steps: [...], testsWeakened, attribution, testFiles } as JSON. A step
  * passes when it has no failure that the baseline did not already have. Tests that existed before a fix
@@ -274,9 +274,11 @@ function testFiles(project) {
 }
 
 /** Test files present at the previous run that are now changed or gone. */
-function weakened(before, now) {
+function weakened(before, now, { deletedOnly = false } = {}) {
   if (!before || !now) return [];
-  return Object.keys(before).filter((f) => now[f] !== before[f]).map((f) => (f in now ? `${f} (edited)` : `${f} (deleted)`));
+  return Object.keys(before)
+    .filter((f) => (deletedOnly ? !(f in now) : now[f] !== before[f]))
+    .map((f) => (f in now ? `${f} (edited)` : `${f} (deleted)`));
 }
 
 /** Maps each new failure to the domain whose files it names; API failures go to backend. */
@@ -330,7 +332,10 @@ async function run(project, opts = {}, root = ROOT) {
   if (opts.collection && fs.existsSync(opts.collection)) steps.push(compare(await runApi(cfg, project, opts.collection), null));
   const files = testFiles(project);
   const prev = opts.guard && fs.existsSync(opts.guard) ? JSON.parse(fs.readFileSync(opts.guard, 'utf8')).testFiles : null;
-  const testsWeakened = weakened(prev, files);
+  // The first run has no earlier run to compare with: against the baseline only a deleted test counts, since an author may
+  // legitimately update a test while changing behaviour, but never delete one.
+  const base = opts.guardBaseline && fs.existsSync(opts.guardBaseline) ? JSON.parse(fs.readFileSync(opts.guardBaseline, 'utf8')).testFiles : null;
+  const testsWeakened = prev ? weakened(prev, files) : weakened(base, files, { deletedOnly: true });
   const owners = opts.owners && fs.existsSync(opts.owners) ? JSON.parse(fs.readFileSync(opts.owners, 'utf8')) : {};
   const result = {
     configured: true,
@@ -357,7 +362,7 @@ if (require.main === module) {
       return;
     }
     const result = await run(dir, {
-      baseline: opt('--baseline'), collection: opt('--collection'), owners: opt('--owners'), guard: opt('--guard'),
+      baseline: opt('--baseline'), collection: opt('--collection'), owners: opt('--owners'), guard: opt('--guard'), guardBaseline: opt('--guard-baseline'),
       changed: (opt('--changed') || '').split(',').filter(Boolean),
     });
     const out = opt('--out');

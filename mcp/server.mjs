@@ -35,8 +35,9 @@ const TOOLS = [
     description:
       'Plan (and optionally apply) a development task across the database, backend, frontend and calls domain agents, in that order. ' +
       'Safe by default: returns a plan. Set apply=true to write the generated files into projectPath (a git repository): the files are ' +
-      'kept only if the pre-commit security scan passes, otherwise nothing is written. This path does not write a requirements spec, ' +
-      'run tests or the contract bridge, or commit; the result lists them under "notRun".',
+      'kept only if the pre-commit security scan passes and, when the project has confirmed check commands, the own build/lint/tests of the project ' +
+      'do not newly fail; otherwise nothing is written. Add commit=true to commit the files on a new branch. This path does not write a ' +
+      'requirements spec or run generated tests, ponytail or the contract bridge; the result lists what did not run under "notRun".',
     inputSchema: {
       type: 'object',
       required: ['task', 'projectPath'],
@@ -44,6 +45,7 @@ const TOOLS = [
         task: { type: 'string' },
         projectPath: { type: 'string' },
         apply: { type: 'boolean' },
+        commit: { type: 'boolean', description: 'with apply: commit the written files on a new branch (never the current one)' },
         clarifications: { type: 'object' },
       },
     },

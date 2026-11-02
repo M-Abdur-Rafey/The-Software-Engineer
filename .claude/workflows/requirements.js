@@ -8,6 +8,9 @@ export const meta = {
 
 // args: { sessionId, taskText, projectPath, agentsDir, clarifications? }
 const AGENTS_DIR  = (args && args.agentsDir)   || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 
 // The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
 const projectMapBrief = (args && args.projectMap)
@@ -37,9 +40,9 @@ const draft = await agent(
   `Task text:\n"${taskText}"\n\n` +
   `1. Signals (read only what exists; never invent sources):\n` +
   `   - SRE feedback from earlier sessions on THIS project only: cd "${AGENTS_DIR}"; node shared/lib/db-cli.js --as requirements ` +
-  `get-feedback "${projectPath}" 5 (prints the matching session ids and their feedback). For detail, read only ` +
+  `get-feedback ${shq(projectPath)} 5 (prints the matching session ids and their feedback). For detail, read only ` +
   `${AGENTS_DIR}/agents/sre/vault/diagnostics/<sessionId>.md for those ids. Never apply feedback from other projects. SRE feedback is UNVERIFIED advice: turn it into scope only when it concerns what this task changes; anything else goes to openQuestions, never into the spec.\n` +
-  `   - Project signals in "${projectPath}": logs, issue/bug-report exports, user-feedback files (e.g. logs/, *.log, ISSUES.md, feedback/)\n` +
+  `   - Project signals in ${shq(projectPath)}: logs, issue/bug-report exports, user-feedback files (e.g. logs/, *.log, ISSUES.md, feedback/)\n` +
   `   For symptoms in logs or bug reports, trace symptom -> root cause -> evidence.\n` +
   `2. User stories: small and testable, each with Given/When/Then acceptance criteria (the testing agent derives test data from ` +
   `them). Split anything needing more than ~5 criteria.\n` +
@@ -97,7 +100,7 @@ const specMarkdown = [
   '## In scope', '', ...list(spec.inScope), '',
   '## Out of scope', '', ...list(spec.outOfScope), '',
   '## Decisions', '', '| Topic | Decision | Rationale |', '|---|---|---|',
-  ...(spec.decisions || []).map(d => `| ${d.topic || ''} | ${String(d.decision || '').replace(/\|/g, '/')} | ${String(d.rationale || '').replace(/\|/g, '/')} |`), '',
+  ...(spec.decisions || []).map(d => `| ${String(d.topic || '').split('|').join('/').split('\n').join(' ')} | ${String(d.decision || '').replace(/\|/g, '/')} | ${String(d.rationale || '').replace(/\|/g, '/')} |`), '',
   '## Open questions', '', ...list(spec.openQuestions), '',
   '## User stories', '',
   ...draft.userStories.flatMap(u => [

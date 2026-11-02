@@ -12,6 +12,9 @@ export const meta = {
 // folder-structure used to do in sequence is one author's checklist; one reviewer who never sees
 // the author's reasoning checks it.
 const AGENTS_DIR      = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 
 // The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
 const projectMapBrief = (args && args.projectMap)
@@ -44,6 +47,7 @@ function uniquePaths(list) {
     if (!raw) continue
     let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
     if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (p.split('/').includes('..') || p.startsWith('/') || /^[A-Za-z]:/.test(p)) continue   // outside the project
     if (!seen.has(p)) seen.set(p, p)
   }
   return [...seen.values()]
@@ -187,7 +191,7 @@ const review = await agent(
   `Project: ${projectPath}\nTask: "${taskText}"\n` +
   EVIDENCE_GUARD + projectMapBrief +
   `Files changed this session: ${JSON.stringify(authored)}\n` +
-  `Read them (and git -C "${projectPath}" diff for files that existed before).\n\n` +
+  `Read them (and git -C ${shq(projectPath)} diff for files that existed before).\n\n` +
   `Requirements spec:\n${spec}\n\n` +
   CHECKLIST + `\n` +
   `1. Check every changed file against each checklist item and against the spec's Decisions and acceptance criteria for this task.\n` +
@@ -215,6 +219,10 @@ const review = await agent(
   }
 )
 const unfixed = review.violations.filter(v => !v.fixed)
+// A violation the reviewer could not fix fails the domain when it is about data access (injection, pooling) or a missed
+// acceptance criterion; the pipeline stops before the commit. Style findings are reported but do not block.
+const BLOCKING_RULES = ['data-architect', 'spec']
+const unfixedBlocking = unfixed.filter(v => BLOCKING_RULES.includes(v.rule))
 log(`Review: ${review.violations.length} violation(s), ${review.filesFixed.length} file(s) fixed, ${unfixed.length} left, ${review.contractMismatches.length} contract mismatch(es)`)
 
 // No decision row: what the session built is in the contracts and the project map, and what the reviewer caught is
@@ -236,7 +244,7 @@ return {
   sessionId,
   agentName:      'backend',
   persistOps,
-  status:         'completed',
+  status:         unfixedBlocking.length ? 'failed' : 'completed',
   dataAccess,
   routes:         build.routeContracts,
   handlers:       build.filesCreated.map(f => ({ filePath: f, functions: [], feature: build.featureName })),
