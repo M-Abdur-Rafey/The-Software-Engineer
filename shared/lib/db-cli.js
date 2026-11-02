@@ -76,9 +76,16 @@ try {
       assertWrite(caller, agentName);
       const row = JSON.parse(jsonData);
       const db = openDb(agentName);
-      const cols = Object.keys(row).join(', ');
-      const placeholders = Object.keys(row).map(() => '?').join(', ');
-      db.prepare(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`).run(...Object.values(row));
+      // Table and column names are interpolated into the SQL, so they must be real ones.
+      const ident = /^[A-Za-z_][A-Za-z0-9_]*$/;
+      const known = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all().map(r => r.name);
+      if (!ident.test(table) || !known.includes(table)) { db.close(); throw new Error(`insert: unknown table "${table}"`); }
+      const real = db.prepare(`PRAGMA table_info("${table}")`).all().map(c => c.name);
+      const keys = Object.keys(row);
+      const bad = keys.filter(k => !ident.test(k) || !real.includes(k));
+      if (!keys.length || bad.length) { db.close(); throw new Error(`insert: unknown column(s) ${bad.join(', ') || '(none given)'} in "${table}"`); }
+      const placeholders = keys.map(() => '?').join(', ');
+      db.prepare(`INSERT INTO "${table}" (${keys.map(k => `"${k}"`).join(', ')}) VALUES (${placeholders})`).run(...Object.values(row));
       db.close();
       console.log(JSON.stringify({ success: true }));
       break;

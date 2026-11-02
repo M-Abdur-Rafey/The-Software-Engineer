@@ -30,13 +30,16 @@ function uniquePaths(list) {
   for (const raw of list) {
     if (!raw) continue
     let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
+    if (/[\x00-\x1f"`$;&|<>\n]/.test(p) || p.split('/').includes('..')) continue   // never put these in a shell command
     if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
     if (!seen.has(p)) seen.set(p, p)
   }
   return [...seen.values()]
 }
-const taskType      = (args && args.taskType)     || 'feat'
-const taskSlug      = (args && args.taskSlug)     || 'task'
+// These end up in shell commands the commit agent runs: keep only safe characters.
+const TYPES         = ['feat', 'fix', 'chore', 'test', 'docs', 'refactor', 'security']
+const taskType      = TYPES.includes(args && args.taskType) ? args.taskType : 'feat'
+const taskSlug      = String((args && args.taskSlug) || 'task').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'task'
 const backendOutput = (args && args.backendOutput) || null
 const bridgeOutput  = (args && args.bridgeOutput) || null
 

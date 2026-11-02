@@ -289,7 +289,7 @@ const verifyDraft = {
   } : null,
   notes: vd.notes || '',
 }
-persistOps.push({ write: `agents/orchestrator/vault/projects/${projectName}/verify.draft.json`, content: JSON.stringify(verifyDraft, null, 2) })
+persistOps.push({ verifyDraft: projectPath, content: JSON.stringify(verifyDraft, null, 2) })
 const note = (agentName, content) => persistOps.push({ write: `agents/${agentName}/vault/projects/${projectName}.md`, content })
 
 if (scanBackend) {

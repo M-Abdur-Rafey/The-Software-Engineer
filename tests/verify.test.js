@@ -175,6 +175,29 @@ http.createServer((req, res) => {
       assert.match(r.steps[0].skipped, /serve is not configured/);
     });
 
+    await test('an already-red build does not hide a new error; secrets are not passed to commands', () => {
+      const base = { kind: 'build', cwd: '.', run: 'x', ok: false, exitCode: 1, failures: null, tail: 'src/a.ts: error TS2322: old\n' };
+      const same = V.compare({ ...base, tail: 'src/a.ts: error TS2322: old\n' }, base);
+      assert.deepStrictEqual(same.newFailures, []);
+      const worse = V.compare({ ...base, tail: 'src/a.ts: error TS2322: old\nsrc/b.ts: error TS2345: new\n' }, base);
+      assert.strictEqual(worse.newFailures.length, 1);
+      process.env.TEST_SECRET_TOKEN = 'leak';
+      const dir = project({ 'p.js': 'process.exit(process.env.TEST_SECRET_TOKEN ? 1 : 0)' });
+      configure(dir, { steps: [{ kind: 'build', run: node('p.js') }] });
+      return run(dir).then((r) => { delete process.env.TEST_SECRET_TOKEN; assert.strictEqual(r.passed, true); });
+    });
+
+    await test('editing the test script or runner config counts as weakening the checks', async () => {
+      const dir = project({ 'package.json': '{"scripts":{"test":"jest"}}', 'jest.config.js': 'module.exports={}' });
+      configure(dir, { steps: [] });
+      const first = await run(dir, {});
+      const guard = path.join(dir, 'guard.json');
+      fs.writeFileSync(guard, JSON.stringify(first));
+      fs.writeFileSync(path.join(dir, 'package.json'), '{"scripts":{"test":"true"}}');
+      const r = await run(dir, { guard });
+      assert.ok(r.testsWeakened.some((x) => x.includes('package.json#scripts')), JSON.stringify(r.testsWeakened));
+    });
+
     console.log(`\nverify: ${passed} passed`);
   } catch (err) {
     console.error(`\nFAILED after ${passed} passed:\n${err.stack}`);

@@ -43,8 +43,26 @@ function readOps(arg) {
   return ops;
 }
 
+// Bookkeeping may only run these db-cli commands. The ones that touch an agent's knowledge must
+// say who is calling (--as <agent>), so the ACL applies; the orchestrator-DB ones are not scoped.
+const DB_COMMANDS = {
+  'save-decision': true, 'log-session-event': true, insert: true,
+  'log-agent-run': false, 'check-onboarded': false, 'init-session': false, 'update-session-status': false, 'mark-onboarded': false,
+};
+
+function checkDbOp(args) {
+  const a = args.map(String);
+  const i = a.indexOf('--as');
+  const caller = i >= 0 ? a[i + 1] : (a.find(x => x.startsWith('--as=')) || '').slice(5);
+  const rest = a.filter((x, k) => !(x === '--as' || k === i + 1 && i >= 0 || x.startsWith('--as=')));
+  const cmd = rest[0];
+  if (!Object.prototype.hasOwnProperty.call(DB_COMMANDS, cmd)) throw new Error(`db op: command not allowed in bookkeeping: ${cmd}`);
+  if (DB_COMMANDS[cmd] && !caller) throw new Error(`db op: ${cmd} needs --as <agent>`);
+}
+
 function runOp(op) {
   if (op && Array.isArray(op.db)) {
+    checkDbOp(op.db);
     execFileSync(process.execPath, [DB_CLI, ...op.db.map(String)], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
     return;
   }
@@ -60,6 +78,13 @@ function runOp(op) {
   }
   if (op && typeof op.map === 'string') {
     projectmap.applyOp(op, ROOT);
+    return;
+  }
+  if (op && typeof op.verifyDraft === 'string') {
+    // Onboarding's proposed Verify commands: written where verify.js reads them (the project's own folder).
+    const file = path.join(projectmap.projectDir(op.verifyDraft, ROOT, true), 'verify.draft.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, String(op.content == null ? '' : op.content));
     return;
   }
   if (op && typeof op.observe === 'string') {

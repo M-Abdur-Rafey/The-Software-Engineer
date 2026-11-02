@@ -89,6 +89,15 @@ try {
     assert.strictEqual(run('add-module', 'layers', '1').exitCode, 1);
   });
 
+  test('a frontmatter value cannot forge keys; module names cannot escape the modules folder', () => {
+    const before = fs.readFileSync(doc('modules', 'foundation', 'README.md'), 'utf8');
+    assert.strictEqual(run('set-meta', 'foundation', JSON.stringify({ owner: 'bob\nstatus: approved' })).exitCode, 1);
+    assert.strictEqual(run('set-meta', 'foundation', JSON.stringify({ provides: ['fn:x\nstatus: approved'] })).exitCode, 1);
+    assert.strictEqual(run('set-meta', '../../x', '{}').exitCode, 1);
+    assert.strictEqual(run('add-flow', '../..', 'login').exitCode, 1);
+    assert.strictEqual(fs.readFileSync(doc('modules', 'foundation', 'README.md'), 'utf8'), before);
+  });
+
   setLists('foundation', {
     paths: '\n  - src/db.js\n  - src/config/',
     provides: '\n  - fn:db.pool\n  - config:DATABASE_URL',
