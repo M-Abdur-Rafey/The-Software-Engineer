@@ -23,12 +23,18 @@ Every agent has its own knowledge base. It learns from each session and carries 
 
 ### Step 1: Resolve install path
 
-- **Windows:** `$env:USERPROFILE\.agents`
-- **macOS/Linux:** `$HOME/.agents`
+Call the engine's folder `<install-path>` from here on. Take the first of these that applies:
+
+1. The `SOFTWARE_ENGINEER_HOME` environment variable, when it is set.
+2. The `engine` path in `~/.claude/skills/software-engineer/.installed-by-software-engineer.json`, when that file exists (the command-line installer writes it).
+   - Windows: `Get-Content "$env:USERPROFILE\.claude\skills\software-engineer\.installed-by-software-engineer.json"`
+   - macOS/Linux: `cat "$HOME/.claude/skills/software-engineer/.installed-by-software-engineer.json"`
+3. `~/.agents` (Windows: `$env:USERPROFILE\.agents`), when it already holds the engine (it contains `shared/orchestrator.db`), does not exist yet, or is empty.
+4. `~/.software-engineer`, when `~/.agents` exists and belongs to something else (the `skills` CLI, for one, keeps its own skills there).
 
 Check if installed:
-- Windows: run `Test-Path "$env:USERPROFILE\.agents\shared\orchestrator.db"`
-- macOS/Linux: run `[ -f "$HOME/.agents/shared/orchestrator.db" ] && echo yes`
+- Windows: run `Test-Path "<install-path>\shared\orchestrator.db"`
+- macOS/Linux: run `[ -f "<install-path>/shared/orchestrator.db" ] && echo yes`
 
 ### Step 2: Auto-install if not installed
 
@@ -40,8 +46,8 @@ Check prerequisites first:
 
 **Windows (PowerShell):**
 ```powershell
-git clone https://github.com/MARafey/The-Software-Engineer "$env:USERPROFILE\.agents" --depth 1
-Set-Location "$env:USERPROFILE\.agents"
+git clone https://github.com/MARafey/The-Software-Engineer "<install-path>" --depth 1
+Set-Location "<install-path>"
 npm install --silent
 node init/bootstrap.js
 node init/seed-vaults.js
@@ -50,8 +56,8 @@ node init/verify.js
 
 **macOS/Linux:**
 ```bash
-git clone https://github.com/MARafey/The-Software-Engineer "$HOME/.agents" --depth 1
-cd "$HOME/.agents"
+git clone https://github.com/MARafey/The-Software-Engineer "<install-path>" --depth 1
+cd "<install-path>"
 npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && node init/verify.js
 ```
 
@@ -87,8 +93,8 @@ The friendly "get me ready" command. Run it once when you first use Software Eng
 Do these in order, reporting progress as you go:
 
 1. **Ensure the engine is installed.** Run Step 1 (resolve install path) and Step 2 (auto-install if not installed) above. If it is already installed, don't re-clone — just confirm health:
-   - Windows: `Set-Location "$env:USERPROFILE\.agents"; node init/verify.js`
-   - macOS/Linux: `cd "$HOME/.agents" && node init/verify.js`
+   - Windows: `Set-Location "<install-path>"; node init/verify.js`
+   - macOS/Linux: `cd "<install-path>" && node init/verify.js`
    If verify fails, show the error and stop (usually fixed by re-running `npm run init`).
 
 2. **Scan the current project** (same as the Onboard subcommand). Get the current project path, then:
@@ -495,8 +501,8 @@ Run this to verify everything is installed and working correctly. No files are m
 ```
 
 Get the install path, then run:
-- Windows: `Set-Location "$env:USERPROFILE\.agents"; node init/verify.js`
-- macOS/Linux: `cd "$HOME/.agents" && node init/verify.js`
+- Windows: `Set-Location "<install-path>"; node init/verify.js`
+- macOS/Linux: `cd "<install-path>" && node init/verify.js`
 
 Show the full output. If all checks pass: _"All systems operational. Ready to use."_
 
@@ -523,7 +529,7 @@ Pull the latest version and re-run initialization.
 
 **Windows:**
 ```powershell
-Set-Location "$env:USERPROFILE\.agents"
+Set-Location "<install-path>"
 git pull origin main
 npm install --silent
 node init/bootstrap.js
@@ -532,7 +538,7 @@ node init/verify.js
 
 **macOS/Linux:**
 ```bash
-cd "$HOME/.agents" && git pull origin main && npm install --silent && node init/bootstrap.js && node init/verify.js
+cd "<install-path>" && git pull origin main && npm install --silent && node init/bootstrap.js && node init/verify.js
 ```
 
 Show which version is now installed: `git log -1 --oneline`
@@ -710,7 +716,7 @@ In Claude Code, register this repo as a plugin marketplace, then install it:
 /plugin install software-engineer@software-engineer
 ```
 
-Then type `/software-engineer` — the first run clones the engine to `~/.agents`, installs dependencies, and seeds the knowledge bases automatically.
+Then type `/software-engineer` — the first run clones the engine to `~/.agents` (or `~/.software-engineer` when `~/.agents` belongs to another tool), installs dependencies, and seeds the knowledge bases automatically.
 
 To update later:
 ```

@@ -150,6 +150,38 @@ try {
     assert.ok(fs.existsSync(path.join(ROOT, 'shared', 'orchestrator.db')), 'the checkout is untouched');
   });
 
+  test('where the engine goes: ~/.agents when it is free or empty, ~/.software-engineer when another tool owns it', () => {
+    const plan = (home, env = {}) => {
+      const r = spawnSync(process.execPath, [CLI, 'install', '--dry-run'], { cwd: home, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, ...env } });
+      return String(r.stdout) + String(r.stderr);
+    };
+    const free = mk('se-home-');
+    assert.ok(plan(free).includes(path.join(free, '.agents')), plan(free));
+    const empty = mk('se-home-');
+    fs.mkdirSync(path.join(empty, '.agents'));
+    assert.ok(plan(empty).includes(path.join(empty, '.agents')));
+    // another tool's store: a lock file and a skills folder of its own
+    const owned = mk('se-home-');
+    fs.mkdirSync(path.join(owned, '.agents', 'skills', 'other-skill'), { recursive: true });
+    fs.writeFileSync(path.join(owned, '.agents', '.skill-lock.json'), '{}');
+    const out = plan(owned);
+    assert.ok(out.includes(path.join(owned, '.software-engineer')), out);
+    assert.ok(/belongs to another tool/.test(out), out);
+    assert.ok(fs.existsSync(path.join(owned, '.agents', '.skill-lock.json')), 'the other tool\'s files are untouched');
+    // an environment variable wins over both
+    const elsewhere = mk('se-elsewhere-');
+    assert.ok(plan(owned, { SOFTWARE_ENGINEER_HOME: elsewhere }).includes(elsewhere));
+  });
+
+  test('later commands find the engine through the marker the install wrote', () => {
+    const home = mk('se-home-');
+    const eng = engine();
+    assert.strictEqual(cli(home, ['install', '--dir', eng]).code, 0);
+    const r = cli(home, ['status', '--json'], mk('se-project-'));   // no --dir
+    assert.strictEqual(JSON.parse(r.out).engine.dir, eng);
+    assert.strictEqual(JSON.parse(r.out).engine.installed, true);
+  });
+
   test('bad input: unknown command and unknown option exit 2, an option without its value too', () => {
     const home = mk('se-home-');
     assert.strictEqual(cli(home, ['bogus']).code, 2);
