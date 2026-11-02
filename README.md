@@ -52,6 +52,8 @@ Then restart Claude Code (or open a new session) and run `/software-engineer sta
 
 Options: `--project` installs the skill into `./.claude/skills` of the current folder only, instead of globally · `--dir <path>` uses another engine folder (default `~/.agents`, where the skill looks for it) · `--repo <url>` clones from another git URL · `--link` uses an existing checkout as the engine instead of cloning (for contributors) · `--skip-engine` installs only the skill and leaves the engine to be set up on first use · `--force` replaces a skill of the same name that this tool did not install · `--dry-run` shows what would happen and changes nothing.
 
+Where the engine goes: `~/.agents`, which is where the skill looks first. If `~/.agents` already belongs to another tool (the `skills` CLI keeps its own skills and a lock file there), the engine goes to `~/.software-engineer` instead and the installed skill finds it through a small marker file next to it. `--dir <path>` or the `SOFTWARE_ENGINEER_HOME` environment variable choose any other folder, and `update`, `status` and `uninstall` find it again on their own.
+
 Good to know:
 - It never overwrites a skill it did not install unless you pass `--force`, and `uninstall` only removes what it installed.
 - Use **either** the plugin **or** the CLI, not both, or the command is registered twice.

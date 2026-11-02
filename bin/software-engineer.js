@@ -9,7 +9,7 @@
  *   software-engineer status      what is installed, and whether the engine passes its health check
  *   software-engineer uninstall   remove the installed skill (--purge --yes also removes the engine and its knowledge bases)
  *
- * Options: --dir <engine dir> (default ~/.agents) · --project (the skill goes in ./.claude/skills instead of the global folder)
+ * Options: --dir <engine dir> (default ~/.agents, else ~/.software-engineer when ~/.agents belongs to another tool) · --project (the skill goes in ./.claude/skills instead of the global folder)
  *          --repo <git url> · --link (use this checkout as the engine) · --skip-engine · --force · --dry-run · --json · --yes
  */
 
@@ -51,8 +51,27 @@ function parse(argv) {
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 const say = (m = '') => console.log(m);
-const engineDir = (o) => path.resolve(o.dir || path.join(os.homedir(), '.agents'));
 const initialized = (dir) => fs.existsSync(path.join(dir, 'shared', 'orchestrator.db'));
+
+/**
+ * ~/.agents is where the skill looks first, but other tools (the `skills` CLI keeps its own skills there, with a skills/ folder
+ * of its own) share that name. It is used when it is free, empty or already our engine; otherwise the engine goes to
+ * ~/.software-engineer, and the skill finds it through the marker file this tool writes.
+ */
+function defaultEngineDir() {
+  const std = path.join(os.homedir(), '.agents');
+  if (!fs.existsSync(std) || initialized(std) || fs.readdirSync(std).length === 0) return std;
+  return path.join(os.homedir(), '.software-engineer');
+}
+
+/** --dir, then SOFTWARE_ENGINEER_HOME, then the engine recorded by an earlier install, then the default. */
+function engineDir(o) {
+  if (o.dir) return path.resolve(o.dir);
+  if (process.env.SOFTWARE_ENGINEER_HOME) return path.resolve(process.env.SOFTWARE_ENGINEER_HOME);
+  const recorded = readJson(path.join(os.homedir(), '.claude', 'skills', SKILL, MARKER));
+  if (recorded && recorded.engine) return path.resolve(recorded.engine);
+  return defaultEngineDir();
+}
 const skillDest = (o) => (o.project ? path.join(process.cwd(), '.claude', 'skills', SKILL) : path.join(os.homedir(), '.claude', 'skills', SKILL));
 const norm = (s) => String(s).split(String.fromCharCode(13)).join('');
 const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
@@ -91,6 +110,10 @@ function setUp(dir, { reseed = true } = {}) {
 // ── the engine ──────────────────────────────────────────────────────────────
 function ensureEngine(o) {
   const dir = engineDir(o);
+  const std = path.join(os.homedir(), '.agents');
+  if (dir !== std && !o.dir && !process.env.SOFTWARE_ENGINEER_HOME && path.basename(dir) === '.software-engineer') {
+    say(`Note: ${std} belongs to another tool, so the engine goes to ${dir} (the skill finds it through its marker file).`);
+  }
   if (initialized(dir)) { say(`Engine: already set up at ${dir}`); return dir; }
   if (o['dry-run']) {
     say(dir === SELF ? `Engine: would set up this checkout (${dir})` : o.link ? `Engine: would link ${dir} to this checkout (${SELF}) and set it up` : `Engine: would clone ${o.repo || DEFAULT_REPO} to ${dir} and set it up`);
@@ -243,7 +266,8 @@ Commands
   uninstall   Remove the installed skill (add --purge --yes to also delete the engine and its knowledge bases)
 
 Options
-  --dir <path>     Engine folder (default: ~/.agents, where the skill looks for it)
+  --dir <path>     Engine folder (default: ~/.agents, or ~/.software-engineer when ~/.agents belongs to another tool;
+                   SOFTWARE_ENGINEER_HOME sets it too)
   --project        Use ./.claude/skills in the current folder instead of the global ~/.claude/skills
   --repo <url>     Clone from this git URL instead of ${DEFAULT_REPO}
   --link           Use this checkout as the engine (a link at --dir) instead of cloning
