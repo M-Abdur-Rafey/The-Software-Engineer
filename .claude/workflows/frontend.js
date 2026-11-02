@@ -207,7 +207,11 @@ if (use3D) {
     (scrollAnimHint ? `${scrollAnimHint}\n` : '') +
     `${artContext}` +
     `\nLet the art direction guide mood, palette, light, motion, and composition of the scene — the 3D should feel like part of the same authored piece, not a separate tech demo.\n` +
-    `\nExamine the project at ${projectPath} to understand the existing tech stack before making library choices.\n\n` +
+    `\nExamine the project at ${projectPath} to understand the existing tech stack before making library choices.\n` +
+    `Vault notes with the vetted patterns (read the ones this design needs, not all): ${VAULT}/3d/three-js-scene-setup.md and ` +
+    `performance-rules.md always; physics-engines.md only if the scene has physics; scroll-animation.md only if it is scroll-driven; ` +
+    `shader-cookbook.md only if it needs custom shaders; mobile-responsive.md for the mobile rules; math-reference.md for easing, ` +
+    `quaternion and camera-path maths. Follow them rather than inventing a different setup.\n\n` +
     `Design the complete 3D web experience. Cover ALL of the following sections:\n\n` +
 
     `1. LIBRARY SELECTION — choose the best fit for this project's stack:\n` +
@@ -361,6 +365,8 @@ const threeDContext = threeDDesign
     `Animations: ${JSON.stringify(threeDDesign.animations)}\n` +
     `Shaders: ${JSON.stringify(threeDDesign.shaders)}\n` +
     `Files to create: ${threeDDesign.codeFiles.join(', ')}\n` +
+    `Code recipes to follow (read the ones that apply): ${VAULT}/3d/ - three-js-scene-setup.md, performance-rules.md, mobile-responsive.md, ` +
+    `physics-engines.md, scroll-animation.md, shader-cookbook.md, math-reference.md\n` +
     `Install before coding: npm install ${threeDDesign.installPackages.join(' ')}\n` +
     `Performance rules (mandatory): ${threeDDesign.performanceNotes.join('; ')}`
   : ''
@@ -375,7 +381,7 @@ const CHECKLIST =
   `sticky/fixed and overlay/portal placement; no z-index wars or clipping.\n` +
   `- Contrast (contrast-specialist): WCAG AA (4.5:1 text, 3:1 large text and UI), visible focus states, both themes; keep the accent ` +
   `legible rather than flattening the palette.\n` +
-  `- Components (component-creator): all API calls in src/api/<feature>.api.js, never inline or via fetch/axios in components; design ` +
+  `- Components (component-creator, ${VAULT}/design-system/component-checklist.md): all API calls in src/api/<feature>.api.js, never inline or via fetch/axios in components; design ` +
   `tokens, no hardcoded colours; loading, empty and error states in every data-fetching component; the cohesion rules on every component.\n` +
   `- Wiring (api-request-handler): only call routes the backend declared (or that already exist in the project); response data to the ` +
   `storage layer in ${VAULT}/state-management/storage-rules.md.\n` +

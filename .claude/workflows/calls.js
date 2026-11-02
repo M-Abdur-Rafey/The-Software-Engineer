@@ -104,6 +104,10 @@ const tableContext = databaseOutput ? JSON.stringify(databaseOutput.tables || []
 
 const VAULT = `${AGENTS_DIR}/agents/calls/vault`
 const spec = specBrief('calls')
+// The setup note for the provider the user chose (the vault has Twilio and Vonage; others fall back to their own SDK).
+const providerNote = ['twilio', 'vonage'].includes(provider)
+  ? `${VAULT}/providers/${provider}-setup.md (if missing: the ${provider === 'twilio' ? 'twilio' : '@vonage/server-sdk'} npm package and its credentials from environment variables)`
+  : `the ${provider} provider's own SDK and documentation (the vault has no setup note for it): credentials from environment variables only`
 const sigRule = provider === 'twilio' ? 'X-Twilio-Signature via twilio.validateRequest()' : 'X-Nexmo-Signature via HMAC-SHA256'
 
 // ─── Phase: Author ────────────────────────────────────────────────────────────
@@ -117,8 +121,7 @@ const built = await agent(
   `Task: "${taskText}"\nProject: ${projectPath}\n${providerBrief}\nDatabase tables available: ${tableContext}\n\n` +
   EVIDENCE_GUARD + projectMapBrief + lessonsBrief +
   `Requirements spec:\n${spec}\n\n` +
-  `Context to read first: ${VAULT}/INDEX.md and the notes it lists that apply, ${VAULT}/providers/twilio-setup.md (if missing: the twilio npm package, ` +
-  `auth token from TWILIO_AUTH_TOKEN), and any existing telephony code in the project.\n\n` +
+  `Context to read first: ${VAULT}/INDEX.md and the notes it lists that apply, ${providerNote}, and any existing telephony code in the project.\n\n` +
   `1. CALL FLOW (flow-designer)\n` +
   ((callDirection === 'inbound' || callDirection === 'both')
     ? `   Inbound IVR: greeting on connect; menu at most 3 levels deep, each option -> sub-menu, transfer-to-agent, voicemail or ` +

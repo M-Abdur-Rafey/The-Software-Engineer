@@ -24,6 +24,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const projectmap = require('./projectmap');
 const lessons = require('./lessons');
+const contracts = require('./contracts');
 
 const ROOT = path.join(__dirname, '..', '..');
 const DB_CLI = path.join(__dirname, 'db-cli.js');
@@ -80,6 +81,11 @@ function runOp(op) {
     projectmap.applyOp(op, ROOT);
     return;
   }
+  if (op && typeof op.contract === 'string') {
+    // A domain's output checked against its schema in shared/contracts. Reported, never fatal: bookkeeping must not undo a finished session.
+    const r = contracts.validate(op.contract, op.data);
+    return { contractResult: { name: op.contract, valid: r.valid, errors: r.valid ? [] : contracts.summarize(r.errors) } };
+  }
   if (op && typeof op.verifyDraft === 'string') {
     // Onboarding's proposed Verify commands: written where verify.js reads them (the project's own folder).
     const file = path.join(projectmap.projectDir(op.verifyDraft, ROOT, true), 'verify.draft.json');
@@ -96,23 +102,29 @@ function runOp(op) {
     const db = lessons.openDb();
     try { return { curation: lessons.applyCuration(db, op, { root: ROOT }) }; } finally { db.close(); }
   }
-  throw new Error('unknown op (expected "db", "write", "map", "observe" or "curate")');
+  throw new Error('unknown op (expected "db", "write", "map", "observe", "curate", "contract" or "verifyDraft")');
 }
 
 function run(ops) {
   const failed = [];
+  const contractIssues = [];
   let curation = null;
   for (const op of ops) {
     try {
       const out = runOp(op);
       if (out && out.curation) curation = out.curation;
+      if (out && out.contractResult && !out.contractResult.valid) contractIssues.push(out.contractResult);
     } catch (err) {
       const detail = err.stderr ? err.stderr.toString().trim() : err.message;
-      failed.push({ op: op && (op.db ? `db ${op.db.slice(0, 4).join(' ')}` : op.map ? `map ${op.map}` : op.observe ? `observe ${op.observe}` : op.curate ? `curate ${op.curate}` : `write ${op.write}`), error: detail.slice(0, 300) });
+      failed.push({ op: op && (op.db ? `db ${op.db.slice(0, 4).join(' ')}` : op.map ? `map ${op.map}` : op.observe ? `observe ${op.observe}` : op.curate ? `curate ${op.curate}` : op.contract ? `contract ${op.contract}` : op.verifyDraft ? `verifyDraft ${op.verifyDraft}` : `write ${op.write}`), error: detail.slice(0, 300) });
     }
   }
-  // The curator's result (what was applied, which proposals were written, what was rejected) for the skill to report.
-  return curation ? { ran: ops.length - failed.length, failed, curation } : { ran: ops.length - failed.length, failed };
+  // The curator's result (what was applied, which proposals were written, what was rejected) and any domain output
+  // that does not match its contract schema, for the skill to report.
+  const out = { ran: ops.length - failed.length, failed };
+  if (curation) out.curation = curation;
+  if (contractIssues.length) out.contractIssues = contractIssues;
+  return out;
 }
 
 if (require.main === module) {

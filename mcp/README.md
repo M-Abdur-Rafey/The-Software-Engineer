@@ -9,7 +9,7 @@ This MCP server exposes the multi-agent orchestrator to **any editor that speaks
 |------|--------------|
 | `software_engineer_health` | Reports knowledge-base/contract status and which model backend is available. |
 | `software_engineer_classify` | Classifies a task into the domains it touches (database/backend/frontend/calls). |
-| `software_engineer_orchestrate` | Plans the task across domain agents in dependency order. **Safe by default** (returns a plan); pass `apply: true` to write the generated files into `projectPath`. |
+| `software_engineer_orchestrate` | Plans the task across the database, backend, frontend and calls agents in dependency order. **Safe by default** (returns a plan); pass `apply: true` to write the generated files into `projectPath`, which must be a git repository. The files are kept only if the pre-commit security scan passes; otherwise they are rolled back and the findings are returned. |
 
 ## How it gets a model
 
@@ -80,6 +80,10 @@ claude mcp add software-engineer -- node ~/.agents/mcp/server.mjs
 ## Scope / status
 
 This is the v1 cross-IDE path. It plans and (with `apply: true`) writes the generated files for each
-domain, reusing the same session log and per-agent vault knowledge as the Claude Code pipeline. The
-deeper sub-agent passes (security scan + git commit + Postman generation + contract bridge) currently
-run in the Claude Code workflow; bringing them fully into the MCP path is the next step.
+domain, reusing the same session log and per-agent vault knowledge as the Claude Code pipeline.
+
+What runs here: the database, backend, frontend and calls agents, and the same pre-commit security scan
+(`shared/lib/scan.js`) as the Claude Code pipeline, before any file is kept. Every result lists what did
+**not** run under `notRun`: the requirements spec, Postman test generation, ponytail, the Verify phase,
+the contract bridge, the git commit and SRE. Those exist only in the Claude Code workflow; bringing them
+into the MCP path is the next step.

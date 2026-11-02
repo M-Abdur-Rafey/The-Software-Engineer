@@ -1,15 +1,17 @@
 // Cross-IDE orchestration pipeline for the MCP server.
 //
-// Mirrors the Claude Code workflow dependency order
-//   database → backend → frontend / testing / calls → bridge
-// but runs entirely through the model abstraction (sampling or API key) so it
+// Runs the domain agents in the Claude Code workflow's dependency order
+//   database → backend → frontend / calls
+// and, with apply=true, keeps the files only if the security scan passes. It does NOT run the requirements spec,
+// testing, ponytail, verify, the contract bridge, the git commit or SRE: those exist only in the Claude Code
+// pipeline (NOT_RUN below is reported in every result). It runs entirely through the model abstraction (sampling or API key) so it
 // works in Cursor, Windsurf, VS Code, etc. — anywhere that speaks MCP.
 //
 // Reuses the existing knowledge infrastructure: shared/lib/db-cli.js for the
 // session log and agents/<name>/vault for grounding context.
 import { fileURLToPath } from 'url'
 import { dirname, join, resolve, sep, relative, parse, delimiter } from 'path'
-import { existsSync, readFileSync, mkdirSync, writeFileSync, realpathSync, statSync, lstatSync } from 'fs'
+import { existsSync, readFileSync, mkdirSync, writeFileSync, realpathSync, statSync, lstatSync, rmSync, readdirSync } from 'fs'
 import { homedir } from 'os'
 import { execFileSync } from 'child_process'
 import { createRequire } from 'module'
@@ -19,6 +21,8 @@ const ROOT = resolve(__dirname, '..', '..') // mcp/lib -> install root
 
 // The shared project map (shared/lib/projectmap.js), built by onboarding in Claude Code.
 const projectmap = createRequire(import.meta.url)('../../shared/lib/projectmap.js')
+// The pre-commit security scan (shared/lib/scan.js): the same deterministic script the Claude Code pipeline commits behind.
+const { scan } = createRequire(import.meta.url)('../../shared/lib/scan.js')
 
 const AGENTS = ['backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls']
 const CONTRACTS = ['task', 'backend', 'frontend', 'database', 'testing', 'gitdevops', 'mcpbridge', 'calls']
@@ -129,6 +133,16 @@ async function runDomain(agent, { task, projectPath, prior, clarifications, mode
   return { agent, ...out }
 }
 
+const NOT_RUN = ['requirements', 'testing', 'ponytail', 'verify', 'mcpbridge', 'gitdevops', 'sre']
+
+function isGitRepo(dir) {
+  try { return execFileSync('git', ['-C', dir, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() === 'true' } catch { return false }
+}
+
+function hasFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).some((e) => (e.isDirectory() ? hasFiles(join(dir, e.name)) : true))
+}
+
 // ── safe writes ──────────────────────────────────────────────────────────────────
 // Generated files are written into a project the caller names, from model output that task text can
 // steer. So: the root must be a real project directory (never a filesystem or home root), and files
@@ -198,8 +212,12 @@ export async function orchestrate({ task, projectPath, clarifications, apply = f
 
   const written = []
   const skipped = []
+  let securityScan = null
+  let blocked = null
   if (apply) {
     const projRoot = checkedRoot(projectPath)
+    // The scan reads the project through git, so the project must be a repository (git init is enough).
+    if (!isGitRepo(projRoot)) throw new Error(`apply needs a git repository so the security scan can run: run "git init" in ${projRoot} first`)
     // Validate every file first, so a bad one cannot leave the change half-applied.
     const toWrite = []
     for (const agent of order) {
@@ -209,12 +227,27 @@ export async function orchestrate({ task, projectPath, clarifications, apply = f
         else skipped.push(f && f.path)
       }
     }
+    // Write, remembering what was there, then scan what was written; a blocking finding puts everything back.
+    const undo = []
+    const createdDirs = []
     for (const { dest, f } of toWrite) {
-      mkdirSync(dirname(dest), { recursive: true })
+      const made = mkdirSync(dirname(dest), { recursive: true })
+      if (made) createdDirs.push(made)
+      undo.push({ dest, before: existsSync(dest) ? readFileSync(dest) : null })
       writeFileSync(dest, f.content, 'utf8')
       written.push(f.path)
     }
-    try { dbCli('update-session-status', sessionId, 'completed') } catch { /* non-fatal */ }
+    securityScan = scan(projRoot, toWrite.map(({ dest }) => relative(projRoot, dest).split(sep).join('/')))
+    if (!securityScan.passed) {
+      for (const { dest, before } of undo.reverse()) {
+        if (before === null) rmSync(dest, { force: true })
+        else writeFileSync(dest, before)
+      }
+      for (const d of createdDirs) if (existsSync(d) && !hasFiles(d)) rmSync(d, { recursive: true, force: true })
+      blocked = securityScan.blockingFailures
+      skipped.push(...written.splice(0))
+    }
+    try { dbCli('update-session-status', sessionId, blocked ? 'failed' : 'completed') } catch { /* non-fatal */ }
   }
 
   return {
@@ -224,11 +257,20 @@ export async function orchestrate({ task, projectPath, clarifications, apply = f
     plan: Object.fromEntries(
       order.map((a) => [a, { summary: outputs[a].summary, files: (outputs[a].files || []).map((f) => f.path), notes: outputs[a].notes || '' }])
     ),
-    applied: apply,
+    applied: apply && !blocked,
     filesWritten: written,
     filesSkipped: skipped,
-    next: apply
-      ? 'Review the written files, run your tests, and commit when satisfied.'
-      : 'Re-run with apply=true to write these files into the project.',
+    securityScan: securityScan && {
+      passed: securityScan.passed,
+      blockingFailures: securityScan.blockingFailures,
+      warnings: securityScan.securityFlags.filter((x) => !x.passed && x.severity !== 'blocking').map((x) => `${x.check}: ${x.detail}`),
+    },
+    blocked: blocked ? { reason: 'security_scan_failed', failures: blocked, note: 'Nothing was written: the files were rolled back. Fix the findings and run again.' } : null,
+    notRun: NOT_RUN,
+    next: blocked
+      ? 'The security scan blocked the change and nothing was written. Fix the findings listed in "blocked" and re-run.'
+      : apply
+        ? 'Review the written files, run your tests, and commit when satisfied. The requirements spec, tests, contract bridge and commit are not part of this path.'
+        : 'Re-run with apply=true to write these files into the project.',
   }
 }

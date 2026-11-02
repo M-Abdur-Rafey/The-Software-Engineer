@@ -174,6 +174,12 @@ Only ask questions relevant to the domains you detected above. Group all questio
 
 **Use plain language. Avoid technical jargon unless the user introduced it.**
 
+**Simplification pass (every feature or refactor, one optional line at the end of the message; skip it for the short pipeline):** after the code is generated, a "ponytail" pass trims over-engineering. Add this line so the user can change how far it goes:
+
+> _"After writing the code I trim over-engineering (default). Say **suggest only** if you'd rather I list ideas without editing your files, or **ultra** if I should also question whether some code needs to exist at all."_
+
+Map the answer to `clarifications.ponytailMode`: "suggest only" / "don't touch my code" → `"lite"`; "ultra" / "be ruthless" / "YAGNI" → `"ultra"`; no answer, "default", "fine" → `null` (the workflow uses `"full"`). Never ask a follow-up about it.
+
 ---
 
 **If the task touches FRONTEND — ask these:**
@@ -328,6 +334,7 @@ Workflow({
     projectPath: "<current working directory>",
     agentsDir: "<install-path>",
     clarifications: {
+      ponytailMode: "<'lite'|'full'|'ultra'|null>",
       designPreferences: {
         colors: "<hex codes or 'default' or null>",
         navigation: "<'top-bar'|'side-menu'|'none'|null>",
@@ -374,6 +381,8 @@ node <install-path>/shared/lib/persist.js "<output-file from the completion noti
 ```
 
 It prints `{ ran, failed }`. Mention any failures briefly; they never undo the work. If there is no output file, skip this and say the session could not be recorded.
+
+It may also print `contractIssues`: a domain's output that does not match its schema in `shared/contracts` (`[{ name, valid: false, errors }]`). That means the pipeline itself produced a malformed result for that domain, not that the user's code is wrong. Mention it in one line, naming the domain and the first error, and do not act on it.
 
 Then summarise clearly:
 

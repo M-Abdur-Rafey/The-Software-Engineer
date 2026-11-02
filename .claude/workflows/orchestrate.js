@@ -329,6 +329,18 @@ async function finish(result, status, note) {
   const seen = sessionObservations()
   if (projectPath && seen.domains.length) ops.push({ observe: projectPath, session: sessionId, domains: seen.domains, items: seen.items })
   ops.push({ db: ['update-session-status', sessionId, status] })
+  // Each domain's output checked against its schema in shared/contracts by persist.js (it reports mismatches as contractIssues).
+  // Only when the caller runs persist.js from a file: inline in a direct run these payloads would be re-typed by an agent.
+  if (deferBookkeeping) {
+    const outputs = { requirements: requirementsOutput, database: databaseOutput, backend: backendOutput, frontend: frontendOutput,
+      testing: testingOutput, calls: callsOutput, ponytail: ponytailOutput, mcpbridge: bridgeOutput, gitdevops: gitOutput, sre: sreOutput }
+    for (const [name, o] of Object.entries(outputs)) {
+      if (!o) continue
+      const data = Object.assign({}, o)
+      delete data.persistOps
+      ops.push({ contract: name, data })
+    }
+  }
   if (note) ops.push({ write: `agents/orchestrator/vault/sessions/${sessionId}.md`, content: note })
   if (deferBookkeeping) return Object.assign({}, result, { persistOps: ops })
   const opsFile = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.persist.json`
@@ -446,7 +458,7 @@ if (!small && (backendOutput || frontendOutput || callsOutput || (databaseOutput
       startedAt,
       taskText: domainTask,
       projectPath,
-      mode: clarifications.ponytailMode || 'full',
+      mode: ['lite', 'full', 'ultra'].includes(clarifications.ponytailMode) ? clarifications.ponytailMode : 'full',
       backendOutput,
       frontendOutput,
       callsOutput,

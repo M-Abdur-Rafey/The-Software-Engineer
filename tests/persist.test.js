@@ -51,6 +51,18 @@ try {
     assert.ok(bad('decisions', { 'id) VALUES (1); --': 'x' }));
   });
 
+  test('contract ops check a domain output against its schema and report mismatches', () => {
+    const ok = { sessionId: 's', agentName: 'backend', status: 'completed', routes: [], filesChanged: ['a.js'], errors: [] };
+    const bad = { sessionId: 's', agentName: 'backend', status: 'done', filesChanged: 'a.js' };
+    assert.deepStrictEqual(run([{ contract: 'backend', data: ok }]), { ran: 1, failed: [] });
+    const r = run([{ contract: 'backend', data: bad }, { contract: '../../etc/x', data: ok }]);
+    assert.strictEqual(r.ran, 1);
+    assert.strictEqual(r.failed.length, 1);
+    assert.strictEqual(r.contractIssues.length, 1);
+    assert.strictEqual(r.contractIssues[0].name, 'backend');
+    assert.ok(r.contractIssues[0].errors.some((e) => /status|filesChanged/.test(e)), JSON.stringify(r.contractIssues));
+  });
+
   test('refuses writes outside agents/<name>/vault/', () => {
     const r = run([
       { write: 'package.json', content: 'x' },

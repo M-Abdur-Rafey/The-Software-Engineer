@@ -77,7 +77,7 @@ Dependency order (always enforced):
 Two communication layers — keep them distinct:
 
 - **Knowledge (persistent):** per-agent `agents/<name>/vault/` (Obsidian markdown) + `agents/<name>/knowledge.db`. Vaults are cross-linked into one graph via `[[wikilinks]]` — open the `agents/` folder as a single Obsidian vault to navigate it.
-- **Coordination (runtime):** typed JSON contracts (`shared/contracts/*.schema.json`) passed between workflows, plus the `shared/orchestrator.db` session log. Agents do **not** message each other through vault links.
+- **Coordination (runtime):** typed JSON contracts passed between workflows (each `agent()` call carries its own inline schema), plus the `shared/orchestrator.db` session log. `shared/contracts/*.schema.json` describe each domain's final output: after a session, `persist.js` checks every domain output against its schema through `shared/lib/contracts.js` and reports mismatches as `contractIssues` (a structural check, advisory, run only with `deferBookkeeping`). The route/table/auth consistency between domains is checked by the mcpbridge agent, not by these schemas. Agents do **not** message each other through vault links.
 
 Knowledge access is scoped by `shared/lib/acl.js`: agents call `db-cli --as <agent>`, which enforces write-own-only and read-own+upstream against the policy. `db-cli query` is **read-only** (rejects non-SELECT/multi-statement) and all DB output is **capped** via `shared/lib/truncate.js` so large result sets can't balloon an agent's input tokens. This is a guardrail (a caller could still spoof `--as`), not OS-level isolation.
 
