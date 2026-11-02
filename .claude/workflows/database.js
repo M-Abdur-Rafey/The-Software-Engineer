@@ -118,7 +118,7 @@ const tableDesign = await agent(
   `Requirements spec:\n${spec}\n\n` +
   `Context to read first: ${VAULT}/INDEX.md and the notes it lists that apply, and the project's existing schema and migrations.\n\n` +
   CHECKLIST + `\n` +
-  `Return { migrationSQL: "<the full SQL as written to the file>", migrationFile: "<filename>", tables: [{ name, columns: [{name,type,nullable,primaryKey,foreignKey}], estimatedRows }], ` +
+  `Return { migrationSQL: "<the full SQL as written to the file>", migrationFile: "<the migration file's path relative to the project root, exactly where you wrote it, e.g. migrations/<filename>>", tables: [{ name, columns: [{name,type,nullable,primaryKey,foreignKey}], estimatedRows }], ` +
   `indexes: [{ table, columns, reason }], specConflicts: [string] }.`,
   {
     label: 'author',
@@ -158,7 +158,7 @@ const review = await agent(
   `You are the Database reviewer. You did not write this migration; review it with fresh eyes.\n\n` +
   `Project: ${projectPath}\nTask: "${taskText}"\n` +
   EVIDENCE_GUARD + projectMapBrief +
-  `Migration file: find ${tableDesign.migrationFile} in the project's migrations folder and read it.\n\n` +
+  `Migration file: read ${tableDesign.migrationFile} (a path relative to ${projectPath}).\n\n` +
   `Requirements spec:\n${spec}\n\n` +
   CHECKLIST + `\n` +
   `1. Check the migration against every checklist item and the spec's Decisions.\n` +

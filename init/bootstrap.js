@@ -81,15 +81,6 @@ CREATE TABLE IF NOT EXISTS decisions (
   rationale   TEXT,
   created_at  INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS patterns (
-  id           TEXT PRIMARY KEY,
-  name         TEXT NOT NULL UNIQUE,
-  description  TEXT NOT NULL,
-  code_snippet TEXT,
-  tags         TEXT NOT NULL DEFAULT '[]',
-  use_count    INTEGER DEFAULT 0,
-  last_used    INTEGER
-);
 CREATE TABLE IF NOT EXISTS session_log (
   id          TEXT PRIMARY KEY,
   session_id  TEXT NOT NULL,
@@ -99,46 +90,9 @@ CREATE TABLE IF NOT EXISTS session_log (
   duration_ms INTEGER,
   created_at  INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS contracts (
-  id             TEXT PRIMARY KEY,
-  session_id     TEXT NOT NULL,
-  contract_name  TEXT NOT NULL,
-  version        TEXT NOT NULL,
-  schema_json    TEXT NOT NULL,
-  is_current     INTEGER DEFAULT 1,
-  created_at     INTEGER NOT NULL
-);
 CREATE INDEX IF NOT EXISTS idx_decisions_topic     ON decisions(topic);
 CREATE INDEX IF NOT EXISTS idx_decisions_session   ON decisions(session_id);
 CREATE INDEX IF NOT EXISTS idx_session_log_session ON session_log(session_id);
-`;
-
-const CALL_TABLES = `
-CREATE TABLE IF NOT EXISTS call_logs (
-  id            TEXT PRIMARY KEY,
-  session_id    TEXT NOT NULL,
-  direction     TEXT NOT NULL,
-  provider      TEXT NOT NULL,
-  phone_number  TEXT NOT NULL,
-  status        TEXT NOT NULL,
-  duration_ms   INTEGER,
-  recording_url TEXT,
-  transcript    TEXT,
-  created_at    INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS campaigns (
-  id              TEXT PRIMARY KEY,
-  session_id      TEXT NOT NULL,
-  name            TEXT NOT NULL,
-  direction       TEXT NOT NULL,
-  provider        TEXT NOT NULL,
-  script_template TEXT,
-  status          TEXT NOT NULL DEFAULT 'draft',
-  created_at      INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_call_logs_session   ON call_logs(session_id);
-CREATE INDEX IF NOT EXISTS idx_call_logs_direction ON call_logs(direction);
-CREATE INDEX IF NOT EXISTS idx_campaigns_session   ON campaigns(session_id);
 `;
 
 const MIGRATION_TABLE = `
@@ -200,7 +154,6 @@ AGENT_NAMES.forEach(name => {
   const db = new Database(dbPath);
   db.exec(COMMON_SCHEMA);
   if (name === 'database') db.exec(MIGRATION_TABLE);
-  if (name === 'calls')    db.exec(CALL_TABLES);
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all().map(r => r.name);
   db.close();
   log.ok(`agents/${name}/knowledge.db — [${tables.join(', ')}]`);
@@ -862,6 +815,15 @@ Object.entries(CONTRACTS).forEach(([name, schema]) => {
   );
   log.ok(`shared/contracts/${name}.schema.json`);
 });
+
+// The registry of the schemas above (agent, contract, version, file), so the pipeline and verify can see which exist.
+const registry = new Database(path.join(AGENTS_DIR, 'shared', 'orchestrator.db'));
+const register = registry.prepare('INSERT OR REPLACE INTO contracts_registry (id, agent_name, contract_name, version, schema_path, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+registry.transaction(() => {
+  Object.keys(CONTRACTS).forEach((name) => register.run(name + '@1', name, name, '1', 'shared/contracts/' + name + '.schema.json', Date.now()));
+})();
+registry.close();
+log.ok('contracts_registry: ' + Object.keys(CONTRACTS).length + ' contract(s) registered');
 
 console.log('');
 log.ok('Bootstrap complete. Run: node init/seed-vaults.js');

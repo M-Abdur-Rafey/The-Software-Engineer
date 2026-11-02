@@ -43,7 +43,10 @@ function git(project, args) {
 const norm = (p) => p.replace(/\\/g, '/').replace(/^\.\//, '');
 
 // Files to scan: the given paths (directories expanded to their tracked + untracked files) or the staged files.
-function collectFiles(project, paths, notFound = []) {
+function collectFiles(project, paths, notFound = [], commit = null) {
+  if (commit) {
+    return (git(project, ['show', '--name-only', '--diff-filter=ACMR', '--format=', commit]) || '').split('\n').filter(Boolean).map(norm);
+  }
   if (!paths.length) {
     return (git(project, ['diff', '--staged', '--name-only', '--diff-filter=ACMR']) || '').split('\n').filter(Boolean).map(norm);
   }
@@ -63,8 +66,22 @@ function collectFiles(project, paths, notFound = []) {
   return [...out];
 }
 
+// '+' lines of a zero-context diff, with their line numbers in the new file.
+function parseAdded(diff) {
+  const lines = [];
+  let n = 0;
+  for (const l of diff.split('\n')) {
+    const h = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(l);
+    if (h) { n = Number(h[1]); continue; }
+    if (l.startsWith('+') && !l.startsWith('+++')) lines.push({ line: l.slice(1), n: n++ });
+  }
+  return lines;
+}
+
 // Lines this change adds to a file: all of it when new/untracked, otherwise '+' lines of the diff vs HEAD.
-function addedLines(project, file) {
+// With a commit: the lines that commit added, read from git itself (the working tree is not consulted).
+function addedLines(project, file, commit = null) {
+  if (commit) return parseAdded(git(project, ['show', '--format=', '-U0', commit, '--', file]) || '');
   const tracked = git(project, ['ls-files', '--error-unmatch', '--', file]) !== null && git(project, ['cat-file', '-e', `HEAD:${file}`]) !== null;
   let text;
   try { text = fs.readFileSync(path.join(project, file), 'utf8'); } catch { return []; }
@@ -80,9 +97,11 @@ function addedLines(project, file) {
   return lines;
 }
 
-function scan(project, paths) {
+function scan(project, paths, opts = {}) {
+  const commit = opts.commit || null;
+  const before = commit ? `${commit}^` : 'HEAD';   // where a file must already exist to not be new
   const notFound = [];
-  const files = collectFiles(project, paths, notFound);
+  const files = collectFiles(project, paths, notFound, commit);
   const hits = {};
   const add = (key, file, n, text) => { (hits[key] = hits[key] || []).push(`${file}:${n} ${text.trim().slice(0, 80)}`); };
   const newFiles = [];
@@ -91,8 +110,8 @@ function scan(project, paths) {
     const isTest = TEST_PATH.test(file);
     const isExampleEnv = EXAMPLE_ENV.test(file);
     if (ENV_FILE.test(file) && !isExampleEnv) add('env', file, 0, 'environment file staged');
-    const lines = addedLines(project, file);
-    if (lines.length && git(project, ['cat-file', '-e', `HEAD:${file}`]) === null) newFiles.push({ file, lines });
+    const lines = addedLines(project, file, commit);
+    if (lines.length && git(project, ['cat-file', '-e', `${before}:${file}`]) === null) newFiles.push({ file, lines });
 
     for (const { line, n } of lines) {
       // In code a hardcoded secret is a quoted string literal; an unquoted value there is a type annotation
@@ -125,8 +144,8 @@ function scan(project, paths) {
   const frontendChanged = files.some(f => FRONTEND_FILE.test(f) && !TEST_PATH.test(f) && !DOC_FILE.test(f));
   let cspFound = true;
   if (frontendChanged) {
-    const grep = git(project, ['grep', '-I', '-l', '-i', '-E', 'content-security-policy|contentSecurityPolicy|helmet\\(', '--', '.', ':!*.md']);
-    const untracked = (git(project, ['ls-files', '-o', '--exclude-standard']) || '').split('\n').filter(Boolean)
+    const grep = git(project, ['grep', '-I', '-l', '-i', '-E', 'content-security-policy|contentSecurityPolicy|helmet\\(', ...(commit ? [commit] : []), '--', '.', ':!*.md']);
+    const untracked = commit ? false : (git(project, ['ls-files', '-o', '--exclude-standard']) || '').split('\n').filter(Boolean)
       .some(f => { try { return /content-security-policy|contentSecurityPolicy|helmet\(/i.test(fs.readFileSync(path.join(project, f), 'utf8')); } catch { return false; } });
     cspFound = Boolean(grep) || untracked;
   }
@@ -158,12 +177,21 @@ function scan(project, paths) {
 }
 
 if (require.main === module) {
-  const [project, ...paths] = process.argv.slice(2);
-  if (!project) {
-    console.error(JSON.stringify({ error: 'usage: scan.js <project> [path ...]' }));
+  // scan.js <project> [path ...] [--commit <sha>] [--out <file>]
+  //   --commit  scan what that commit added (an independent check after the fact); --out  also write the JSON to a file,
+  //   so whoever relayed the result can be checked against the file the script itself wrote.
+  const args = process.argv.slice(2);
+  const take = (flag) => { const i = args.indexOf(flag); if (i < 0) return null; const v = args[i + 1]; args.splice(i, 2); return v || null; };
+  const commit = take('--commit');
+  const out = take('--out');
+  const [project, ...paths] = args;
+  if (!project || (commit && !/^([0-9a-f]{4,40}|HEAD)$/i.test(commit))) {
+    console.error(JSON.stringify({ error: 'usage: scan.js <project> [path ...] [--commit <sha>] [--out <file>]' }));
     process.exit(1);
   }
-  console.log(JSON.stringify(scan(path.resolve(project), paths)));
+  const result = scan(path.resolve(project), paths, { commit });
+  if (out) { fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true }); fs.writeFileSync(out, JSON.stringify(result)); }
+  console.log(JSON.stringify(result));
 }
 
 module.exports = { scan, TEST_PATH };

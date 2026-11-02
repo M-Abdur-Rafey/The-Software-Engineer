@@ -3,7 +3,7 @@ export const meta = {
   description: 'Frontend domain agent — a designer sets the vision, one author builds components and wiring, one fresh reviewer checks cohesion, contrast and security',
   phases: [
     { title: 'Design', detail: 'designer: art direction (the masters\' eye) + UI design: pages, layout, states' },
-    { title: '3D Design', detail: '3d-designer architects scene, physics, shaders, scroll animation (3D tasks only)', model: 'claude-opus-4-8' },
+    { title: '3D Design', detail: '3d-designer architects scene, physics, shaders, scroll animation (3D tasks only)', model: 'opus' },
     { title: 'Author', detail: 'Components, API wiring and state, to the layout / positioning / contrast checklists' },
     { title: 'Review', detail: 'Fresh reviewer: cohesion (atelier), contrast and security; fixes what it safely can' },
   ],
@@ -42,6 +42,7 @@ function uniquePaths(list) {
     if (!raw) continue
     let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
     if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (p.split('/').includes('..') || p.startsWith('/') || /^[A-Za-z]:/.test(p)) continue   // outside the project
     if (!seen.has(p)) seen.set(p, p)
   }
   return [...seen.values()]
@@ -102,7 +103,7 @@ const styleNote = styleSlug
 
 // Detect if task requires 3D design work
 const use3D = (designPreferences && designPreferences.use3D === true)
-  || /\b(3d|three\.?js|threejs|webgl|glsl|shader|immersive|particle[s]?|scroll.{0,8}anim|canvas.{0,8}anim|geometry|instanc|raycaster|three.dimension|3-d\b)/i.test(taskText)
+  || /(^|[^a-z0-9])(3d|3-d|three\.?js|webgl|glsl|shader|immersive|instancedmesh|raycaster|three.dimension)|scroll.{0,8}anim|canvas.{0,8}anim|particle.{0,12}(effect|system|field)/i.test(taskText)
 
 const physicsHint      = designPreferences && designPreferences.usePhysics      != null ? `User requested physics: ${designPreferences.usePhysics ? 'YES — include rigid-body physics' : 'NO — skip physics'}.` : ''
 const scrollAnimHint   = designPreferences && designPreferences.useScrollAnimation != null ? `User requested scroll animation: ${designPreferences.useScrollAnimation ? 'YES — include scroll-driven camera path' : 'NO — skip scroll animation'}.` : ''
@@ -333,7 +334,7 @@ if (use3D) {
     {
       label: '3d-designer',
       phase: '3D Design',
-      model: 'claude-opus-4-8',
+      model: 'opus',
       schema: {
         type: 'object',
         required: ['library', 'physicsEngine', 'scrollLibrary', 'sceneConfig', 'objects', 'animations', 'shaders', 'mobileStrategy', 'performanceNotes', 'codeFiles', 'installPackages'],
@@ -356,6 +357,13 @@ if (use3D) {
   log(`3D: ${threeDDesign.library}, physics=${threeDDesign.physicsEngine}, scroll=${threeDDesign.scrollLibrary}, ${threeDDesign.objects.length} obj, ${threeDDesign.shaders.length} shader(s)`)
 }
 
+// The 3D designer's package list is model output and ends up in an npm command: only plain registry names are kept.
+const NPM_NAME = new RegExp('^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(@[A-Za-z0-9._^~<>=*-]+)?$')
+const installPackages = threeDDesign ? (threeDDesign.installPackages || []).map(String).filter(p => NPM_NAME.test(p)) : []
+if (threeDDesign && installPackages.length !== (threeDDesign.installPackages || []).length) {
+  log(`ignored package name(s) that are not plain registry names: ${(threeDDesign.installPackages || []).filter(p => !NPM_NAME.test(String(p))).join(', ').slice(0, 120)}`)
+}
+
 // Build 3D context string to pass into component-creator
 const threeDContext = threeDDesign
   ? `\n\n3D SCENE DESIGN (from 3d-designer — implement these exactly):\n` +
@@ -367,7 +375,7 @@ const threeDContext = threeDDesign
     `Files to create: ${threeDDesign.codeFiles.join(', ')}\n` +
     `Code recipes to follow (read the ones that apply): ${VAULT}/3d/ - three-js-scene-setup.md, performance-rules.md, mobile-responsive.md, ` +
     `physics-engines.md, scroll-animation.md, shader-cookbook.md, math-reference.md\n` +
-    `Install before coding: npm install ${threeDDesign.installPackages.join(' ')}\n` +
+    (installPackages.length ? `Install before coding: npm install --ignore-scripts ${installPackages.join(' ')}\n` : '') +
     `Performance rules (mandatory): ${threeDDesign.performanceNotes.join('; ')}`
   : ''
 
@@ -468,7 +476,7 @@ const review = await agent(
         refinementsApplied: { type: 'array', items: { type: 'object', required: ['change', 'rule'], properties: { file: { type: 'string' }, change: { type: 'string' }, rule: { type: 'string', enum: RULES } } } },
         recommendations:    { type: 'array', items: { type: 'string' } },
         verdict:            { type: 'string' },
-        securityFlags:      { type: 'array' },
+        securityFlags:      { type: 'array', items: { type: 'object', required: ['severity', 'message'], properties: { severity: { type: 'string', enum: ['error', 'warning', 'info'] }, rule: { type: 'string' }, location: { type: 'string' }, message: { type: 'string' } } } },
         filesFixed:         { type: 'array', items: { type: 'string' } },
         mapNotes: { type: 'array', items: { type: 'object', required: ['section', 'note'], properties: { section: { type: 'string', enum: ['Layout', 'Modules', 'Conventions', 'Run'] }, note: { type: 'string' } } } },
       },

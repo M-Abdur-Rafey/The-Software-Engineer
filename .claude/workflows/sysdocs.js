@@ -18,6 +18,9 @@ export const meta = {
 // All file-format work goes through shared/lib/sysdocs.js so agents never hand-edit
 // frontmatter or question entries. Mechanical command runs use haiku.
 const AGENTS_DIR  = (args && args.agentsDir)   || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 const projectPath = (args && args.projectPath) || ''
 const sessionId   = (args && args.sessionId)   || 'sysdocs'
 const mode        = (args && args.mode)        || 'sync'
@@ -115,7 +118,7 @@ function writerPrompt(mods, source) {
 ` +
     `2. For each flow (${(mod.flows || []).join(', ') || 'derive 1-3 main flows'}): run
 ` +
-    `   ${CLI} add-flow "${projectPath}" ${mod.name} <flow-name>
+    `   ${CLI} add-flow ${shq(projectPath)} ${mod.name} <flow-name>
 ` +
     `   then fill ${DOCS}/modules/${mod.name}/flows/<flow-name>.md: plain-language summary, numbered steps user -> frontend -> backend -> DB, ` +
     `a Mermaid sequenceDiagram, example data at each step, failure cases.
@@ -164,7 +167,7 @@ if (mode === 'plan' || mode === 'bootstrap') {
   log(`${summary.modules.length} module(s) planned: ${summary.modules.map(m => `${m.name}(L${m.layer})`).join(', ')}`)
 
   const applied = await runCli('apply-plan', [
-    `${CLI} apply-plan "${projectPath}" "@${PLAN_FILE}"${mode === 'bootstrap' ? ' --synced' : ''}`,
+    `${CLI} apply-plan ${shq(projectPath)} "@${PLAN_FILE}"${mode === 'bootstrap' ? ' --synced' : ''}`,
   ])
   if (!applied.ok) log(`apply-plan reported problems: ${(applied.errors || []).join(' | ')}`)
 
@@ -178,9 +181,9 @@ if (mode === 'plan' || mode === 'bootstrap') {
 
   phase('Index')
   const finalCheck = await runCli('index', [
-    `${CLI} index "${projectPath}"`,
+    `${CLI} index ${shq(projectPath)}`,
     `node -e "require('fs').rmSync(process.argv[1], { force: true })" "${PLAN_FILE}"`,
-    `${CLI} questions "${projectPath}"`,
+    `${CLI} questions ${shq(projectPath)}`,
   ])
 
   let open = 0
@@ -207,7 +210,7 @@ if (mode === 'sync') {
     },
   }
   const drift = await agent(
-    `Run: ${CLI} drift "${projectPath}"\n\n` +
+    `Run: ${CLI} drift ${shq(projectPath)}\n\n` +
     `If it fails because docs/system/modules does not exist, return { initialized: false, drifted: [] }.\n` +
     `Otherwise it prints { modules: [{module, state, syncedAt, changed}], unownedChanged }. Return { initialized: true, ` +
     `drifted: <only entries with state "drifted">, unownedChanged }.`,
@@ -228,19 +231,19 @@ if (mode === 'sync') {
   const synced = await pipeline(drift.drifted, d => agent(
     `You are the doc-sync agent for module "${d.module}". Code changed since the doc was last verified (commit ${d.syncedAt}), ` +
     `probably by hand.\n\nChanged files: ${d.changed.join(', ')}\n` +
-    `See the changes: git -C "${projectPath}" diff ${d.syncedAt} -- ${d.changed.map(f => `"${f}"`).join(' ')} (plus uncommitted changes)\n` +
+    `See the changes: git -C ${shq(projectPath)} diff ${/^[0-9a-f]{7,40}$/i.test(String(d.syncedAt)) ? d.syncedAt : 'HEAD'} -- ${d.changed.map(f => shq(f)).join(' ')} (plus uncommitted changes)\n` +
     `Doc: ${DOCS}/modules/${d.module}/README.md, its flows/ and questions.md.\n\n` +
     `1. If the change is consistent with the doc's recorded decisions (answered questions, Decisions section): update the README ` +
     `body/flows to match the code. If provides/paths/dependsOn changed, write a JSON file and run ` +
-    `${CLI} set-meta "${projectPath}" ${d.module} @<file> with keys provides/paths/dependsOn.\n` +
+    `${CLI} set-meta ${shq(projectPath)} ${d.module} @<file> with keys provides/paths/dependsOn.\n` +
     `2. If the change CONTRADICTS a recorded decision, do not silently update: write the question(s) to a JSON file and run ` +
-    `${CLI} ask "${projectPath}" ${d.module} @<file>. ${QUESTION_RULES} The chainReaction must name which modules are affected ` +
+    `${CLI} ask ${shq(projectPath)} ${d.module} @<file>. ${QUESTION_RULES} The chainReaction must name which modules are affected ` +
     `(see ${DOCS}/dependencies.md).\n` +
-    `3. If nothing was contradictory, run: ${CLI} synced "${projectPath}" ${d.module}\n\n` +
+    `3. If nothing was contradictory, run: ${CLI} synced ${shq(projectPath)} ${d.module}\n\n` +
     `Return { module, updated, questionsAdded: [question ids] }.`,
     { label: `sync:${d.module}`, phase: 'Sync', schema: SYNC_SCHEMA }
   ))
-  await runCli('index', [`${CLI} index "${projectPath}"`])
+  await runCli('index', [`${CLI} index ${shq(projectPath)}`])
   const results = synced.filter(Boolean)
   return {
     mode,
@@ -270,8 +273,8 @@ if (mode === 'update') {
   const changed = await agent(
     (reported.length
       ? `1. The changed files are: ${reported.map(f => `"${f}"`).join(' ')} (ignore anything under docs/system/).\n`
-      : `1. Run: git -C "${projectPath}" status --porcelain -uall   and collect the changed file paths, ignoring anything under docs/system/.\n`) +
-    `2. Run: ${CLI} impact "${projectPath}" <each changed path, quoted>\n` +
+      : `1. Run: git -C ${shq(projectPath)} status --porcelain -uall   and collect the changed file paths, ignoring anything under docs/system/.\n`) +
+    `2. Run: ${CLI} impact ${shq(projectPath)} <each changed path, quoted>\n` +
     `   It prints { targets: [{ target, providers: [module names] }], unowned: [...] }.\n` +
     `Return { byModule: [{ module, files }] grouping the changed files by provider module, unowned: [...] }.`,
     { label: 'changed-files', model: 'haiku', schema: CHANGED_SCHEMA }
@@ -287,17 +290,17 @@ if (mode === 'update') {
     `\nMake ${DOCS}/modules/${name}/ match the code as it is NOW:\n` +
     `1. Frontmatter: write a JSON file with the real paths (files/dirs this module owns), provides (real routes, exported ` +
     `functions, tables it owns) and dependsOn (what it really uses from other modules), then run ` +
-    `${CLI} set-meta "${projectPath}" ${name} @<file>. ${TOUCHPOINT_RULES}\n` +
+    `${CLI} set-meta ${shq(projectPath)} ${name} @<file>. ${TOUCHPOINT_RULES}\n` +
     `2. README body (not the frontmatter): APIs with real request/response examples, Data with real stored formats and example ` +
     `records, Decisions (one line per answered question). Replace any remaining _italic_ placeholders.\n` +
-    `3. Flows: update or add files under flows/ (use ${CLI} add-flow "${projectPath}" ${name} <flow> for new ones) so steps and ` +
+    `3. Flows: update or add files under flows/ (use ${CLI} add-flow ${shq(projectPath)} ${name} <flow> for new ones) so steps and ` +
     `Mermaid diagrams match the real code path.\n` +
     `Only edit files under ${DOCS}/modules/${name}/. ASCII only. Return "done".`,
     { label: `update:${name}`, phase: 'Update' }
   ))
 
   phase('Index')
-  const idx = await runCli('index', [`${CLI} index "${projectPath}"`])
+  const idx = await runCli('index', [`${CLI} index ${shq(projectPath)}`])
   return { mode, modules: names, unowned: changed.unowned, errors: idx.errors || [] }
 }
 

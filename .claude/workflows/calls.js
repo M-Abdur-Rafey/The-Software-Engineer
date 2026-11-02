@@ -40,6 +40,7 @@ function uniquePaths(list) {
     if (!raw) continue
     let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
     if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (p.split('/').includes('..') || p.startsWith('/') || /^[A-Za-z]:/.test(p)) continue   // outside the project
     if (!seen.has(p)) seen.set(p, p)
   }
   return [...seen.values()]
@@ -222,7 +223,7 @@ const compliance = await agent(
           items: {
             type: 'object',
             required: ['rule', 'severity', 'passed'],
-            properties: { rule: { type: 'string' }, severity: { type: 'string' }, passed: { type: 'boolean' }, fixed: { type: 'boolean' }, detail: { type: 'string' } },
+            properties: { rule: { type: 'string' }, severity: { type: 'string', enum: ['blocking', 'warning', 'info'] }, passed: { type: 'boolean' }, fixed: { type: 'boolean' }, detail: { type: 'string' } },
           },
         },
         passed:     { type: 'boolean' },
@@ -233,7 +234,10 @@ const compliance = await agent(
 )
 
 // Pass/fail comes from the checks themselves, not the model's summary flag.
-const blockingFailures = compliance.checks.filter(c => !c.passed && c.severity === 'blocking')
+// Only an explicit warning or info is allowed to fail without blocking, and a review that checked nothing is not a pass.
+const blockingFailures = compliance.checks.length === 0
+  ? [{ rule: 'compliance-review', severity: 'blocking', passed: false, detail: 'the compliance reviewer returned no checks, so nothing was verified' }]
+  : compliance.checks.filter(c => !c.passed && c.severity !== 'warning' && c.severity !== 'info')
 compliance.passed = blockingFailures.length === 0
 log(`Compliance: ${compliance.checks.length} checks, ${blockingFailures.length} blocking failure(s), passed=${compliance.passed}`)
 

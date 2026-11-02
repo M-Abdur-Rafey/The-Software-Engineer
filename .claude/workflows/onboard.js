@@ -15,6 +15,9 @@ export const meta = {
 // (shared/lib/projectmap.js, agents/orchestrator/vault/projects/<name>/map.md), the per-domain
 // project notes, the decisions and the onboarded mark.
 const AGENTS_DIR  = (args && args.agentsDir)    || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 const projectPath = (args && args.projectPath)  || ''
 const sessionId   = (args && args.sessionId)    || 'onboard'
 const projectName = projectPath.replace(/[\\/]+$/, '').split(/[/\\]/).pop() || 'project'
@@ -38,7 +41,7 @@ const discovery = await agent(
   `Project path: ${projectPath}\n\n` +
   `Read (when they exist): package.json (root and workspace packages), the lockfile name, tsconfig.json, .env.example / .env.sample ` +
   `(variable NAMES only, never values), vite/webpack/next/tailwind config, ESLint/Prettier config, README.md. List the top-level ` +
-  `directories and open a few source files to confirm the style. Run: git -C "${projectPath}" log --oneline -20\n\n` +
+  `directories and open a few source files to confirm the style. Run: git -C ${shq(projectPath)} log --oneline -20\n\n` +
   `Determine:\n` +
   `1. techStack: runtime, backendFramework, frontendFramework, database, orm, stateManagement, styling, testing, auth, monorepo, deployment. ` +
   `Use null for a layer the project does not have.\n` +
@@ -214,7 +217,7 @@ const securityNotes = [
 ].filter(Boolean)
 const style = conventions.codingStyle || {}
 // Agents sometimes answer "2 spaces" or "tabs" where a number was asked for.
-const indentText = /^d+$/.test(String(style.indent).trim()) ? `${String(style.indent).trim()}-space indent`
+const indentText = /^[0-9]+$/.test(String(style.indent).trim()) ? `${String(style.indent).trim()}-space indent`
   : style.indent ? `indent: ${style.indent}` : 'indent: ?'
 const cmd = discovery.commands || {}
 

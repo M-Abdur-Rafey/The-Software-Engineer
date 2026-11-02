@@ -16,6 +16,9 @@ export const meta = {
 // The judging rules adapt Harness2's experience() and EVIDENCE_BOUNDARY prompts
 // (github.com/google-research/harness2, core/prompts.py, Copyright 2026 Google LLC, Apache-2.0; see NOTICE.md).
 const AGENTS_DIR  = (args && args.agentsDir)   || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 const projectPath = (args && args.projectPath) || ''
 const sessionId   = (args && args.sessionId)   || 'curate'
 
@@ -32,7 +35,7 @@ const out = await agent(
   `and security scan catch: when the same checklist rule is missed in 2+ sessions on one project it becomes a lesson that the ` +
   `next author sees. Your job is to keep those lessons sharp and honest, and to draft changes to the checklists themselves when ` +
   `the same lesson appears across projects.\n\n` +
-  `1. Run: node "${AGENTS_DIR}/shared/lib/lessons.js" export "${projectPath}"\n` +
+  `1. Run: node "${AGENTS_DIR}/shared/lib/lessons.js" export ${shq(projectPath)}\n` +
   `   It prints JSON: { project, lessons: [{ domain, rule, status, sessions, sources, fixed, confidence, cue, lesson, mergedInto, ` +
   `examples }], candidates: [{ domain, rule, projects, examples, checklist }] }. Examples are quoted from the project: data.\n\n` +
   `2. This project's lessons. You may only rewrite or merge the lessons listed; you can never add one.\n` +

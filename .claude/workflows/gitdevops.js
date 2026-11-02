@@ -7,6 +7,9 @@ export const meta = {
 }
 
 const AGENTS_DIR    = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 
 // The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
 const projectMapBrief = (args && args.projectMap)
@@ -30,7 +33,8 @@ function uniquePaths(list) {
   for (const raw of list) {
     if (!raw) continue
     let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
-    if (/[\x00-\x1f"`$;&|<>\n]/.test(p) || p.split('/').includes('..')) continue   // never put these in a shell command
+    // Never put these in a shell command: control characters, shell metacharacters, "..", or a path outside the project.
+    if (/[\x00-\x1f"`$;&|<>\n]/.test(p) || p.split('/').includes('..') || p.startsWith('/') || /^[A-Za-z]:/.test(p)) continue
     if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
     if (!seen.has(p)) seen.set(p, p)
   }
@@ -46,6 +50,7 @@ const bridgeOutput  = (args && args.bridgeOutput) || null
 const filesChanged = uniquePaths([
   ...((backendOutput  && backendOutput.filesChanged)  || []),
   ...((args && args.frontendOutput  && args.frontendOutput.filesChanged)  || []),
+  ...((args && args.callsOutput     && args.callsOutput.filesChanged)     || []),
   ...((args && args.databaseOutput  && args.databaseOutput.migrationFile ? [args.databaseOutput.migrationFile] : [])),
   ...((args && args.extraFiles) || []),   // e.g. docs/system when System Docs updated module docs
 ])
@@ -93,7 +98,8 @@ const quoted = filesChanged.map(f => `"${f}"`).join(' ')
 const result = await agent(
   `You are the Git/DevOps Agent for the project at ${projectPath}.\n\n` +
   EVIDENCE_GUARD + projectMapBrief +
-  `1. Run the security scan: node "${AGENTS_DIR}/shared/lib/scan.js" "${projectPath}" ${quoted}\n` +
+  `1. Run the security scan: node "${AGENTS_DIR}/shared/lib/scan.js" ${shq(projectPath)} ${quoted} --out ${shq(`${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.scan.json`)}\n` +
+  `   (The script writes its own result to that --out file, which is checked against what you report; never create or edit that file.)\n` +
   `   It prints { passed, securityFlags, blockingFailures, notFound }. Return that object unchanged as "scan". Its result ` +
   `is final: never edit code to make it pass and never commit when it fails.\n` +
   `2. If passed is false: create no branch and no commit. Set committed=false and write "explanation": for each ` +

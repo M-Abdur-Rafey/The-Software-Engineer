@@ -384,6 +384,14 @@ It prints `{ ran, failed }`. Mention any failures briefly; they never undo the w
 
 It may also print `contractIssues`: a domain's output that does not match its schema in `shared/contracts` (`[{ name, valid: false, errors }]`). That means the pipeline itself produced a malformed result for that domain, not that the user's code is wrong. Mention it in one line, naming the domain and the first error, and do not act on it.
 
+**Then check the result independently** (the scan and Verify results travel through agents; this compares them with what the scripts themselves wrote and re-scans the commit from git). Run, leaving out any flag whose value the result does not have:
+
+```bash
+node <install-path>/shared/lib/attest.js "<current working directory>" "<sessionId>" --commit "<commitHash>" --scan-passed <securityPassed> --verify-passed <verify.passed, only when verify.configured>
+```
+
+It prints `{ ok, problems }`. When `ok` is false, tell the user first and plainly, before the summary: which result could not be confirmed (for example "the scan was reported passed, but an independent scan of the commit found a hardcoded secret in src/x.js") and that the commit is on a feature branch they can inspect or delete. Never describe an unconfirmed result as clean. When `ok` is true say nothing about it.
+
 Then summarise clearly:
 
 - **Branch created:** `feat/...` (or why no branch was created)
@@ -393,6 +401,7 @@ Then summarise clearly:
 - **Security:** any issues found (or "all clear")
 - **Contract check:** whether frontend/backend/database were consistent
 - If anything was **blocked** (contract violation, security issue): explain in plain language what failed and what the user should do to fix it
+- **Simplification suggestions** (when `ponytailSuggestions` is not empty, i.e. the user chose "suggest only"): list each as file, what could be simpler, and why. Nothing was edited.
 - **System Docs** (when `systemDocs` is set): which module docs were updated and which other owners are affected
 - **Lessons:** run `node <install-path>/shared/lib/lessons.js pending "<current working directory>"`. When it prints `offer: true`, ask once: _"The reviewers, bridge and scan have caught N new problems on this project since the lessons were last curated. Curate them now? It costs one agent."_ Go to the Lessons section only if the user agrees.
 - **Short pipeline** (when `skipped` is not empty): which stages were skipped. If you asked for `small` but `size` came back `normal`, say why (more than one domain, not a fix/chore, or other modules depend on the change) and that everything ran
@@ -411,6 +420,8 @@ If `verify.configured` is false, say that the project's own checks did not run, 
 - the key lines of its output
 
 Then say what each fix round changed (`verify.rounds`). If `verify.testsWeakened` is not empty, a fixer edited or deleted existing tests, which the gate never accepts: name the files. The changes are still in the working tree. Suggest the next step: fix and re-run, or ask for a narrower task.
+
+**If the result has `status: "blocked"` with `reason: "domain_failed"`**, nothing was committed: one domain's own reviewer found a problem it could not fix. Name the domain (`domain`) and list `errors` in plain language: for the database, blocking schema violations; for the backend, an unfixed data-access (injection, pooling) or missed acceptance-criteria problem; for the frontend, a security error; for calls, a compliance failure. Say what the user can do (change the request, give the missing decision, or ask to retry), and that the files the domain wrote are still in the working tree uncommitted.
 
 **If the result has `status: "awaiting-answers"`**, nothing was coded: the project's System Docs need decisions first. Explain the `chainReaction` and the affected `consumers` in plain language, then follow the Answer section for every target module in `blocking`. When every target passes `gate`, re-run Step 5 with the same task.
 

@@ -10,6 +10,9 @@ export const meta = {
 // args: { sessionId, taskText, projectPath, agentsDir, backendOutput?, frontendOutput?,
 //         databaseOutput?, testingOutput?, callsOutput?, ponytailOutput?, bridgeOutput?, gitOutput? }
 const AGENTS_DIR     = (args && args.agentsDir)      || 'C:/Users/Hp/Desktop/Ideas/Agents'
+// A value placed in a shell command an agent runs: double-quoted, with the characters the shell still expands escaped.
+const SHQ_BS = String.fromCharCode(92)
+const shq = (s) => '"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
 
 // The shared project map (design/agent-consolidation.md, change 4): read it instead of exploring the repo.
 const projectMapBrief = (args && args.projectMap)
@@ -34,6 +37,7 @@ function uniquePaths(list) {
     if (!raw) continue
     let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
     if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (p.split('/').includes('..') || p.startsWith('/') || /^[A-Za-z]:/.test(p)) continue   // outside the project
     if (!seen.has(p)) seen.set(p, p)
   }
   return [...seen.values()]
@@ -79,7 +83,7 @@ const diagnosis = await agent(
   `First read: ${AGENTS_DIR}/agents/sre/CLAUDE.md, ` +
   `${AGENTS_DIR}/agents/sre/vault/runbooks/root-cause-analysis.md and ` +
   `${AGENTS_DIR}/agents/sre/vault/runbooks/iac-review.md\n\n` +
-  `Task: "${taskText}"\nProject: "${projectPath}"\n\n` +
+  `Task: "${taskText}"\nProject: ${shq(projectPath)}\n\n` +
   EVIDENCE_GUARD + projectMapBrief +
   `Session outcome metrics (already computed):\n${JSON.stringify(outcomeMetrics, null, 2)}\n\n` +
   `Session summary:\n` +
@@ -87,7 +91,7 @@ const diagnosis = await agent(
   `- bridge violations: ${JSON.stringify((bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.violations) || [])}\n` +
   `- errors reported by domain agents: ${JSON.stringify([backendOutput, frontendOutput, databaseOutput, testingOutput, callsOutput].filter(Boolean).flatMap(o => o.errors || []))}\n\n` +
   `Do the following (READ-ONLY — you never modify code):\n` +
-  `1. Health checks — in "${projectPath}", check what applies: dependency lockfile present, ` +
+  `1. Health checks — in ${shq(projectPath)}, check what applies: dependency lockfile present, ` +
   `tests/collection generated, migrations present when schema changed (changed files: ${JSON.stringify(filesChanged.slice(0, 40))}). ` +
   `Whether the code builds, type-checks, lints and passes its tests is NOT yours to judge: the Verify phase ran those commands ` +
   `and its result is below. Report it in healthChecks as it is, and diagnose any already-failing or flaky step.\n` +

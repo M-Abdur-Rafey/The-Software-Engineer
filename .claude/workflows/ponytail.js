@@ -38,11 +38,13 @@ function uniquePaths(list) {
     if (!raw) continue
     let p = String(raw).replace(/\\/g, '/').replace(/^\.\//, '')
     if (root && p.toLowerCase().startsWith(root.toLowerCase() + '/')) p = p.slice(root.length + 1)
+    if (p.split('/').includes('..') || p.startsWith('/') || /^[A-Za-z]:/.test(p)) continue   // outside the project
     if (!seen.has(p)) seen.set(p, p)
   }
   return [...seen.values()]
 }
-const mode           = (args && args.mode)           || 'full'   // lite | full | ultra
+const modeArg        = String((args && args.mode) || 'full').toLowerCase()
+const mode           = ['lite', 'full', 'ultra'].includes(modeArg) ? modeArg : 'full'   // lite | full | ultra
 const backendOutput  = (args && args.backendOutput)  || null
 const frontendOutput = (args && args.frontendOutput) || null
 const callsOutput    = (args && args.callsOutput)    || null
@@ -170,7 +172,9 @@ const result = await agent(
 
 const review = { simplifications: result.simplifications, skippedSuggestions: result.skippedSuggestions }
 // Lite mode never edits, whatever the agent reports.
-const applied = mode === 'lite' ? [] : (result.applied || [])
+// Only edits to files this pass reviewed count (a path outside the review set is not an applied simplification).
+const reviewedSet = new Set(filesChanged)
+const applied = mode === 'lite' ? [] : (result.applied || []).filter(a => a && reviewedSet.has(uniquePaths([a.file])[0]))
 const estimatedLinesRemoved = applied.reduce((sum, a) => sum + (a.linesRemoved || 0), 0)
 log(`Ponytail: ${review.simplifications.length} simplification(s), ${applied.length} applied (~${estimatedLinesRemoved} lines), ${review.skippedSuggestions.length} skipped (protected)`)
 
@@ -211,6 +215,7 @@ return {
   mode,
   filesReviewed:      filesChanged,
   simplifications:    applied,
+  suggestions:        review.simplifications,   // what was found; in lite mode this is all the caller gets
   skippedSuggestions: review.skippedSuggestions,
   metrics: {
     filesReviewed:          filesChanged.length,

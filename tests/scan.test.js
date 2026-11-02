@@ -181,6 +181,25 @@ try {
     assert.strictEqual(check(scan(d, ['src/ok.js']), 'No hardcoded secrets').passed, true);
   });
 
+  test('--commit scans what a commit added, independent of the working tree; --out writes the result', () => {
+    const d = repo();
+    const git = (...a) => execFileSync('git', ['-C', d, '-c', 'core.autocrlf=false', '-c', 'user.email=t@example.com', '-c', 'user.name=T', ...a], { stdio: 'ignore' });
+    write(d, { 'src/leak.js': '// leak\nconst API_KEY = "fake-0123456789abcdef";\n' });
+    git('add', '-A');
+    git('commit', '-q', '-m', 'adds a secret');
+    fs.writeFileSync(path.join(d, 'src/leak.js'), '// clean now\n');   // the working tree no longer shows it
+    assert.strictEqual(scan(d, ['src/leak.js']).passed, true);
+    const r = scan(d, [], { commit: 'HEAD' });
+    assert.strictEqual(r.passed, false);
+    assert.ok(r.blockingFailures.some(x => /secrets/.test(x)), JSON.stringify(r.blockingFailures));
+    const out = path.join(d, 'scan-out.json');
+    const cli = path.join(__dirname, '..', 'shared', 'lib', 'scan.js');
+    const printed = JSON.parse(execFileSync(process.execPath, [cli, d, '--commit', 'HEAD', '--out', out], { encoding: 'utf8' }));
+    assert.strictEqual(printed.passed, false);
+    assert.strictEqual(JSON.parse(fs.readFileSync(out, 'utf8')).passed, false);
+    assert.throws(() => execFileSync(process.execPath, [cli, d, '--commit', 'x; rm -rf /'], { stdio: 'pipe' }));
+  });
+
   console.log(`\nscan: ${passed} passed`);
 } catch (err) {
   console.error(`\nFAILED after ${passed} passed:\n${err.stack}`);

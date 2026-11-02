@@ -6,6 +6,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { execFileSync } from 'child_process'
+import { createRequire } from 'module'
 import { orchestrate } from '../mcp/lib/orchestrator.mjs'
 
 let passed = 0
@@ -42,7 +43,7 @@ try {
     assert.strictEqual(r.applied, true)
     assert.deepStrictEqual(r.filesWritten, ['src/a.js'])
     assert.strictEqual(r.securityScan.passed, true)
-    assert.ok(r.notRun.includes('mcpbridge') && r.notRun.includes('gitdevops'))
+    assert.ok(r.notRun.includes('mcpbridge') && r.notRun.some((x) => /git commit/.test(x)) && r.notRun.some((x) => /^verify/.test(x)))
     assert.ok(fs.existsSync(path.join(dir, 'src', 'a.js')))
   })
 
@@ -65,6 +66,36 @@ try {
     dirs.push(dir)
     await assert.rejects(orchestrate({ task: 'x', projectPath: dir, apply: true, model: modelWith([{ path: 'a.js', content: '// a\n' }]) }), /git repository/)
     assert.deepStrictEqual(fs.readdirSync(dir), [])
+  })
+
+  await test('the project\'s own checks (when confirmed) block a change that newly fails them, and it is rolled back', async () => {
+    const require = createRequire(import.meta.url)
+    const verify = require('../shared/lib/verify.js')
+    const projectmap = require('../shared/lib/projectmap.js')
+    const dir = repo({ 'check.js': "process.exit(require('fs').existsSync('src/bad.js') ? 1 : 0)\n" })
+    try {
+      verify.set(dir, { confirmed: true, steps: [{ kind: 'test', run: 'node check.js' }] })
+      const bad = await orchestrate({ task: 'x', projectPath: dir, apply: true, model: modelWith([{ path: 'src/bad.js', content: '// bad\n' }]) })
+      assert.strictEqual(bad.applied, false)
+      assert.strictEqual(bad.blocked.reason, 'verify_failed')
+      assert.ok(!fs.existsSync(path.join(dir, 'src', 'bad.js')), 'rolled back')
+      const good = await orchestrate({ task: 'x', projectPath: dir, apply: true, model: modelWith([{ path: 'src/good.js', content: '// good\n' }]) })
+      assert.strictEqual(good.applied, true)
+      assert.strictEqual(good.verify.passed, true)
+    } finally {
+      fs.rmSync(projectmap.projectDir(dir), { recursive: true, force: true })   // the confirmed commands live in the install's vault
+    }
+  })
+
+  await test('commit=true commits exactly the written files on a new branch', async () => {
+    const dir = repo()
+    fs.writeFileSync(path.join(dir, 'unrelated.txt'), 'left alone')
+    const r = await orchestrate({ task: 'add a thing', projectPath: dir, apply: true, commit: true, model: modelWith([{ path: 'src/a.js', content: '// a\nmodule.exports = 1\n' }]) })
+    assert.ok(r.commit && r.commit.branch && /^feat\//.test(r.commit.branch), JSON.stringify(r.commit))
+    const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim()
+    assert.strictEqual(git('rev-parse', '--abbrev-ref', 'HEAD'), r.commit.branch)
+    assert.deepStrictEqual(git('show', '--name-only', '--format=', 'HEAD').split('\n'), ['src/a.js'])
+    assert.ok(git('status', '--porcelain').includes('unrelated.txt'), 'other files stay uncommitted')
   })
 
   await test('without apply nothing is written and no scan runs', async () => {
