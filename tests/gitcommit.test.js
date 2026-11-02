@@ -49,6 +49,62 @@ try {
     assert.ok(out(d, 'status', '--porcelain').includes('other.txt'));
   });
 
+  test('the commit is the user\'s: their identity is the author, and attribution lines an agent wrote are dropped', () => {
+    const d = repo();
+    write(d, 'src/a.js', '// a\nmodule.exports = 1\n');
+    const r = commitChange(d, ['src/a.js'], {
+      type: 'feat', slug: 'mine', session: 's7', message: 'feat: mine',
+      body: ['Adds a.', '', 'Co-Authored-By: Claude <noreply@anthropic.com>', 'Generated with Claude Code', 'Why: needed.'].join('\n'),
+    });
+    assert.strictEqual(r.committed, true, JSON.stringify(r));
+    assert.strictEqual(r.author, 'T <t@example.com>');
+    const msg = out(d, 'log', '-1', '--format=%B');
+    assert.ok(/Adds a[.]/.test(msg) && /Why: needed/.test(msg), msg);
+    assert.ok(!/co-authored|generated with|anthropic/i.test(msg), msg);
+    assert.strictEqual(out(d, 'log', '-1', '--format=%an <%ae>|%cn <%ce>'), 'T <t@example.com>|T <t@example.com>');
+  });
+
+  test('with no git identity configured nothing is committed and no identity is invented', () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'gitcommit-noid-'));
+    tmp.push(d);
+    const base = ['-C', d, '-c', 'user.name=Setup', '-c', 'user.email=setup@example.com'];
+    execFileSync('git', [...base, 'init', '-q']);
+    fs.writeFileSync(path.join(d, 'README.md'), '# app\n');
+    execFileSync('git', [...base, 'add', '-A']);
+    execFileSync('git', [...base, 'commit', '-q', '-m', 'base']);
+    write(d, 'src/a.js', '// a\nmodule.exports = 1\n');
+    const saved = { g: process.env.GIT_CONFIG_GLOBAL, s: process.env.GIT_CONFIG_NOSYSTEM, n: process.env.GIT_AUTHOR_NAME, e: process.env.GIT_AUTHOR_EMAIL };
+    const empty = path.join(d, 'empty.gitconfig');
+    fs.writeFileSync(empty, '');
+    process.env.GIT_CONFIG_GLOBAL = empty;
+    process.env.GIT_CONFIG_NOSYSTEM = '1';
+    delete process.env.GIT_AUTHOR_NAME;
+    delete process.env.GIT_AUTHOR_EMAIL;
+    try {
+      const r = commitChange(d, ['src/a.js'], { type: 'feat', slug: 'x', session: 's8', message: 'feat: x' });
+      assert.strictEqual(r.committed, false);
+      assert.ok(/user[.]name and user[.]email are not set/.test(r.error), JSON.stringify(r));
+      assert.strictEqual(out(d, 'rev-parse', '--abbrev-ref', 'HEAD') !== '', true);
+      assert.ok(!out(d, 'branch', '--list', 'feat/*'), 'no branch was created');
+    } finally {
+      for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.g], ['GIT_CONFIG_NOSYSTEM', saved.s], ['GIT_AUTHOR_NAME', saved.n], ['GIT_AUTHOR_EMAIL', saved.e]]) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
+  });
+
+  test('a subject without the conventional prefix gets the task type; one that has it is kept', () => {
+    const subject = (message, type = 'chore') => {
+      const d = repo();
+      write(d, 'src/a.js', '// a\nmodule.exports = 1\n');
+      return commitChange(d, ['src/a.js'], { type, slug: 'x', session: 's10', message }).message;
+    };
+    assert.strictEqual(subject('add shout helper to greet module'), 'chore: add shout helper to greet module');
+    assert.strictEqual(subject('feat(greet): add shout'), 'feat(greet): add shout');
+    assert.strictEqual(subject('fix!: drop old api', 'fix'), 'fix!: drop old api');
+    assert.strictEqual(subject(''), 'chore: x');
+  });
+
   test('files the user had already staged are not swept into the commit', () => {
     const d = repo();
     write(d, 'src/a.js', '// a\nmodule.exports = 1\n');
