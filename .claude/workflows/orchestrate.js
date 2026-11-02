@@ -54,6 +54,9 @@ const AGENTS_DIR      = (args && args.agentsDir) || 'C:/Users/Hp/Desktop/Ideas/A
 const SHQ_BS = String.fromCharCode(92)
 const SAFE_NAME = /^[a-z0-9][a-z0-9-]*$/
 const shq = (s) =>'"' + String(s).split(SHQ_BS).join(SHQ_BS + SHQ_BS).split('"').join(SHQ_BS + '"').split('$').join(SHQ_BS + '$').split('`').join(SHQ_BS + '`') + '"'
+// Where the sub-workflow scripts are. Normally the engine's own folder; a session opened in another project cannot read that
+// folder, so the skill stages a copy (shared/lib/stage-workflows.js) and passes it here.
+const WF_DIR          = (args && args.workflowsDir) || `${AGENTS_DIR}/.claude/workflows`
 const taskText        = (args && args.task)           || ''
 const projectPath     = (args && args.projectPath)    || ''
 
@@ -120,7 +123,7 @@ if (!isOnboardTask && projectPath) {
     log('First use on this project — running deep codebase scan before starting work...')
     log('This happens once per project. All future sessions skip this step.')
     const onboardOutput = collect(await workflow(
-      { scriptPath: `${AGENTS_DIR}/.claude/workflows/onboard.js` },
+      { scriptPath: `${WF_DIR}/onboard.js` },
       { sessionId, projectPath, agentsDir: AGENTS_DIR, deferPersist: true }
     ))
     if (onboardOutput && onboardOutput.projectMap) projectMap = onboardOutput.projectMap
@@ -200,7 +203,7 @@ let sreOutput      = null
 // manual edits, find which modules the task touches and who depends on them,
 // stop for answers if a target module's doc isn't approved, and hand every
 // domain agent a compact briefing so it doesn't break linked features.
-const SYSDOCS = { scriptPath: `${AGENTS_DIR}/.claude/workflows/sysdocs.js` }
+const SYSDOCS = { scriptPath: `${WF_DIR}/sysdocs.js` }
 const CLI = `node "${AGENTS_DIR}/shared/lib/sysdocs.js"`
 const DOCS = `${projectPath}/docs/system`
 let docs = null
@@ -380,7 +383,7 @@ if (small) log('small task: skipping requirements, ponytail and SRE (the task te
 if (!small) {
   phase('Requirements')
   requirementsOutput = collect(await workflow(
-    { scriptPath: `${AGENTS_DIR}/.claude/workflows/requirements.js` },
+    { scriptPath: `${WF_DIR}/requirements.js` },
     { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, clarifications, ...MAP }
   ))
   log(`requirements → ${requirementsOutput && requirementsOutput.status} (${requirementsOutput && requirementsOutput.userStories && requirementsOutput.userStories.length} stories, ${requirementsOutput && requirementsOutput.spec && requirementsOutput.spec.openQuestions && requirementsOutput.spec.openQuestions.length} open questions)`)
@@ -405,7 +408,7 @@ if (!verifyBaseline && projectPath) {
 if (classification.requiresDatabase) {
   phase('Database')
   databaseOutput = collect(await workflow(
-    { scriptPath: `${AGENTS_DIR}/.claude/workflows/database.js` },
+    { scriptPath: `${WF_DIR}/database.js` },
     { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, dbPreferences: clarifications.dbPreferences || null, ...MAP, ...lessonArgs('database') }
   ))
   log(`database → ${databaseOutput && databaseOutput.status}`)
@@ -416,7 +419,7 @@ if (classification.requiresDatabase) {
 if (classification.requiresBackend) {
   phase('Backend')
   backendOutput = collect(await workflow(
-    { scriptPath: `${AGENTS_DIR}/.claude/workflows/backend.js` },
+    { scriptPath: `${WF_DIR}/backend.js` },
     { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, databaseOutput, archPreferences: clarifications.archPreferences || null, ...MAP, ...lessonArgs('backend') }
   ))
   log(`backend → ${backendOutput && backendOutput.status}`)
@@ -431,14 +434,14 @@ phase('Frontend + Testing + Calls')
   // Frontend-only tasks (no backend change) still need the frontend agent; it copes with backendOutput = null.
   if (classification.requiresFrontend) {
     parallelTasks.push(() => workflow(
-      { scriptPath: `${AGENTS_DIR}/.claude/workflows/frontend.js` },
+      { scriptPath: `${WF_DIR}/frontend.js` },
       { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, designPreferences: clarifications.designPreferences || null, ...MAP, ...lessonArgs('frontend') }
     ))
   }
 
   if (backendOutput) {
     parallelTasks.push(() => workflow(
-      { scriptPath: `${AGENTS_DIR}/.claude/workflows/testing.js` },
+      { scriptPath: `${WF_DIR}/testing.js` },
       { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput,
         flowDirs: docs ? docs.targets.map(t => `${DOCS}/modules/${t}/flows`) : [], ...MAP }
     ))
@@ -446,7 +449,7 @@ phase('Frontend + Testing + Calls')
 
   if (classification.requiresCalls) {
     parallelTasks.push(() => workflow(
-      { scriptPath: `${AGENTS_DIR}/.claude/workflows/calls.js` },
+      { scriptPath: `${WF_DIR}/calls.js` },
       { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText: domainTask, projectPath, requirementsOutput, backendOutput, databaseOutput, callPreferences: clarifications.callPreferences || null, ...MAP, ...lessonArgs('calls') }
     ))
   }
@@ -470,7 +473,7 @@ phase('Frontend + Testing + Calls')
 if (!small && (backendOutput || frontendOutput || callsOutput || (databaseOutput && databaseOutput.migrationFile))) {
   phase('Ponytail')
   ponytailOutput = collect(await workflow(
-    { scriptPath: `${AGENTS_DIR}/.claude/workflows/ponytail.js` },
+    { scriptPath: `${WF_DIR}/ponytail.js` },
     {
       agentsDir: AGENTS_DIR,
       sessionId,
@@ -591,7 +594,7 @@ if (verifyOutput.configured && !verifyOutput.passed) {
 // ─── Phase: Bridge ────────────────────────────────────────────────────────────
 phase('Bridge')
 bridgeOutput = collect(await workflow(
-  { scriptPath: `${AGENTS_DIR}/.claude/workflows/mcpbridge.js` },
+  { scriptPath: `${WF_DIR}/mcpbridge.js` },
   { agentsDir: AGENTS_DIR, sessionId, deferPersist: true, startedAt, taskText, projectPath, backendOutput, frontendOutput, databaseOutput, callsOutput }
 ))
 const bridgePassed = bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.passed
@@ -626,7 +629,7 @@ if (docs) {
 phase('Git')
 const otherOwners = (docs && docs.impact.otherOwners) || []
 gitOutput = collect(await workflow(
-  { scriptPath: `${AGENTS_DIR}/.claude/workflows/gitdevops.js` },
+  { scriptPath: `${WF_DIR}/gitdevops.js` },
   {
     agentsDir: AGENTS_DIR,
     sessionId,
@@ -675,7 +678,7 @@ if (docs && gitOutput && gitOutput.status === 'completed') {
 if (!small) {
   phase('SRE')
   sreOutput = collect(await workflow(
-    { scriptPath: `${AGENTS_DIR}/.claude/workflows/sre.js` },
+    { scriptPath: `${WF_DIR}/sre.js` },
     {
       agentsDir: AGENTS_DIR,
       sessionId,

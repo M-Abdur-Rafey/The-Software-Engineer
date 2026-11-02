@@ -14,10 +14,10 @@ const CLI = path.join(__dirname, '..', 'bin', 'software-engineer.js');
 const ROOT = path.join(__dirname, '..');
 const tmp = [];
 let passed = 0;
-function test(name, fn) {
-  fn();
-  passed++;
-  console.log(`  ok  ${name}`);
+const queue = [];
+function test(name, fn) { queue.push([name, fn]); }
+async function runAll() {
+  for (const [name, fn] of queue) { await fn(); passed++; console.log(`  ok  ${name}`); }
 }
 
 const mk = (prefix) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); tmp.push(d); return d; };
@@ -39,6 +39,7 @@ function cli(home, args, cwd = home) {
 }
 const skillDir = (home) => path.join(home, '.claude', 'skills', 'software-engineer');
 
+(async () => {
 try {
   test('install puts the skill, its extra files and a marker in the global skills folder', () => {
     const home = mk('se-home-');
@@ -182,6 +183,23 @@ try {
     assert.strictEqual(JSON.parse(r.out).engine.installed, true);
   });
 
+  test('dashboard starts the live page on a local port, prints its address, and serves it', async () => {
+    const { spawn } = require('child_process');
+    const home = mk('se-home-');
+    const child = spawn(process.execPath, [CLI, 'dashboard', '--no-open', '--port', '0'], { cwd: home, env: { ...process.env, HOME: home, USERPROFILE: home } });
+    try {
+      const url = await new Promise((resolve, reject) => {
+        let out = '';
+        const timer = setTimeout(() => reject(new Error('no address printed: ' + out)), 15000);
+        child.stdout.on('data', (d) => { out += d; const m = /http:\/\/127\.0\.0\.1:\d+/.exec(out); if (m) { clearTimeout(timer); resolve(m[0]); } });
+        child.on('exit', (c) => reject(new Error(`exited with ${c}: ${out}`)));
+      });
+      const health = await (await fetch(url + '/api/health')).json();
+      assert.strictEqual(health.ok, true);
+      assert.ok((await (await fetch(url + '/')).text()).includes('Live Agents'));
+    } finally { child.kill(); }
+  });
+
   test('bad input: unknown command and unknown option exit 2, an option without its value too', () => {
     const home = mk('se-home-');
     assert.strictEqual(cli(home, ['bogus']).code, 2);
@@ -190,6 +208,7 @@ try {
     assert.strictEqual(cli(home, ['help']).code, 0);
   });
 
+  await runAll();
   console.log(`\ncli: ${passed} passed`);
 } catch (err) {
   console.error(`\nFAILED after ${passed} passed:\n${err.stack}`);
@@ -197,3 +216,4 @@ try {
 } finally {
   for (const d of tmp) fs.rmSync(d, { recursive: true, force: true });
 }
+})();
