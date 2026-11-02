@@ -69,6 +69,7 @@ const outcomeMetrics = {
   repeatMisses:           (args && args.repeatMisses) || 0,
   verifyPassed:           verifyOutput ? (verifyOutput.configured ? verifyOutput.passed : null) : null,
   verifyRuns:             (verifyOutput && verifyOutput.attempts) || 0,
+  testingRan:             !!(testingOutput && testingOutput.status === 'completed'),   // false: no collection, so coverage below is not a measurement
   testCoveragePercent:    (testingOutput && testingOutput.coverage && testingOutput.coverage.percentCovered) || 0,
   contractViolations:     (bridgeOutput && bridgeOutput.contractValidation && bridgeOutput.contractValidation.violations && bridgeOutput.contractValidation.violations.length) || 0,
   securityBlocks:         (gitOutput && gitOutput.blockedBy && gitOutput.blockedBy.length) || 0,

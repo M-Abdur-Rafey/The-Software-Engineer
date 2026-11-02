@@ -201,7 +201,7 @@ const schemaNote = [
   ]),
 ].join('\n')
 const persistOps = [
-  { db: ['--as', 'database', 'insert', 'database', 'migrations', JSON.stringify({ id: `${sessionId}-mig`, session_id: sessionId, filename: tableDesign.migrationFile, description: taskText.slice(0, 80), status: 'generated', created_at: (args && args.startedAt) || 0 })] },
+  { db: ['--as', 'database', 'insert', 'database', 'migrations', JSON.stringify({ id: `${sessionId}-mig`, session_id: sessionId, filename: tableDesign.migrationFile, description: taskText.slice(0, 80), status: blockingViolations.length ? 'blocked' : 'generated', created_at: (args && args.startedAt) || 0 })] },
   { write: `agents/database/vault/schemas/${tableDesign.tables.map(t => t.name).join('-')}.md`, content: schemaNote },
 ]
 await flushPersist(persistOps)

@@ -55,6 +55,8 @@ const filesChanged = uniquePaths([
   ...((args && args.extraFiles) || []),   // e.g. docs/system when System Docs updated module docs
 ])
 const commitNotes = (args && args.commitNotes) || ''
+// Set by orchestrate: the Verify phase ran, so the commit script must find its result file (and a pass) before committing.
+const requireVerify = !!(args && args.requireVerify)
 
 // Bookkeeping is returned as data (persistOps) and run by shared/lib/persist.js
 // (design/agent-consolidation.md): orchestrate defers it to the skill; a direct run uses one agent.
@@ -95,30 +97,34 @@ const branchName = `${taskType}/${taskSlug.slice(0, 30)}-${sessionId.slice(0, 8)
 phase('Scan + Commit')
 
 const quoted = filesChanged.map(f => `"${f}"`).join(' ')
+const scanOut = `${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.scan.json`
 const result = await agent(
   `You are the Git/DevOps Agent for the project at ${projectPath}.\n\n` +
   EVIDENCE_GUARD + projectMapBrief +
-  `1. Run the security scan: node "${AGENTS_DIR}/shared/lib/scan.js" ${shq(projectPath)} ${quoted} --out ${shq(`${AGENTS_DIR}/agents/orchestrator/vault/sessions/${sessionId}.scan.json`)}\n` +
-  `   (The script writes its own result to that --out file, which is checked against what you report; never create or edit that file.)\n` +
-  `   It prints { passed, securityFlags, blockingFailures, notFound }. Return that object unchanged as "scan". Its result ` +
-  `is final: never edit code to make it pass and never commit when it fails.\n` +
-  `2. If passed is false: create no branch and no commit. Set committed=false and write "explanation": for each ` +
-  `blocking failure, in plain language, what was found (file and line), why it blocks the commit, and how to fix it.\n` +
-  `3. If passed is true: in ${projectPath}, run git switch -c ${branchName} (never commit on main or master), git add ` +
-  `only these paths: ${quoted}, then commit. Commit format: read ${AGENTS_DIR}/shared/standards/commit-format.md and ` +
+  `The commit is made by a script that runs the 10-point security scan itself and creates the branch and the commit only if the scan ` +
+  `passes. There is no override: never run git switch, git add or git commit yourself, and never edit code to make the scan pass.\n\n` +
+  `1. Write the commit message. Read ${AGENTS_DIR}/shared/standards/commit-format.md and ` +
   `${AGENTS_DIR}/agents/gitdevops/vault/commit-format/examples.md (if missing: type(scope): subject, blank line, body). ` +
   `Type ${taskType}; scope from the task; subject max 50 chars, imperative, no trailing period.` +
   (commitNotes ? ` Append this section verbatim to the commit body:\n${commitNotes}\n` : '\n') +
   `   Task: "${taskText}"\n` +
-  `   Set committed=true, branchCreated, commitHash (git rev-parse HEAD), commitMessage, filesCommitted.\n\n` +
-  `Return { scan, committed, explanation?, branchCreated?, commitHash?, commitMessage?, filesCommitted? }.`,
+  `   Use only plain characters in the message (no double quotes, dollar signs, backticks or backslashes), because it goes on a command line.\n` +
+  `2. Run exactly this (the subject in --message; add --body "<body>" only if there is a body):\n` +
+  `   node "${AGENTS_DIR}/shared/lib/gitcommit.js" ${shq(projectPath)} --type ${taskType} --slug ${taskSlug} --session ${shq(sessionId)} --message "<subject>" --out ${shq(scanOut)}${requireVerify ? ` --require-verify ${shq(`${AGENTS_DIR}/agents/orchestrator/vault/sessions`)}` : ''} -- ${quoted}\n` +
+  `   (The script also writes the scan result to that --out file, which is checked against what you report; never create or edit that file.)\n` +
+  `3. It prints JSON: { committed: true, branch, hash, message, scan } after a commit; { committed: false, blocked, scan } when the scan ` +
+  `failed; or { committed: false, error } for anything else. Return it as: scan = its scan object unchanged (omit it if absent), committed, ` +
+  `branch, commitHash = hash, commitMessage = message, filesCommitted = the paths after the -- in your command.\n` +
+  `4. If committed is false, do nothing else: write "explanation": for each blocking failure, in plain language, what was found (file and ` +
+  `line), why it blocks the commit, and how to fix it; for an error, what it says.\n\n` +
+  `Return { scan?, committed, explanation?, branch?, commitHash?, commitMessage?, filesCommitted? }.`,
   {
     label: 'scan-and-commit',
     phase: 'Scan + Commit',
     model: 'haiku',
     schema: {
       type: 'object',
-      required: ['scan', 'committed'],
+      required: ['committed'],
       properties: {
         scan: {
           type: 'object',
@@ -132,6 +138,7 @@ const result = await agent(
         },
         committed:      { type: 'boolean' },
         explanation:    { type: 'string' },
+        branch:         { type: 'string' },
         branchCreated:  { type: 'boolean' },
         commitHash:     { type: 'string' },
         commitMessage:  { type: 'string' },
@@ -141,7 +148,10 @@ const result = await agent(
   }
 )
 
-const scan = result.scan
+// The script names the branch (same type/slug/session rule as branchName); use what it reports.
+const actualBranch = result.branch || branchName
+// The script always reports its scan; only a malformed request (no valid files) comes back without one, and that is a block.
+const scan = result.scan || { passed: false, securityFlags: [], blockingFailures: [result.explanation || 'nothing was committed: no valid files'] }
 log(`Security: ${scan.securityFlags.length} checks, ${scan.blockingFailures.length} blocking failure(s)`)
 const checks = scan.securityFlags.map(f => `- [${f.passed ? 'PASS' : 'FAIL'}] ${f.check} (${f.severity}): ${f.detail || 'ok'}`).join('\n')
 
@@ -149,10 +159,10 @@ if (!scan.passed || !result.committed) {
   log(`BLOCKED: ${scan.blockingFailures.join(', ') || 'commit not created'}`)
   const persistOps = [
     { write: `agents/gitdevops/vault/security-scans/scan-results/${sessionId}.md`,
-      content: `# Security Scan — FAILED — Session ${sessionId}\n\n**Task:** ${taskText}\n**Branch would have been:** ${branchName}\n\n` +
+      content: `# Security Scan — FAILED — Session ${sessionId}\n\n**Task:** ${taskText}\n**Branch would have been:** ${actualBranch}\n\n` +
         `## Blocking failures\n${scan.blockingFailures.map(f => `- ${f}`).join('\n') || '- none (commit not created)'}\n\n` +
         `## What to do\n${result.explanation || ''}\n\n## All checks\n${checks}\n` },
-    { db: ['log-agent-run', sessionId, 'gitdevops', 'failed', JSON.stringify({ branch: branchName, blockedBy: scan.blockingFailures })] },
+    { db: ['log-agent-run', sessionId, 'gitdevops', 'failed', JSON.stringify({ branch: actualBranch, blockedBy: scan.blockingFailures })] },
   ]
   await flushPersist(persistOps)
   return {
@@ -160,7 +170,7 @@ if (!scan.passed || !result.committed) {
     agentName:    'gitdevops',
     persistOps,
     status:       'failed',
-    branch:       branchName,
+    branch:       actualBranch,
     commitHash:   null,
     commitMessage: '',
     filesCommitted: [],
@@ -171,12 +181,12 @@ if (!scan.passed || !result.committed) {
   }
 }
 
-log(`Branch: ${branchName} | Commit: ${result.commitHash}`)
+log(`Branch: ${actualBranch} | Commit: ${result.commitHash}`)
 
 const persistOps = [
   { write: `agents/gitdevops/vault/security-scans/scan-results/${sessionId}.md`,
-    content: `# Security Scan — PASSED — Session ${sessionId}\n\n**Branch:** ${branchName}\n**Commit:** ${result.commitHash}\n\n${checks}\n` },
-  { db: ['log-agent-run', sessionId, 'gitdevops', 'completed', JSON.stringify({ branch: branchName, commit: result.commitHash })] },
+    content: `# Security Scan — PASSED — Session ${sessionId}\n\n**Branch:** ${actualBranch}\n**Commit:** ${result.commitHash}\n\n${checks}\n` },
+  { db: ['log-agent-run', sessionId, 'gitdevops', 'completed', JSON.stringify({ branch: actualBranch, commit: result.commitHash })] },
 ]
 await flushPersist(persistOps)
 
@@ -185,7 +195,7 @@ return {
   agentName:    'gitdevops',
   persistOps,
   status:       'completed',
-  branch:       branchName,
+  branch:       actualBranch,
   commitHash:   result.commitHash,
   commitMessage: result.commitMessage,
   filesCommitted: result.filesCommitted || [],

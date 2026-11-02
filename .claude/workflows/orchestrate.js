@@ -280,7 +280,7 @@ if (args && args.systemDocs !== false && projectPath) {
       }, 'awaiting-answers')
     }
 
-    docs = { targets, impact }
+    docs = { targets, impact, lightFix: !!(lightFix && failing.length) }
     if (small && impact.consumers.length) {
       small = false
       log(`size=small ignored: ${impact.consumers.map(c => c.module).join(', ')} depend on what changes`)
@@ -642,6 +642,7 @@ gitOutput = collect(await workflow(
     callsOutput,
     testingOutput,
     bridgeOutput,
+    requireVerify: true,
     ...MAP,
     extraFiles: docs ? ['docs/system'] : [],
     commitNotes: otherOwners.length
@@ -752,7 +753,7 @@ return await finish({
   outcomeMetrics:  sreOutput && sreOutput.outcomeMetrics,
   sreFeedback:     (sreOutput && sreOutput.feedback) || [],
   contractsPassed: bridgePassed,
-  systemDocs:      docs ? { targets: docs.targets, consumers: docs.impact.consumers, chainReaction: docs.impact.chainReaction, otherOwners, updated: docsUpdate && docsUpdate.modules } : null,
+  systemDocs:      docs ? { targets: docs.targets, lightFix: docs.lightFix, consumers: docs.impact.consumers, chainReaction: docs.impact.chainReaction, otherOwners, updated: docsUpdate && docsUpdate.modules } : null,
   securityPassed:  gitOutput && !(gitOutput.blockedBy && gitOutput.blockedBy.length),
   verify:          verifyOutput,
   size:            small ? 'small' : 'normal',

@@ -384,10 +384,10 @@ It prints `{ ran, failed }`. Mention any failures briefly; they never undo the w
 
 It may also print `contractIssues`: a domain's output that does not match its schema in `shared/contracts` (`[{ name, valid: false, errors }]`). That means the pipeline itself produced a malformed result for that domain, not that the user's code is wrong. Mention it in one line, naming the domain and the first error, and do not act on it.
 
-**Then check the result independently** (the scan and Verify results travel through agents; this compares them with what the scripts themselves wrote and re-scans the commit from git). Run, leaving out any flag whose value the result does not have:
+**Then check the result independently** (the scan and Verify results travel through agents; this compares them with what the scripts themselves wrote, re-scans the commit from git, and with System Docs re-runs each target module's approval gate and recomputes who depends on the changed files). Run, leaving out any flag whose value the result does not have:
 
 ```bash
-node <install-path>/shared/lib/attest.js "<current working directory>" "<sessionId>" --commit "<commitHash>" --scan-passed <securityPassed> --verify-passed <verify.passed, only when verify.configured>
+node <install-path>/shared/lib/attest.js "<current working directory>" "<sessionId>" --commit "<commitHash>" --scan-passed <securityPassed> --verify-passed <verify.passed, only when verify.configured> --docs-targets <systemDocs.targets joined with commas, when systemDocs is set> --light-fix <systemDocs.lightFix>
 ```
 
 It prints `{ ok, problems }`. When `ok` is false, tell the user first and plainly, before the summary: which result could not be confirmed (for example "the scan was reported passed, but an independent scan of the commit found a hardcoded secret in src/x.js") and that the commit is on a feature branch they can inspect or delete. Never describe an unconfirmed result as clean. When `ok` is true say nothing about it.

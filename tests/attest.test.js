@@ -73,6 +73,33 @@ try {
     assert.ok(r.problems.some(p => /independent scan/.test(p)), JSON.stringify(r.problems));
   });
 
+  test('System Docs: the gate is re-run, and a light fix is checked against who really depends on the change', () => {
+    const { spawnSync } = require('child_process');
+    const d = repo('src/a/x.js', '// a\nmodule.exports = 1\n');
+    const cli = path.join(__dirname, '..', 'shared', 'lib', 'sysdocs.js');
+    const sd = (...a) => { const r = spawnSync(process.execPath, [cli, a[0], d, ...a.slice(1)], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stdout + r.stderr); };
+    const plan = path.join(d, 'plan.json');
+    fs.writeFileSync(plan, JSON.stringify({ modules: [
+      { name: 'core', layer: 1, owner: 'Ann', paths: ['src/a/'], provides: ['fn:a.run'], dependsOn: [] },
+      { name: 'app', layer: 2, owner: 'Bob', paths: ['src/b/'], provides: [], dependsOn: [{ module: 'core', uses: ['fn:a.run'] }] },
+      { name: 'draft', layer: 2, owner: 'Cy', paths: ['src/c/'], provides: [], dependsOn: [] },
+    ] }));
+    sd('apply-plan', '@' + plan);
+    sd('approve', 'core', 'Tester');
+    const s = sessions({});
+    // an approved module, a normal run: nothing to report
+    assert.strictEqual(attest(d, 's5', { docsTargets: ['core'], lightFix: false, commit: 'HEAD' }, s).ok, true);
+    // a module that is not approved was "coded anyway"
+    const unapproved = attest(d, 's5', { docsTargets: ['draft'], lightFix: false }, s);
+    assert.ok(unapproved.problems.some(p => /gate does not pass/.test(p)), JSON.stringify(unapproved.problems));
+    // a light fix that skipped approval, while app depends on what the commit changed
+    const light = attest(d, 's5', { docsTargets: ['draft'], lightFix: true, commit: 'HEAD' }, s);
+    assert.deepStrictEqual(light.docs.dependents, ['app']);
+    assert.ok(light.problems.some(p => /skipped the approval round/.test(p)), JSON.stringify(light.problems));
+    // module names are validated before use
+    assert.deepStrictEqual(attest(d, 's5', { docsTargets: ['../x; rm'] }, s).docs, undefined);
+  });
+
   test('a session id cannot point outside the sessions folder', () => {
     const d = repo('src/a.js', '// a\n');
     assert.throws(() => attest(d, '../../etc/passwd', {}, sessions({})), /invalid session id/);

@@ -261,7 +261,9 @@ function record(project, input) {
   const commit = data.commit || git(project, ['rev-parse', '--short=10', 'HEAD']);
   if (!commit) fail('no commit given and HEAD could not be read');
   const flows = Object.assign({}, prev.flows);
+  const FLOW_DOC = new RegExp('^docs/system/modules/[a-z0-9-]+/flows/[a-z0-9-]+[.]md$');
   for (const doc of data.flows || []) {
+    if (!FLOW_DOC.test(String(doc))) continue;   // a flow doc of this project, nothing else is read
     const file = path.join(project, doc);
     if (fs.existsSync(file)) flows[doc] = hash(fs.readFileSync(file, 'utf8'));
   }

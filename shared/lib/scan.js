@@ -80,8 +80,9 @@ function parseAdded(diff) {
 
 // Lines this change adds to a file: all of it when new/untracked, otherwise '+' lines of the diff vs HEAD.
 // With a commit: the lines that commit added, read from git itself (the working tree is not consulted).
-function addedLines(project, file, commit = null) {
+function addedLines(project, file, commit = null, staged = false) {
   if (commit) return parseAdded(git(project, ['show', '--format=', '-U0', commit, '--', file]) || '');
+  if (staged) return parseAdded(git(project, ['diff', '--cached', '-U0', '--', file]) || '');
   const tracked = git(project, ['ls-files', '--error-unmatch', '--', file]) !== null && git(project, ['cat-file', '-e', `HEAD:${file}`]) !== null;
   let text;
   try { text = fs.readFileSync(path.join(project, file), 'utf8'); } catch { return []; }
@@ -99,6 +100,7 @@ function addedLines(project, file, commit = null) {
 
 function scan(project, paths, opts = {}) {
   const commit = opts.commit || null;
+  const staged = !commit && !paths.length;   // no paths: the staged files, so their staged content is what counts
   const before = commit ? `${commit}^` : 'HEAD';   // where a file must already exist to not be new
   const notFound = [];
   const files = collectFiles(project, paths, notFound, commit);
@@ -110,7 +112,7 @@ function scan(project, paths, opts = {}) {
     const isTest = TEST_PATH.test(file);
     const isExampleEnv = EXAMPLE_ENV.test(file);
     if (ENV_FILE.test(file) && !isExampleEnv) add('env', file, 0, 'environment file staged');
-    const lines = addedLines(project, file, commit);
+    const lines = addedLines(project, file, commit, staged);
     if (lines.length && git(project, ['cat-file', '-e', `${before}:${file}`]) === null) newFiles.push({ file, lines });
 
     for (const { line, n } of lines) {
