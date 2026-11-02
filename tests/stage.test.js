@@ -68,6 +68,14 @@ try {
     assert.ok(skill.includes('workflowsDir'));
   });
 
+  test('discovery: the skill researches and asks about providers, and the requirements agent treats the answers as binding', () => {
+    const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'software-engineer', 'SKILL.md'), 'utf8');
+    for (const word of ['4c2', 'WebSearch', 'LangGraph', 'Ollama', 'providers:', 'architecture:', 'research:', 'Open questions']) assert.ok(skill.includes(word), `SKILL.md lacks ${word}`);
+    for (const word of ['model: "haiku"', 'at most 250 words', 'source URL for every claim', 'Drop every claim that has no source']) assert.ok(skill.includes(word), `SKILL.md lacks ${word}`);
+    const req = fs.readFileSync(path.join(WORKFLOWS, 'requirements.js'), 'utf8');
+    for (const word of ['clar.providers', 'clar.architecture', 'clar.research', 'discoveryBrief']) assert.ok(req.includes(word), `requirements.js lacks ${word}`);
+  });
+
   console.log(`\nstage: ${passed} passed`);
 } catch (err) {
   console.error(`\nFAILED after ${passed} passed:\n${err.stack}`);
