@@ -7,6 +7,7 @@
  *   software-engineer install     put the skill in ~/.claude/skills/software-engineer and set up the engine in ~/.agents
  *   software-engineer update      pull the engine, re-run its setup, refresh the installed skill
  *   software-engineer status      what is installed, and whether the engine passes its health check
+ *   software-engineer dashboard   open the live agent dashboard (a local page that shows each pipeline run as it happens)
  *   software-engineer uninstall   remove the installed skill (--purge --yes also removes the engine and its knowledge bases)
  *
  * Options: --dir <engine dir> (default ~/.agents, else ~/.software-engineer when ~/.agents belongs to another tool) · --project (the skill goes in ./.claude/skills instead of the global folder)
@@ -27,8 +28,8 @@ const MARKER = '.installed-by-software-engineer.json';
 class UsageError extends Error {}
 
 // ── arguments ───────────────────────────────────────────────────────────────
-const VALUE_FLAGS = ['dir', 'repo'];
-const BOOL_FLAGS = ['project', 'link', 'skip-engine', 'force', 'dry-run', 'json', 'yes', 'purge', 'reseed'];
+const VALUE_FLAGS = ['dir', 'repo', 'port'];
+const BOOL_FLAGS = ['project', 'link', 'skip-engine', 'force', 'dry-run', 'json', 'yes', 'purge', 'reseed', 'no-open'];
 
 function parse(argv) {
   const opts = { _: [] };
@@ -254,6 +255,18 @@ function status(o) {
   }
 }
 
+/** Opens the live agent dashboard (shared/lib/dashboard.js) and stays running until Ctrl+C. */
+function dashboard(o) {
+  const dir = engineDir(o);
+  const script = path.join(initialized(dir) ? dir : SELF, 'shared', 'lib', 'dashboard.js');
+  if (!fs.existsSync(script)) throw new Error('the dashboard was not found in the engine; run: software-engineer update');
+  const args = [script];
+  if (o.port) args.push('--port', o.port);
+  if (!o['no-open']) args.push('--open');
+  const r = spawnSync(process.execPath, args, { stdio: 'inherit' });
+  process.exit(r.status === null ? 1 : r.status);
+}
+
 function help() {
   say(`software-engineer ${PKG.version}
 
@@ -264,6 +277,7 @@ Commands
   update      Pull the latest engine, re-run its setup, refresh the installed skill
   status      Show what is installed and whether the engine passes its health check
   uninstall   Remove the installed skill (add --purge --yes to also delete the engine and its knowledge bases)
+  dashboard   Watch the agents work: a live, animated page for every pipeline run (opens in your browser)
 
 Options
   --dir <path>     Engine folder (default: ~/.agents, or ~/.software-engineer when ~/.agents belongs to another tool;
@@ -275,7 +289,9 @@ Options
   --force          Replace a skill this tool did not install
   --dry-run        Show what would happen, change nothing
   --json           status: print JSON
-  --reseed         update: also rewrite the baseline vault notes`);
+  --reseed         update: also rewrite the baseline vault notes
+  --port <n>       dashboard: port to listen on (default 4777; the next free one if it is taken)
+  --no-open        dashboard: print the address without opening a browser`);
 }
 
 function main(argv) {
@@ -283,7 +299,7 @@ function main(argv) {
   const cmd = o._[0];
   if (!cmd || cmd === 'help' || cmd === '--help') return help();
   if (cmd === 'version') return say(PKG.version);
-  const table = { install, update, status, uninstall };
+  const table = { install, update, status, uninstall, dashboard };
   if (!table[cmd]) throw new UsageError(`unknown command "${cmd}"`);
   return table[cmd](o);
 }

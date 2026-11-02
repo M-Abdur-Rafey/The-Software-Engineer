@@ -96,6 +96,10 @@ check('package.json bin entries exist', () => {
   }
 });
 
+check('the dashboard page exists', () => {
+  if (!fs.existsSync(path.join(AGENTS_DIR, 'shared', 'dashboard', 'index.html'))) throw new Error('shared/dashboard/index.html is missing');
+});
+
 // ─── Shared standards ─────────────────────────────────────────────────────────
 ['commit-format.md', 'security-rules.md', 'code-standards.md'].forEach(f => {
   check(`shared/standards/${f} exists`, () => {
@@ -105,7 +109,7 @@ check('package.json bin entries exist', () => {
 });
 
 // ─── Shared lib ───────────────────────────────────────────────────────────────
-['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js', 'projectmap.js', 'lessons.js', 'verify.js', 'attest.js', 'gitcommit.js'].forEach(f => {
+['db.js', 'db-cli.js', 'vault.js', 'logger.js', 'contracts.js', 'acl.js', 'truncate.js', 'sysdocs.js', 'uitest.js', 'persist.js', 'scan.js', 'projectmap.js', 'lessons.js', 'verify.js', 'attest.js', 'gitcommit.js', 'stage-workflows.js', 'dashboard.js'].forEach(f => {
   check(`shared/lib/${f} exists`, () => {
     const p = path.join(AGENTS_DIR, 'shared', 'lib', f);
     if (!fs.existsSync(p)) throw new Error('file missing');

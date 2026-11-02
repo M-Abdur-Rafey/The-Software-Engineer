@@ -47,6 +47,7 @@ Then restart Claude Code (or open a new session) and run `/software-engineer sta
 | `software-engineer install` | Install the skill globally and set up the engine. Safe to run again: nothing changes if it is already current |
 | `software-engineer update` | Pull the latest engine, re-run its setup, refresh the installed skill |
 | `software-engineer status` | Show what is installed, whether the skill is current, and whether the engine passes its health check (`--json` for scripts) |
+| `software-engineer dashboard` | Open the live agent dashboard (see *Watch the agents work* below) |
 | `software-engineer uninstall` | Remove the installed skill. The engine and your knowledge bases are kept |
 | `software-engineer uninstall --purge --yes` | Also delete the engine and every knowledge base in it (cannot be undone, so it asks for `--yes`) |
 
@@ -84,6 +85,7 @@ Good to know:
 | `/software-engineer start` | One-command setup: install (if needed), scan the current project, build its code graph |
 | `/software-engineer test` | Health check of the install (no files modified) |
 | `/software-engineer status` | Show recent sessions |
+| `/software-engineer dashboard` | Watch the agents work live in your browser (animated pipeline, what each agent is doing, timeline) |
 | `/software-engineer update` | Pull the latest version |
 | `/software-engineer onboard` | Re-scan the current project (runs automatically on first use) |
 | `/software-engineer graph` | Build a filtered Obsidian knowledge graph of the project's real code |
@@ -98,6 +100,21 @@ Good to know:
 | `/software-engineer uitest <module>...` | UI-test the named modules' flows |
 | `/software-engineer uitest --workers N` | Set how many tests run in parallel (default: half your CPU cores, max 8) |
 | `/software-engineer help` | Show all commands |
+
+---
+
+## Watch the agents work
+
+`/software-engineer dashboard` (or `software-engineer dashboard` in a terminal) opens a live page in your browser that shows what the pipeline is doing right now:
+
+- **The orchestration** as three rows (prepare, build, check and ship). Each stage lights up as it starts: orange and pulsing while an agent works, yellow between two of its agents, green with a check when done, struck through when the task did not need it. Agents that run in parallel sit side by side, and the connectors animate while work flows on.
+- **Every agent** as a card: which stage it belongs to, its model, what it is doing this second (for example *Reading src/routes.js* or *Running: node shared/lib/scan.js*), a strip of its recent tool calls, how long it has run, and its tokens.
+- **A timeline** of all agents over time, so parallel work is visible, and a **live activity feed**.
+- A progress bar and status for the whole run: running, complete, or *stopped early* when a check blocked the commit or the run is waiting for your answers. Click any stage or agent for its recent actions and what it returned.
+
+It needs nothing set up. Claude Code already writes a trail for every workflow run, and the dashboard reads it: it follows the newest run, shows runs from every project, and keeps working after a run ends. `?demo=1` on the address plays a scripted run so you can see it without starting one; `--port` picks another port.
+
+It is read-only and local: it listens on `127.0.0.1` only, refuses requests addressed to any other host name, loads nothing from the internet, and shows tool names and short targets (a file name, the start of a command with anything credential-like masked), never whole prompts. It works on a phone-sized window and respects reduced-motion settings.
 
 ---
 
@@ -464,6 +481,7 @@ Run from the repo root (`~/.agents` once installed):
 | Command | What it does |
 |---|---|
 | `npm install` | Install dependencies |
+| `npm run dashboard` | Open the live agent dashboard |
 | `npm run install-skill` | Install the skill globally from this checkout (same as `software-engineer install`) |
 | `npm run init` | Bootstrap databases and contracts, seed vaults, verify. Run after changing agents, contracts or seed notes |
 | `npm run verify` | Health check (same as `/software-engineer test`) |

@@ -64,6 +64,18 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 - If `verify.js` exits 0: _"Done. Obsidian vaults are ready — open any folder in `agents/*/vault/` as a new Obsidian vault."_
 - If it fails: Show the error output. Ask the user to open an issue at https://github.com/MARafey/The-Software-Engineer/issues
 
+### Launching a workflow (read before any step that says `Workflow(...)`)
+
+The Workflow tool only loads a `scriptPath` it can read. A session opened in some other project usually cannot read files in the engine's folder, and the call fails with "scriptPath must be a script path this tool returned, or a file you can already read". When that happens, stage the scripts once and use the copy; never copy or edit them by hand:
+
+1. Run `node <install-path>/shared/lib/stage-workflows.js "<your scratchpad directory>"`. It prints `{ "dir": "...", "files": N }`.
+2. Use `<dir>/<name>.js` wherever this file says `<install-path>/.claude/workflows/<name>.js`.
+3. For `orchestrate.js`, also pass `workflowsDir: "<dir>"` in `args`, so the scripts it starts are read from the same copy.
+
+Once a pipeline run is launched, tell the user once that `/software-engineer dashboard` shows the agents working live.
+
+Stage again after `update`, since the copy does not follow the engine.
+
 ### Step 3: Route the command
 
 | What the user typed | Action |
@@ -72,6 +84,7 @@ npm install --silent && node init/bootstrap.js && node init/seed-vaults.js && no
 | `/software-engineer <task>` | Run the full pipeline — go to Step 4 |
 | `/software-engineer test` | Run health check — go to the Test section |
 | `/software-engineer status` | Show recent sessions — go to the Status section |
+| `/software-engineer dashboard` | Open the live agent dashboard (animated view of the pipeline and every agent) — go to the Dashboard section |
 | `/software-engineer update` | Pull latest version — go to the Update section |
 | `/software-engineer onboard` | Force re-scan of current project — go to the Onboard section |
 | `/software-engineer graph` | Build a filtered code knowledge graph of the current project — go to the Graph section |
@@ -312,6 +325,7 @@ Summarise what you're going to do in one short paragraph before starting the wor
 
 1. `node <install-path>/shared/lib/db-cli.js init-session "<task text>" "<current working directory>"` prints `{ sessionId, startedAt }`.
 2. `node <install-path>/shared/lib/db-cli.js check-onboarded "<current working directory>"` prints `{ onboarded, techStack }`.
+   **A brand-new project has nothing to scan.** When `onboarded` is false and the folder is empty (or holds only `.git`), skip onboarding: run `node <install-path>/shared/lib/db-cli.js mark-onboarded "<current working directory>" "new project" "empty at start"` and pass `onboarded: true`. The project map is built from what this session writes, after the commit.
 3. `node <install-path>/shared/lib/projectmap.js show "<current working directory>"` prints the project map (stack, layout, conventions, routes, tables, commands), or nothing before the first onboarding.
    `node <install-path>/shared/lib/lessons.js brief "<current working directory>"` prints this project's active lessons as JSON (`{}` when there are none): problems the reviewers, bridge or scan caught in 2+ earlier sessions.
 4. **The project's own checks** (design: `<install-path>/design/verify-phase.md`):
@@ -339,6 +353,7 @@ Workflow({
     deferBookkeeping: true,   // Step 6 records the session with shared/lib/persist.js, no agent needed
     projectPath: "<current working directory>",
     agentsDir: "<install-path>",
+    workflowsDir: "<the staged dir, only when you had to stage the scripts>",
     clarifications: {
       ponytailMode: "<'lite'|'full'|'ultra'|null>",
       designPreferences: {
@@ -510,6 +525,17 @@ If any check fails: show which check failed, what it means in plain language, an
 
 ---
 
+## Subcommand: dashboard (watch the agents work)
+
+A local, read-only page that shows every pipeline run as it happens: the stages of the pipeline lighting up, which agent is working and on what, what finished and how long it took, what was skipped, tokens, and a timeline of agents running in parallel. It reads the files Claude Code already writes for each workflow run, so there is nothing to configure and it also shows runs started in other projects.
+
+1. Start it in the background (Bash with `run_in_background: true`; it keeps running until stopped): `node <install-path>/shared/lib/dashboard.js --open`
+2. It prints `Dashboard: http://127.0.0.1:<port>` (4777, or the next free port) and opens the browser. Tell the user that address.
+3. By default it follows the newest run; the picker at the top chooses another, and clicking a stage or an agent shows what it did. `?demo=1` on the address plays a scripted run, for a preview.
+4. It listens on 127.0.0.1 only and shows tool names and short targets, never whole prompts. To stop it, stop the background task.
+
+---
+
 ## Subcommand: status
 
 Show the last 10 sessions.
@@ -637,6 +663,7 @@ Show:
 /software-engineer <task>     — Plan, build, test, and commit anything
 /software-engineer test       — Run health check (no files modified)
 /software-engineer status     — Show recent sessions
+/software-engineer dashboard  — Watch the agents work live in your browser
 /software-engineer update     — Pull latest version
 /software-engineer onboard    — Re-scan current project
 /software-engineer graph      — Build a filtered code knowledge graph (Obsidian)
